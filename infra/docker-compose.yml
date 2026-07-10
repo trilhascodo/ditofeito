@@ -28,6 +28,10 @@ services:
       DATABASE_URL: postgres://ditofeito:${POSTGRES_PASSWORD}@postgres:5432/ditofeito
       NODE_ENV: production
       PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:?defina WEB_ORIGIN no .env (ex.: https://ditofeito.com.br)}
+      APP_BASE_URL: ${APP_BASE_URL:-https://ditofeito.com.br}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-DitoFeito <nao-responda@ditofeito.com.br>}
     ports:
       - "127.0.0.1:3000:3000"
 

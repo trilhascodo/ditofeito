@@ -11,6 +11,8 @@
     "build": "pnpm -r run build",
     "dev:api": "pnpm --filter @ditofeito/api dev",
     "dev:web": "pnpm --filter @ditofeito/web dev",
+    "db:migrate": "pnpm --filter @ditofeito/db run migrate",
+    "db:seed": "pnpm --filter @ditofeito/db run seed",
     "typecheck": "pnpm --filter @ditofeito/core --filter @ditofeito/db run build && pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint"

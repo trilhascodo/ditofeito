@@ -201,27 +201,28 @@ export function renderCardSvg(d: PublicMarketData): string {
 // 4. WIRING HTTP (Express — rotas públicas, fora do tRPC, cacheáveis na CDN)
 // ---------------------------------------------------------------------------
 import type express from "express";
+import { asyncHandler } from "./asyncHandler.js";
 
 export function mountEmbed(app: express.Express, pool: Pool) {
   const cache = (res: express.Response) => res.set({
     "Cache-Control": `public, s-maxage=${EMBED_CONFIG.cacheSeconds}, stale-while-revalidate=300`,
     "Content-Security-Policy": "frame-ancestors *",   // embed liberado
   });
-  app.get("/embed/:slug", async (req, res) => {
+  app.get("/embed/:slug", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).send("mercado não encontrado");
     cache(res); res.type("html").send(renderEmbedHtml(d));
-  });
-  app.get("/api/pub/:slug.json", async (req, res) => {
+  }));
+  app.get("/api/pub/:slug.json", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).json({ erro: "não encontrado" });
     cache(res); res.json(d);
-  });
-  app.get("/card/:slug.svg", async (req, res) => {
+  }));
+  app.get("/card/:slug.svg", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).send("");
     cache(res); res.type("image/svg+xml").send(renderCardSvg(d));
-  });
+  }));
 }
 
 // Snippet que o candidato cola no site dele (página do mercado exibe pronto):

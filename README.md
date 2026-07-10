@@ -42,12 +42,15 @@ concorrência (20 trades simultâneos) e simulação de 25 dias de tráfego.
 ```
 packages/db/migrations/001_schema.sql   Migração 001 — núcleo (22 tabelas)
 packages/db/migrations/002_tse.sql      Migração 002 — pré-candidatura, staging TSE, matches
+packages/db/migrations/003_auth.sql     Migração 003 — sessões, verificação de e-mail
 packages/db/seeds/001_seed.sql          Usuário sistema + categoria eleicoes-2026
 packages/core/src/lmsr.ts               Matemática pura: LMSR + Brier/skill (sem dependências)
 apps/api/src/domain/trade.ts            Transação de trade, resolução, anulação, auditoria do ledger
+apps/api/src/domain/auth.ts             Cadastro/login/logout/verificação de e-mail (argon2 + cookie httpOnly)
 apps/api/src/jobs/matcher.ts            Reconciliação fase 1 × registro TSE (tiers auditáveis)
 apps/api/src/jobs/gerador.ts            Fábrica programática de mercados eleitorais (job diário)
 apps/api/src/http/embed.ts              Widget embedável + JSON público + card OG (distribuição)
+apps/api/src/http/auth.ts               Rotas /auth/* + asyncHandler (nenhum erro derruba o processo)
 ```
 
 Estrutura completa do monorepo em `plano-construcao.md` §1.
@@ -90,6 +93,7 @@ Estrutura completa do monorepo em `plano-construcao.md` §1.
 | Venda a descoberto / saldo negativo impossíveis | Exceções SHARES_INSUFICIENTES / SALDO_INSUFICIENTE |
 | Gerador idempotente | 2ª execução cria 0; novo pré-candidato → 2 binários + sync no MULTI |
 | Matcher conservador | Homônimo c/ nascimento divergente → descartado (0,645); dados incompletos → fila humana, nunca auto-match |
+| Erro de banco em rota async não derruba o processo | `asyncHandler` + error middleware final testados com Postgres indisponível: `/auth/signup` e `/auth/login` respondem 500 e `/health` segue OK logo depois — Express 4 não propaga rejeição de Promise sozinho, achado ao testar auth sem DB |
 
 ### Concorrência (trade.ts)
 Lock pessimista (`FOR UPDATE`) em vez de SERIALIZABLE+retry: enfileira trades do
@@ -167,6 +171,28 @@ mercados "registro-*"                "registro-*"
    (F0); páginas de mercado, ranking de calibração, comentários com posição,
    fluxo de sugestão/reivindicação de pré-candidato, fila de revisão do
    moderador ficam para F1 (`plano-construcao.md` §3).
+7. ~~Auth básico~~ — feito: cadastro/login/logout por e-mail+senha (argon2),
+   verificação de e-mail assíncrona (não bloqueia login), sessão em cookie
+   httpOnly (`apps/api/src/domain/auth.ts`, `packages/db/migrations/003_auth.sql`).
+   Rate limit em `/auth/signup` e `/auth/login`; CORS restrito a `WEB_ORIGIN`.
+
+### Deploy (commit → VPS)
+`infra/scripts/deploy.sh` roda na VPS: `git reset --hard origin/main` →
+`docker compose up -d --build` → espera `/health` → `docker image prune`.
+`.github/workflows/deploy.yml` dispara esse script via SSH assim que o
+workflow `CI` termina com sucesso em `main` (nunca deploya código que não
+passou em typecheck/test/build).
+
+Configurar antes do primeiro deploy:
+- **Secrets do repo GitHub**: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (chave
+  privada com acesso à VPS), `VPS_PATH` (caminho do repo clonado na VPS),
+  opcional `VPS_PORT`.
+- **`infra/.env` na VPS** (nunca commitado — copiar de `infra/.env.example`):
+  `POSTGRES_PASSWORD`, `WEB_ORIGIN`, `APP_BASE_URL`, `RESEND_API_KEY`
+  (vazio = e-mails de verificação só logados no console, útil pra validar
+  o fluxo antes de contratar o Resend).
+- Repo já clonado manualmente em `VPS_PATH` na primeira vez (o deploy
+  automático só faz fetch/reset, não clone inicial).
 
 ### Cold start (plano)
 Maranhão primeiro (custo de curadoria baixo, terreno conhecido) → mercados de

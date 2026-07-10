@@ -60,7 +60,7 @@ function entryHash(
 }
 
 /** Apende no ledger do usuário. PRESSUPÕE lock FOR UPDATE já tomado no user. */
-async function appendLedger(
+export async function appendLedger(
   c: PoolClient, userId: string, delta: number, reason: string,
   refType: string | null, refId: string | null,
 ): Promise<{ newBalance: number }> {
