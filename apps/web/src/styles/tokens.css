@@ -28,6 +28,61 @@ body {
   font: 15px/1.55 var(--sans);
 }
 
-a { color: var(--violeta); }
+a { color: var(--violeta); text-decoration: none; }
 
 .mono { font-family: var(--mono); }
+
+/* ---------- primitivos reusados nas páginas (gabarito: docs/prototipos/prototipo-mercado.html) ---------- */
+.site-header { border-bottom: 1px solid var(--linha); background: var(--papel); }
+.site-header-in {
+  max-width: 1080px; margin: 0 auto; padding: 14px 20px;
+  display: flex; align-items: center; gap: 24px;
+}
+.logo { font: 700 22px var(--serif); letter-spacing: -.02em; color: var(--tinta); }
+.logo b { color: var(--violeta); font-weight: 700; }
+.logo .selo {
+  display: inline-block; font: 600 10px var(--mono); color: var(--violeta);
+  border: 1.5px solid var(--violeta); border-radius: 3px; padding: 0 4px; margin-left: 6px;
+  transform: rotate(-3deg); vertical-align: 3px;
+}
+.site-nav { display: flex; gap: 18px; font-weight: 500; font-size: 14px; color: var(--grafite); }
+.site-nav a { color: var(--grafite); }
+.site-header-auth { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 14px; }
+.saldo {
+  font: 600 14px var(--mono); background: var(--violeta-2); color: var(--violeta);
+  border-radius: 8px; padding: 6px 12px;
+}
+.link-btn {
+  font: 500 14px var(--sans); color: var(--grafite); background: none; border: 0;
+  cursor: pointer; padding: 0;
+}
+.link-btn:hover { color: var(--tinta); }
+
+.page { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+.page-narrow { max-width: 420px; margin: 60px auto; padding: 0 20px; }
+
+.card { background: #fff; border: 1px solid var(--linha); border-radius: 10px; padding: 24px; }
+
+.field { margin-bottom: 14px; }
+.label { display: block; font: 600 12px var(--sans); color: var(--grafite); margin-bottom: 6px; }
+.input {
+  width: 100%; font: 500 15px var(--sans); color: var(--tinta);
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 8px; padding: 10px 12px;
+}
+.input:focus { outline: 2px solid var(--violeta); outline-offset: 0; border-color: transparent; }
+
+.btn {
+  width: 100%; font: 600 15px var(--sans); color: #fff; background: var(--violeta);
+  border: 0; border-radius: 8px; padding: 14px; cursor: pointer;
+}
+.btn:hover { background: #4A3C73; }
+.btn:disabled { background: var(--linha); color: var(--grafite); cursor: not-allowed; }
+.btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; }
+
+.btn-small {
+  font: 600 13px var(--sans); color: #fff; background: var(--violeta);
+  border-radius: 8px; padding: 8px 14px;
+}
+
+.error-text { color: var(--carimbo); font-size: 13px; margin-top: 4px; }
+.hint-text { color: var(--grafite); font-size: 13px; }

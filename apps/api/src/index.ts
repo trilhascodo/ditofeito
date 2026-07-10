@@ -11,7 +11,10 @@ import { APP_CONFIG } from "./config.js";
 import { appRouter } from "./routers/_app.js";
 import { createContextFactory } from "./trpc/context.js";
 
-const app = express();
+// Anotação explícita: com declaration:true, inferir o tipo do Express aqui
+// sem anotação vira TS2742 (o tipo interno não é "nomeável" a partir do
+// pnpm store aninhado ao gerar o .d.ts que apps/web importa).
+const app: express.Express = express();
 // Atrás de nginx (TLS termina lá): sem isso, req.ip vira o IP do proxy e
 // req.secure fica sempre false, mesmo com a conexão real em HTTPS.
 app.set("trust proxy", 1);

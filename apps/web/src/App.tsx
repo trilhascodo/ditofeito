@@ -1,12 +1,20 @@
-// Placeholder da F0 — páginas reais (home, mercado, perfil, login) entram na F1.
-// docs/prototipos/prototipo-mercado.html é o gabarito visual da página de mercado.
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { Layout } from "./Layout";
+import { Home } from "./pages/Home";
+import { Login } from "./pages/Login";
+import { Signup } from "./pages/Signup";
+
+const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    children: [
+      { path: "/", element: <Home /> },
+      { path: "/entrar", element: <Login /> },
+      { path: "/cadastro", element: <Signup /> },
+    ],
+  },
+]);
+
 export function App() {
-  return (
-    <main style={{ maxWidth: 640, margin: "80px auto", padding: "0 20px" }}>
-      <h1 style={{ fontFamily: "var(--serif)", fontSize: 32 }}>
-        Dito<span style={{ color: "var(--violeta)" }}>Feito</span>
-      </h1>
-      <p style={{ color: "var(--grafite)" }}>pode escrever — MVP em construção (F0).</p>
-    </main>
-  );
+  return <RouterProvider router={router} />;
 }

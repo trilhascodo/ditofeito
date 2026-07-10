@@ -9,6 +9,8 @@ export default defineConfig({
       "/embed": "http://localhost:3000",
       "/api": "http://localhost:3000",
       "/card": "http://localhost:3000",
+      "/trpc": "http://localhost:3000",
+      "/auth": "http://localhost:3000",
     },
   },
 });
