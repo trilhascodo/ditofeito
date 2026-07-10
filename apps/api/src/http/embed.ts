@@ -4,7 +4,9 @@
 // Endpoints públicos (fora do tRPC — são artefatos HTTP cacheáveis):
 //   GET /embed/:slug        -> HTML autocontido (iframe em sites de campanha)
 //   GET /api/pub/:slug.json -> dados p/ integrações (o "índice" em miniatura)
-//   GET /card/:slug.svg     -> card 1200x630 p/ og:image (WhatsApp/redes)
+//   GET /card/:slug.svg     -> card 1200x630 (fonte; útil pra depurar)
+//   GET /card/:slug.png     -> card 1200x630 raster p/ og:image — é este que
+//                              vai na meta tag, WhatsApp não renderiza SVG
 //
 // Requisitos de produto embutidos:
 //   - Zero dependência externa no HTML (funciona em qualquer site, offline-ish)
@@ -13,6 +15,9 @@
 //   - Cache: s-maxage=60 + stale-while-revalidate (CDN absorve a campanha)
 //   - frame-ancestors * (embed é o objetivo; NUNCA X-Frame-Options: DENY aqui)
 // ============================================================================
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Resvg } from "@resvg/resvg-js";
 import type { Pool } from "pg";
 import { lmsrPrices } from "@ditofeito/core";
 
@@ -167,8 +172,16 @@ export function renderEmbedHtml(d: PublicMarketData): string {
 
 // ---------------------------------------------------------------------------
 // 3. CARD OG 1200x630 (og:image -> preview no WhatsApp/redes)
-//    SVG puro; converter p/ PNG no deploy (resvg/sharp) — WhatsApp exige raster.
+//    Paleta/tipografia = identidade-ditofeito.md (papel/violeta + IBM Plex),
+//    nunca o azul/navy genérico de placeholder. renderCardSvg gera o SVG;
+//    renderCardPng converte pra PNG com as fontes embutidas (WhatsApp exige
+//    raster — não pré-visualiza SVG).
 // ---------------------------------------------------------------------------
+const TOKENS = {
+  papel: "#FAF8F3", tinta: "#1E2733", grafite: "#5C6672",
+  violeta: "#5B4B8A", linha: "#E3DDD0",
+} as const;
+
 export function renderCardSvg(d: PublicMarketData): string {
   const lider = [...d.outcomes]
     .filter((o) => !o.isCatchall && o.label !== "NÃO")
@@ -178,23 +191,42 @@ export function renderCardSvg(d: PublicMarketData): string {
   const titulo = d.title.length > 70 ? d.title.slice(0, 67) + "…" : d.title;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#0f172a"/>
-  <rect x="0" y="0" width="1200" height="8" fill="#2563eb"/>
-  <text x="80" y="120" font-family="Segoe UI,Roboto,sans-serif" font-size="40"
-        font-weight="600" fill="#e2e8f0">${esc(titulo)}</text>
-  <text x="80" y="330" font-family="Segoe UI,Roboto,sans-serif" font-size="150"
-        font-weight="800" fill="#3b82f6">${pct(lider?.price ?? 0)}</text>
-  <text x="80" y="390" font-family="Segoe UI,Roboto,sans-serif" font-size="34"
-        fill="#94a3b8">${esc(d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? ""))}</text>
+  <rect width="1200" height="630" fill="${TOKENS.papel}"/>
+  <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
+  <text x="80" y="120" font-family="IBM Plex Sans" font-size="40"
+        font-weight="600" fill="${TOKENS.tinta}">${esc(titulo)}</text>
+  <text x="80" y="330" font-family="IBM Plex Mono" font-size="150"
+        font-weight="700" fill="${TOKENS.violeta}">${pct(lider?.price ?? 0)}</text>
+  <text x="80" y="390" font-family="IBM Plex Mono" font-size="34"
+        font-weight="600" fill="${TOKENS.grafite}">${esc(d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? ""))}</text>
   <g transform="translate(480,240)">
-    ${path ? `<path d="${path}" fill="none" stroke="#3b82f6" stroke-width="5"
+    ${path ? `<path d="${path}" fill="none" stroke="${TOKENS.violeta}" stroke-width="5"
       stroke-linecap="round" stroke-linejoin="round"/>` : ""}
   </g>
-  <text x="80" y="530" font-family="Segoe UI,Roboto,sans-serif" font-size="30"
-        font-weight="700" fill="#e2e8f0">${esc(EMBED_CONFIG.brand)}</text>
-  ${d.isElectoral ? `<text x="80" y="580" font-family="Segoe UI,Roboto,sans-serif"
-        font-size="20" fill="#64748b">${DISCLAIMER}</text>` : ""}
+  <text x="80" y="540" font-family="IBM Plex Serif" font-size="34" font-weight="700" fill="${TOKENS.tinta}">Dito<tspan fill="${TOKENS.violeta}">Feito</tspan></text>
+  ${d.isElectoral ? `<text x="80" y="580" font-family="IBM Plex Sans"
+        font-size="20" fill="${TOKENS.grafite}">${DISCLAIMER}</text>` : ""}
 </svg>`;
+}
+
+const FONTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "assets", "fonts");
+const CARD_FONT_FILES = [
+  path.join(FONTS_DIR, "IBMPlexSans-Variable.ttf"),
+  path.join(FONTS_DIR, "IBMPlexMono-Bold.ttf"),
+  path.join(FONTS_DIR, "IBMPlexMono-SemiBold.ttf"),
+  path.join(FONTS_DIR, "IBMPlexSerif-Bold.ttf"),
+];
+
+export function renderCardPng(d: PublicMarketData): Buffer {
+  const svg = renderCardSvg(d);
+  const resvg = new Resvg(svg, {
+    font: {
+      fontFiles: CARD_FONT_FILES,
+      loadSystemFonts: false, // determinístico — não depende do que o container tem instalado
+      defaultFontFamily: "IBM Plex Sans",
+    },
+  });
+  return resvg.render().asPng();
 }
 
 // ---------------------------------------------------------------------------
@@ -222,6 +254,13 @@ export function mountEmbed(app: express.Express, pool: Pool) {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).send("");
     cache(res); res.type("image/svg+xml").send(renderCardSvg(d));
+  }));
+  // PNG é o que vai em og:image — WhatsApp (e a maioria dos crawlers de
+  // preview) não renderiza SVG em og:image, só raster.
+  app.get("/card/:slug.png", asyncHandler(async (req, res) => {
+    const d = await getMarketPublicData(pool, req.params.slug);
+    if (!d) return res.status(404).send("");
+    cache(res); res.type("image/png").send(renderCardPng(d));
   }));
 }
 

@@ -143,8 +143,11 @@ mercados "registro-*"                "registro-*"
 - `GET /embed/:slug` — HTML autocontido (~4 KB, zero deps), disclaimer eleitoral
   embutido, link de volta com UTM. Snippet de iframe exibido na página do mercado.
 - `GET /api/pub/:slug.json` — dados públicos (embrião da API B2B do índice).
-- `GET /card/:slug.svg` — card 1200×630 p/ og:image. **Pendência: converter p/ PNG
-  no deploy (resvg-js/sharp) — WhatsApp não pré-visualiza SVG.**
+- `GET /card/:slug.svg` — card 1200×630, fonte (útil pra depurar).
+- `GET /card/:slug.png` — mesmo card em raster via `@resvg/resvg-js` — é este
+  que vai no `og:image` (WhatsApp não pré-visualiza SVG). Fontes IBM Plex
+  embutidas como arquivo (`apps/api/assets/fonts/`, `loadSystemFonts: false`)
+  — não depende de nada instalado no container, determinístico.
 - Cache `s-maxage=60, stale-while-revalidate=300` — CDN absorve viralização;
   `frame-ancestors *` **somente** nesses endpoints.
 - Cores dos outcomes: paleta fixa por posição, nunca cor partidária (neutralidade).
