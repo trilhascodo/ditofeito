@@ -228,7 +228,7 @@ export const marketRouter = router({
       const where = `WHERE ${conds.join(" AND ")}`;
 
       const r = await ctx.pool.query(
-        `SELECT m.id, m.slug, m.title, m.status, m.type, m.is_electoral, m.liquidity_b,
+        `SELECT m.id, m.slug, m.title, m.status, m.type, m.is_electoral, m.liquidity_b, m.close_at,
                 c.slug AS category_slug, c.name AS category_name
            FROM markets m JOIN categories c ON c.id = m.category_id
            ${where}
@@ -266,6 +266,7 @@ export const marketRouter = router({
         return {
           slug: row.slug as string, title: row.title as string, status: row.status as string,
           type: row.type as string, isElectoral: row.is_electoral as boolean,
+          closeAt: row.close_at as Date,
           categorySlug: row.category_slug as string, categoryName: row.category_name as string,
           summary,
         };
