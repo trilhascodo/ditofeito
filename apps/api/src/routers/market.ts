@@ -5,6 +5,9 @@ import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 
 const outcomeInput = z.object({ label: z.string().trim().min(1).max(120) });
 
+const SERIES_DAYS = 30;
+const SERIES_POINTS = 60;
+
 // BINARY sempre nasce SIM/NÃO (README §schema: "type BINARY -> exatamente 2
 // outcomes"); MULTI exige outcomes nomeados + catchall opcional (mesmo
 // padrão do gerador.ts eleitoral, generalizado pra qualquer categoria).
@@ -138,9 +141,10 @@ export const marketRouter = router({
 
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
-      `SELECT id, slug, title, description, status, type, liquidity_b, is_electoral,
-              close_at, resolve_by, resolution_criteria, resolution_source
-         FROM markets WHERE slug = $1`,
+      `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
+              m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source, c.name AS category_name
+         FROM markets m JOIN categories c ON c.id = m.category_id
+        WHERE m.slug = $1`,
       [input.slug],
     );
     if (!m.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
@@ -153,29 +157,98 @@ export const marketRouter = router({
     );
     const prices = lmsrPrices(out.rows.map((r) => Number(r.q)), Number(mk.liquidity_b));
 
+    // Série de preços p/ o gráfico — mesmo downsample por bucket de tempo do
+    // embed.ts (getMarketPublicData), só que aqui indexado por outcome_id em
+    // vez de label (é o que a página React usa pra casar com os outcomes).
+    const snaps = await ctx.pool.query(
+      `WITH win AS (
+         SELECT outcome_id, price, ts, extract(epoch FROM ts) AS ep
+           FROM price_snapshots
+          WHERE market_id = $1 AND ts > now() - ($2 || ' days')::interval
+       ), lim AS (SELECT min(ep) AS t0, max(ep) AS t1 FROM win)
+       SELECT w.outcome_id,
+              width_bucket(w.ep, lim.t0, lim.t1 + 1, $3) AS bucket,
+              avg(w.price) AS price,
+              (avg(w.ep) - lim.t0) / greatest(lim.t1 - lim.t0, 1) AS t
+         FROM win w, lim
+        GROUP BY w.outcome_id, bucket, lim.t0, lim.t1
+        ORDER BY w.outcome_id, bucket`,
+      [mk.id, SERIES_DAYS, SERIES_POINTS],
+    );
+    const byOutcome = new Map<string, [number, number][]>();
+    for (const s of snaps.rows) {
+      const arr = byOutcome.get(s.outcome_id) ?? [];
+      arr.push([Number(s.t), Number(s.price)]);
+      byOutcome.set(s.outcome_id, arr);
+    }
+
     return {
       id: mk.id as string, slug: mk.slug as string, title: mk.title as string,
       description: mk.description as string | null, status: mk.status as string,
       type: mk.type as string, isElectoral: mk.is_electoral as boolean,
       closeAt: mk.close_at as Date, resolveBy: mk.resolve_by as Date,
       resolutionCriteria: mk.resolution_criteria as string, resolutionSource: mk.resolution_source as string,
+      categoryName: mk.category_name as string,
+      liquidityB: Number(mk.liquidity_b),
       outcomes: out.rows.map((r, i) => ({
         id: r.id as string, label: r.label as string,
         isCatchall: r.is_catchall as boolean, price: prices[i],
+        series: byOutcome.get(r.id as string) ?? [],
       })),
     };
   }),
 
   list: publicProcedure
-    .input(z.object({ status: z.string().optional() }).optional())
+    .input(z.object({ status: z.string().optional(), categorySlug: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const status = input?.status;
+      const conds: string[] = [];
+      const params: unknown[] = [];
+      if (input?.status) { params.push(input.status); conds.push(`m.status = $${params.length}`); }
+      if (input?.categorySlug) { params.push(input.categorySlug); conds.push(`c.slug = $${params.length}`); }
+      const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
       const r = await ctx.pool.query(
-        status
-          ? `SELECT slug, title, status, type FROM markets WHERE status = $1 ORDER BY created_at DESC LIMIT 50`
-          : `SELECT slug, title, status, type FROM markets ORDER BY created_at DESC LIMIT 50`,
-        status ? [status] : [],
+        `SELECT m.id, m.slug, m.title, m.status, m.type, m.is_electoral, m.liquidity_b,
+                c.slug AS category_slug, c.name AS category_name
+           FROM markets m JOIN categories c ON c.id = m.category_id
+           ${where}
+          ORDER BY m.created_at DESC LIMIT 50`,
+        params,
       );
-      return r.rows;
+      if (!r.rowCount) return [];
+
+      const marketIds = r.rows.map((row) => row.id as string);
+      const out = await ctx.pool.query(
+        `SELECT market_id, label, q, is_catchall FROM market_outcomes
+          WHERE market_id = ANY($1) ORDER BY market_id, display_order, id`,
+        [marketIds],
+      );
+      const byMarket = new Map<string, { label: string; q: number; isCatchall: boolean }[]>();
+      for (const o of out.rows) {
+        const arr = byMarket.get(o.market_id) ?? [];
+        arr.push({ label: o.label, q: Number(o.q), isCatchall: o.is_catchall });
+        byMarket.set(o.market_id, arr);
+      }
+
+      return r.rows.map((row) => {
+        const outcomes = byMarket.get(row.id as string) ?? [];
+        const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
+        // Resumo: BINARY -> preço do SIM; MULTI -> outcome líder (excluindo OUTROS).
+        let summary: { label: string; price: number } | null = null;
+        if (row.type === "BINARY") {
+          const idx = outcomes.findIndex((o) => o.label === "SIM");
+          if (idx >= 0) summary = { label: "SIM", price: prices[idx] };
+        } else {
+          let best = -1;
+          outcomes.forEach((o, i) => { if (!o.isCatchall && (best < 0 || prices[i] > prices[best])) best = i; });
+          if (best >= 0) summary = { label: outcomes[best].label, price: prices[best] };
+        }
+        return {
+          slug: row.slug as string, title: row.title as string, status: row.status as string,
+          type: row.type as string, isElectoral: row.is_electoral as boolean,
+          categorySlug: row.category_slug as string, categoryName: row.category_name as string,
+          summary,
+        };
+      });
     }),
 });
