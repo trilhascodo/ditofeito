@@ -3,18 +3,30 @@ import { Link, useParams } from "react-router-dom";
 import { sharesForPoints, tradeCost } from "@ditofeito/core";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
+import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 
 const CORES = ["#5B4B8A", "#B3402E", "#1F7A5C", "#B8860B", "#0E7490", "#888780"];
-const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
-const pct = (p: number) => `${(p * 100).toFixed(p >= 0.1 ? 0 : 1)}%`;
-const dataFmt = (d: Date | string) =>
-  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 
 function pathFromSeries(points: [number, number][], w: number, h: number, pad: number): string {
   if (points.length < 2) return "";
   return points
     .map(([t, p], i) => `${i ? "L" : "M"}${(pad + t * (w - 2 * pad)).toFixed(1)},${(h - p * h * 0.92 - pad).toFixed(1)}`)
     .join(" ");
+}
+
+function priceDelta(o: { price: number; series: [number, number][] }): number {
+  const serie = o.series;
+  const antes = serie.length >= 2 ? serie[serie.length - 2][1] : o.price;
+  return o.price - antes;
+}
+
+function VarBadge({ d }: { d: number }) {
+  if (Math.abs(d) < 0.0005) return <span className="var mono" style={{ color: "var(--grafite)" }}>—</span>;
+  return (
+    <span className={`var mono ${d > 0 ? "up" : "down"}`}>
+      {d > 0 ? "▲" : "▼"} {(Math.abs(d) * 100).toFixed(1)}
+    </span>
+  );
 }
 
 export function MarketPage() {
@@ -69,13 +81,17 @@ export function MarketPage() {
   }
 
   const W = 640, H = 220, P = 8;
+  const simIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "SIM") : -1;
+  const naoIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "NÃO") : -1;
 
   return (
     <main className="page">
-      <p className="eyebrow">{market.categoryName}</p>
+      <Link to={`/?categoria=${market.categorySlug}`} className="eyebrow" style={{ display: "block" }}>
+        {market.categoryName}
+      </Link>
       <h1>{market.title}</h1>
       <div className="meta">
-        <span>Encerra em <span className="mono">{dataFmt(market.closeAt)}</span></span>
+        <span>{relativeClose(market.closeAt)} <span className="mono">· {dataFmt(market.closeAt)}</span></span>
         <span>Resolve por <span className="mono">{market.resolutionSource}</span></span>
       </div>
       <p className="regras">{market.resolutionCriteria}</p>
@@ -97,40 +113,56 @@ export function MarketPage() {
                 );
               })}
             </svg>
-            <div className="legenda">
-              {market.outcomes.map((o, k) => (
-                <span key={o.id}>
-                  <i className="dot" style={{ background: CORES[k % CORES.length] }} />
-                  {o.label}
-                </span>
-              ))}
-            </div>
+            {market.type === "MULTI" && (
+              <div className="legenda">
+                {market.outcomes.map((o, k) => (
+                  <span key={o.id}>
+                    <i className="dot" style={{ background: CORES[k % CORES.length] }} />
+                    {o.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="card">
-            {market.outcomes.map((o, k) => {
-              const serie = o.series;
-              const antes = serie.length >= 2 ? serie[serie.length - 2][1] : o.price;
-              const d = o.price - antes;
-              return (
+          {market.type === "BINARY" && simIdx >= 0 && naoIdx >= 0 ? (
+            <div className="card binary-headline">
+              <div className="binary-pct">{pct(market.outcomes[simIdx].price)}</div>
+              <div className="binary-pct-label">
+                chance de <b>SIM</b> <VarBadge d={priceDelta(market.outcomes[simIdx])} />
+              </div>
+              {canTrade && (
+                <div className="binary-pills">
+                  <button
+                    className={`pill-outcome ${selected === market.outcomes[simIdx].id ? "sel" : ""}`}
+                    onClick={() => setSelected(market.outcomes[simIdx].id)}
+                  >
+                    Prever SIM<b>{pct(market.outcomes[simIdx].price)}</b>
+                  </button>
+                  <button
+                    className={`pill-outcome ${selected === market.outcomes[naoIdx].id ? "sel" : ""}`}
+                    onClick={() => setSelected(market.outcomes[naoIdx].id)}
+                  >
+                    Prever NÃO<b>{pct(market.outcomes[naoIdx].price)}</b>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="card">
+              {market.outcomes.map((o, k) => (
                 <div key={o.id} className={`out ${selected === o.id ? "sel" : ""}`}>
                   <span className="dot" style={{ background: CORES[k % CORES.length] }} />
                   <span className="nome">{o.label}</span>
-                  {Math.abs(d) < 0.0005 ? (
-                    <span className="var mono" style={{ color: "var(--grafite)" }}>—</span>
-                  ) : (
-                    <span className={`var mono ${d > 0 ? "up" : "down"}`}>
-                      {d > 0 ? "▲" : "▼"} {(Math.abs(d) * 100).toFixed(1)}
-                    </span>
-                  )}
+                  <VarBadge d={priceDelta(o)} />
                   <span className="preco mono">{pct(o.price)}</span>
                   {canTrade && (
                     <button onClick={() => setSelected(o.id)} aria-label={`Prever ${o.label}`}>Prever</button>
                   )}
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
 
           {market.isElectoral && (
             <p className="disc">
@@ -158,12 +190,17 @@ export function MarketPage() {
               <>
                 <h2>O que você diz?</h2>
                 <p className="sub">Registre sua previsão. Se o feito confirmar o dito, sua reputação sobe.</p>
-                <div className="campo">
-                  <label>Sua escolha</label>
-                  <span className="sel-out">
-                    {idx >= 0 ? market.outcomes[idx].label : "— selecione um outcome ao lado"}
-                  </span>
-                </div>
+                {idx >= 0 ? (
+                  <div className="painel-sel">
+                    <span className="nome">{market.outcomes[idx].label}</span>
+                    <span className="preco">{pct(market.outcomes[idx].price)}</span>
+                  </div>
+                ) : (
+                  <div className="campo">
+                    <label>Sua escolha</label>
+                    <span className="sel-out">— selecione um outcome ao lado</span>
+                  </div>
+                )}
                 <div className="campo">
                   <label htmlFor="pts">Pontos a comprometer</label>
                   <input
@@ -173,9 +210,9 @@ export function MarketPage() {
                 </div>
                 {preview && (
                   <div className="preview">
-                    <div className="row"><span>Posições que você recebe</span><b>{fmt(preview.shares)}</b></div>
+                    <div className="row"><span>Posições que você recebe</span><b>{fmtPoints(preview.shares)}</b></div>
                     <div className="row"><span>Probabilidade vai a</span><b>{pct(preview.priceAfter)}</b></div>
-                    <div className="row"><span>Se acertar, recebe</span><b>{fmt(preview.shares)} pts</b></div>
+                    <div className="row"><span>Se acertar, recebe</span><b>{fmtPoints(preview.shares)} pts</b></div>
                   </div>
                 )}
                 {tradeError && <p className="error-text">{tradeError}</p>}
@@ -188,8 +225,8 @@ export function MarketPage() {
                 {myPosition && (
                   <div className="posicao">
                     <div className="row"><span>Sua posição</span><b>{myPosition.outcomeLabel}</b></div>
-                    <div className="row"><span>Posições</span><b>{fmt(myPosition.shares)}</b></div>
-                    <div className="row"><span>Comprometido</span><b>{fmt(myPosition.costBasis)} pts</b></div>
+                    <div className="row"><span>Posições</span><b>{fmtPoints(myPosition.shares)}</b></div>
+                    <div className="row"><span>Comprometido</span><b>{fmtPoints(myPosition.costBasis)} pts</b></div>
                   </div>
                 )}
               </>

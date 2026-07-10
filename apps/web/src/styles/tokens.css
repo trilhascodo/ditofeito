@@ -231,3 +231,26 @@ textarea, select {
 textarea:focus, select:focus { outline: 2px solid var(--violeta); border-color: transparent; }
 textarea { resize: vertical; min-height: 70px; font-family: var(--sans); }
 .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 13px; color: var(--grafite); }
+
+/* ---------- headline binário (identidade §6: "número mono grande + seta de
+   variação 24h + sparkline violeta" — a probabilidade É a cara do produto) ---------- */
+.binary-headline { text-align: center; padding: 12px 20px 24px; }
+.binary-pct { font: 700 clamp(40px, 8vw, 60px) var(--mono); color: var(--violeta); line-height: 1; }
+.binary-pct-label { font-size: 14px; color: var(--grafite); margin-top: 10px; }
+.binary-pct-label b { color: var(--tinta); }
+.binary-pills { display: flex; gap: 10px; margin-top: 22px; }
+.pill-outcome {
+  flex: 1; font: 600 14px var(--sans); border-radius: 10px; padding: 14px; cursor: pointer;
+  border: 1.5px solid var(--linha); background: #fff; color: var(--tinta);
+}
+.pill-outcome b { display: block; font: 700 22px var(--mono); margin-top: 4px; }
+.pill-outcome.sel { border-color: var(--violeta); background: var(--violeta-2); }
+.pill-outcome:hover { border-color: var(--violeta); }
+
+/* seleção atual no painel de previsão, em destaque acima do form */
+.painel-sel {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--linha);
+}
+.painel-sel .nome { font-weight: 600; }
+.painel-sel .preco { font: 700 22px var(--mono); color: var(--violeta); }

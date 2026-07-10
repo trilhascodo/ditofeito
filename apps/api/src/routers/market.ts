@@ -160,7 +160,8 @@ export const marketRouter = router({
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
-              m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source, c.name AS category_name
+              m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source,
+              c.slug AS category_slug, c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
         WHERE m.slug = $1`,
       [input.slug],
@@ -206,7 +207,7 @@ export const marketRouter = router({
       type: mk.type as string, isElectoral: mk.is_electoral as boolean,
       closeAt: mk.close_at as Date, resolveBy: mk.resolve_by as Date,
       resolutionCriteria: mk.resolution_criteria as string, resolutionSource: mk.resolution_source as string,
-      categoryName: mk.category_name as string,
+      categorySlug: mk.category_slug as string, categoryName: mk.category_name as string,
       liquidityB: Number(mk.liquidity_b),
       outcomes: out.rows.map((r, i) => ({
         id: r.id as string, label: r.label as string,

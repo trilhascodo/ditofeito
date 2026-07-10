@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
-
-const pct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
+import { pct, relativeClose } from "../lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
   CLOSED: "ENCERRADO", RESOLVED: "RESOLVIDO", VOIDED: "ANULADO",
@@ -16,23 +14,17 @@ const CATEGORY_EMOJI: Record<string, string> = {
 };
 const FALLBACK_EMOJI = "◆";
 
-function relativeClose(closeAt: string | Date): string {
-  const diff = new Date(closeAt).getTime() - Date.now();
-  if (diff <= 0) return "encerrado";
-  const days = Math.floor(diff / 86_400_000);
-  if (days >= 1) return `encerra em ${days} dia${days > 1 ? "s" : ""}`;
-  const hours = Math.floor(diff / 3_600_000);
-  if (hours >= 1) return `encerra em ${hours}h`;
-  const mins = Math.max(1, Math.floor(diff / 60_000));
-  return `encerra em ${mins}min`;
-}
-
 export function Home() {
-  const [categorySlug, setCategorySlug] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const categorySlug = searchParams.get("categoria");
   const { data: categories } = trpc.market.categories.useQuery();
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
     categorySlug ? { categorySlug } : undefined,
   );
+
+  function selectCategory(slug: string | null) {
+    setSearchParams(slug ? { categoria: slug } : {});
+  }
 
   return (
     <main className="page">
@@ -45,7 +37,7 @@ export function Home() {
         <div className="cat-tabs">
           <button
             className={`cat-tab ${categorySlug === null ? "on" : ""}`}
-            onClick={() => setCategorySlug(null)}
+            onClick={() => selectCategory(null)}
           >
             Todos
           </button>
@@ -53,7 +45,7 @@ export function Home() {
             <button
               key={c.slug}
               className={`cat-tab ${categorySlug === c.slug ? "on" : ""}`}
-              onClick={() => setCategorySlug(c.slug)}
+              onClick={() => selectCategory(c.slug)}
             >
               {c.name}
             </button>
