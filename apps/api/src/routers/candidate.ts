@@ -38,14 +38,18 @@ const suggestInput = z
 export const candidateRouter = router({
   suggest: protectedProcedure.input(suggestInput).mutation(async ({ ctx, input }) => {
     try {
+      // ballot_name (nome de urna) é NOT NULL no schema, mas só existe de
+      // verdade após o registro no TSE — usa o nome público/civil como
+      // estimativa até lá (mesmo padrão de fallback do gerador.ts).
+      const ballotName = input.publicName ?? input.name;
       const r = await ctx.pool.query(
         `INSERT INTO candidates
-           (name, public_name, party, office, uf, municipality_ibge, photo_url,
+           (name, ballot_name, public_name, party, office, uf, municipality_ibge, photo_url,
             source_url, candidacy_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PRE_ANUNCIADO')
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PRE_ANUNCIADO')
          RETURNING id`,
         [
-          input.name, input.publicName ?? null, input.party, input.office,
+          input.name, ballotName, input.publicName ?? null, input.party, input.office,
           input.uf ?? null, input.municipalityIbge ?? null, input.photoUrl ?? null,
           input.sourceUrl,
         ],
