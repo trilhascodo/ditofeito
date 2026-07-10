@@ -1,3 +1,7 @@
+# NÃO USADO no deploy atual (VPS compartilhada com nginx nativo na 80/443 —
+# ver infra/nginx/README.md). Mantido para um cenário futuro de VPS dedicada
+# só ao DitoFeito, onde faria sentido o Caddy ser a própria porta de entrada.
+#
 # TLS automático (Let's Encrypt) + headers de cache específicos do embed.
 # frame-ancestors * SOMENTE nas rotas de embed — em todo o resto, o padrão
 # do navegador (mesma origem) protege contra clickjacking.

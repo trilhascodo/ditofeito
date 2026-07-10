@@ -9,6 +9,9 @@ import { startJobs } from "./jobs/schedule.js";
 import { APP_CONFIG } from "./config.js";
 
 const app = express();
+// Atrás de nginx (TLS termina lá): sem isso, req.ip vira o IP do proxy e
+// req.secure fica sempre false, mesmo com a conexão real em HTTPS.
+app.set("trust proxy", 1);
 const pool = getPool();
 
 // Rotas públicas do embed primeiro: HTML/SVG/JSON cacheáveis na CDN, sem
