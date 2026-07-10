@@ -21,4 +21,13 @@ INSERT INTO categories (slug, name, vertical, brand_safe) VALUES
   ('entretenimento', 'Entretenimento & Cultura Pop', 'ENTRETENIMENTO', true)
 ON CONFLICT (slug) DO NOTHING;
 
+-- "Menções": mercados de "expressão X foi dita em evento/discurso Y" —
+-- mecânica, não tema (mistura Oscar, política, figura pública). vertical
+-- OUTROS porque não é um assunto único; brand_safe=false porque a própria
+-- categoria pode conter mercado político (ex.: presidente/pronunciamento)
+-- mesmo quando o mercado individual não é (decisão 10/jul/2026).
+INSERT INTO categories (slug, name, vertical, brand_safe)
+VALUES ('mencoes', 'Menções', 'OUTROS', false)
+ON CONFLICT (slug) DO NOTHING;
+
 -- Moderadores reais: cadastrar manualmente via admin (não inventar contas aqui).

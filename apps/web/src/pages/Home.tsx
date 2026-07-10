@@ -13,6 +13,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   "eleicoes-2026": "🗳️",
   "esportes": "🏆",
   "entretenimento": "🎬",
+  "mencoes": "💬",
 };
 const FALLBACK_EMOJI = "◆";
 
