@@ -27,9 +27,9 @@ interface LedgerRow {
 
 export function Profile() {
   const { user, isLoading: authLoading } = useAuth();
-  const { data: me } = trpc.user.me.useQuery(undefined, { enabled: !!user });
-  const { data: positions } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
-  const { data: ledger } = trpc.user.myLedger.useQuery(undefined, { enabled: !!user });
+  const { data: me, isLoading: meLoading } = trpc.user.me.useQuery(undefined, { enabled: !!user });
+  const { data: positions, isLoading: positionsLoading } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
+  const { data: ledger, isLoading: ledgerLoading } = trpc.user.myLedger.useQuery(undefined, { enabled: !!user });
 
   if (authLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
 
@@ -54,7 +54,7 @@ export function Profile() {
         </div>
         <div style={{ textAlign: "right" }}>
           <div className="mono" style={{ fontSize: 28, fontWeight: 600, color: "var(--violeta)" }}>
-            {fmt(me?.balance ?? 0)} pts
+            {meLoading ? "—" : `${fmt(me?.balance ?? 0)} pts`}
           </div>
           <p className="hint-text" style={{ margin: 0 }}>saldo</p>
         </div>
@@ -90,7 +90,9 @@ export function Profile() {
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Posições</h2>
-        {!positions || positions.length === 0 ? (
+        {positionsLoading ? (
+          <p className="hint-text">Carregando…</p>
+        ) : !positions || positions.length === 0 ? (
           <p className="hint-text">Nenhuma posição aberta ainda.</p>
         ) : (
           positions.map((p) => (
@@ -115,7 +117,9 @@ export function Profile() {
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Extrato</h2>
-        {!ledger || ledger.length === 0 ? (
+        {ledgerLoading ? (
+          <p className="hint-text">Carregando…</p>
+        ) : !ledger || ledger.length === 0 ? (
           <p className="hint-text">Nada por aqui ainda.</p>
         ) : (
           (ledger as LedgerRow[]).map((entry) => {
