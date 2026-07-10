@@ -26,6 +26,9 @@ const createMarketInput = z
     resolveBy: z.string().datetime(),
     isElectoral: z.boolean().default(false),
     liquidityB: z.number().positive().optional(),
+    // false = fica em DRAFT pra revisão editorial antes de abrir pro público
+    // (mesma opção do gerador.ts eleitoral, GERADOR_CONFIG.publicarDireto).
+    publish: z.boolean().default(true),
   })
   .refine((d) => new Date(d.resolveBy) > new Date(d.closeAt), {
     message: "resolveBy deve ser depois de closeAt",
@@ -53,10 +56,10 @@ export const marketRouter = router({
         `INSERT INTO markets (slug, title, description, category_id, type, liquidity_b, status,
                               resolution_criteria, resolution_source, close_at, resolve_by,
                               is_electoral, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,'OPEN',$7,$8,$9,$10,$11,$12) RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
         [
           input.slug, input.title, input.description ?? null, categoryId, input.type,
-          b.toFixed(4), input.resolutionCriteria, input.resolutionSource,
+          b.toFixed(4), input.publish ? "OPEN" : "DRAFT", input.resolutionCriteria, input.resolutionSource,
           input.closeAt, input.resolveBy, input.isElectoral, ctx.user.id,
         ],
       );
@@ -139,6 +142,21 @@ export const marketRouter = router({
       }
     }),
 
+  publish: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
+    const r = await ctx.pool.query(
+      `UPDATE markets SET status = 'OPEN' WHERE id = $1 AND status = 'DRAFT' RETURNING id`,
+      [input.id],
+    );
+    if (!r.rowCount)
+      throw new TRPCError({ code: "BAD_REQUEST", message: "mercado não encontrado ou não está em DRAFT" });
+    return { id: r.rows[0].id as string };
+  }),
+
+  categories: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(`SELECT slug, name FROM categories ORDER BY name`);
+    return r.rows as { slug: string; name: string }[];
+  }),
+
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
@@ -198,14 +216,16 @@ export const marketRouter = router({
     };
   }),
 
+  // Público: nunca mostra DRAFT (revisão editorial ainda não publicada).
+  // A tabela do admin usa admin.listMarkets, que inclui DRAFT.
   list: publicProcedure
     .input(z.object({ status: z.string().optional(), categorySlug: z.string().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const conds: string[] = [];
+      const conds: string[] = ["m.status != 'DRAFT'"];
       const params: unknown[] = [];
       if (input?.status) { params.push(input.status); conds.push(`m.status = $${params.length}`); }
       if (input?.categorySlug) { params.push(input.categorySlug); conds.push(`c.slug = $${params.length}`); }
-      const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+      const where = `WHERE ${conds.join(" AND ")}`;
 
       const r = await ctx.pool.query(
         `SELECT m.id, m.slug, m.title, m.status, m.type, m.is_electoral, m.liquidity_b,

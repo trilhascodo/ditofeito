@@ -5,6 +5,11 @@ import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { MarketPage } from "./pages/MarketPage";
 import { Profile } from "./pages/Profile";
+import { AdminLayout } from "./admin/AdminLayout";
+import { AdminMarkets } from "./admin/AdminMarkets";
+import { AdminMarketNew } from "./admin/AdminMarketNew";
+import { AdminMarketDetail } from "./admin/AdminMarketDetail";
+import { AdminCandidates } from "./admin/AdminCandidates";
 
 const router = createBrowserRouter([
   {
@@ -15,6 +20,17 @@ const router = createBrowserRouter([
       { path: "/cadastro", element: <Signup /> },
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
+      {
+        path: "/admin",
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <AdminMarkets /> },
+          { path: "mercados", element: <AdminMarkets /> },
+          { path: "mercados/novo", element: <AdminMarketNew /> },
+          { path: "mercados/:slug", element: <AdminMarketDetail /> },
+          { path: "candidatos", element: <AdminCandidates /> },
+        ],
+      },
     ],
   },
 ]);

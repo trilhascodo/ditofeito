@@ -2,6 +2,8 @@ import { Link, Outlet, useNavigate } from "react-router-dom";
 import { logout } from "./lib/auth";
 import { useAuth } from "./lib/useAuth";
 
+const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
+
 export function Layout() {
   const { user, isLoading, refresh } = useAuth();
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export function Layout() {
           </Link>
           <nav className="site-nav">
             <Link to="/">Mercados</Link>
+            {user && STAFF_ROLES.has(user.role) && <Link to="/admin">Admin</Link>}
           </nav>
           <div className="site-header-auth">
             {isLoading ? null : user ? (
