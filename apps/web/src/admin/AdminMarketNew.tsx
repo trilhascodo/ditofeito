@@ -2,12 +2,31 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 
+// Espelha o regex de apps/api/src/routers/market.ts (slug) — sanitiza a
+// cada tecla (sem cortar hífen final, pra não atrapalhar quem tá digitando
+// "abc-def"); finalizeSlug() só corta as pontas no blur/submit.
+function sanitizeSlugLive(s: string): string {
+  return s.normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-{2,}/g, "-");
+}
+function finalizeSlug(s: string): string {
+  return sanitizeSlugLive(s).replace(/(^-|-$)/g, "");
+}
+
+function plusDaysLocal(dtLocalStr: string, days: number): string {
+  const d = new Date(dtLocalStr);
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function AdminMarketNew() {
   const navigate = useNavigate();
   const { data: categories } = trpc.market.categories.useQuery();
   const createMutation = trpc.market.create.useMutation();
 
   const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categorySlug, setCategorySlug] = useState("");
@@ -18,16 +37,34 @@ export function AdminMarketNew() {
   const [resolutionSource, setResolutionSource] = useState("");
   const [closeAt, setCloseAt] = useState("");
   const [resolveBy, setResolveBy] = useState("");
+  const [resolveByTouched, setResolveByTouched] = useState(false);
   const [isElectoral, setIsElectoral] = useState(false);
   const [publish, setPublish] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  function onTitleChange(v: string) {
+    setTitle(v);
+    if (!slugTouched) setSlug(finalizeSlug(v));
+  }
+
+  function onCloseAtChange(v: string) {
+    setCloseAt(v);
+    if (!resolveByTouched) setResolveBy(v ? plusDaysLocal(v, 1) : "");
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const finalSlug = finalizeSlug(slug);
+    if (!finalSlug) { setError("Slug inválido — use letras minúsculas, números e hífen."); return; }
+    if (closeAt && resolveBy && new Date(resolveBy) <= new Date(closeAt)) {
+      setError('"Resolve até" precisa ser depois de "Encerra em".');
+      return;
+    }
+    setSlug(finalSlug);
     try {
       const r = await createMutation.mutateAsync({
-        slug: slug.trim(), title: title.trim(), description: description.trim() || undefined,
+        slug: finalSlug, title: title.trim(), description: description.trim() || undefined,
         categorySlug, type,
         outcomes: type === "MULTI"
           ? outcomes.filter((o) => o.trim()).map((label) => ({ label: label.trim() }))
@@ -48,11 +85,19 @@ export function AdminMarketNew() {
       <form onSubmit={onSubmit}>
         <div className="field">
           <label className="label" htmlFor="slug">Slug</label>
-          <input className="input" id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} required />
+          <input
+            className="input" id="slug" value={slug}
+            onChange={(e) => { setSlug(sanitizeSlugLive(e.target.value)); setSlugTouched(true); }}
+            onBlur={() => setSlug(finalizeSlug(slug))}
+            required
+          />
+          <p className="hint-text" style={{ marginTop: 4 }}>
+            Preenchido a partir do título; edite se quiser um link diferente.
+          </p>
         </div>
         <div className="field">
           <label className="label" htmlFor="title">Título</label>
-          <input className="input" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <input className="input" id="title" value={title} onChange={(e) => onTitleChange(e.target.value)} required />
         </div>
         <div className="field">
           <label className="label" htmlFor="description">Descrição (opcional)</label>
@@ -105,12 +150,13 @@ export function AdminMarketNew() {
         <div className="field">
           <label className="label" htmlFor="closeAt">Encerra em</label>
           <input className="input" id="closeAt" type="datetime-local" value={closeAt}
-                 onChange={(e) => setCloseAt(e.target.value)} required />
+                 onChange={(e) => onCloseAtChange(e.target.value)} required />
         </div>
         <div className="field">
           <label className="label" htmlFor="resolveBy">Resolve até</label>
           <input className="input" id="resolveBy" type="datetime-local" value={resolveBy}
-                 onChange={(e) => setResolveBy(e.target.value)} required />
+                 onChange={(e) => { setResolveBy(e.target.value); setResolveByTouched(true); }} required />
+          <p className="hint-text" style={{ marginTop: 4 }}>Precisa ser depois de "Encerra em".</p>
         </div>
         <label className="checkbox-row">
           <input type="checkbox" checked={isElectoral} onChange={(e) => setIsElectoral(e.target.checked)} />

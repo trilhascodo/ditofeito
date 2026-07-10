@@ -1,7 +1,19 @@
 import { initTRPC, TRPCError } from "@trpc/server";
+import { ZodError } from "zod";
 import type { Context } from "./context.js";
 
-const t = initTRPC.context<Context>().create();
+const t = initTRPC.context<Context>().create({
+  // Sem isso, erro de validação de input chega no cliente com `message` =
+  // JSON.stringify(zodError.issues) (comportamento padrão do tRPC) — em vez
+  // de um texto legível, o front mostra o array bruto pro usuário.
+  errorFormatter(opts) {
+    const { shape, error } = opts;
+    if (error.cause instanceof ZodError) {
+      return { ...shape, message: error.cause.issues.map((i) => i.message).join(" · ") };
+    }
+    return shape;
+  },
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
