@@ -1,0 +1,18 @@
+{
+  "name": "ditofeito",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DitoFeito — plataforma de predição reputacional (monorepo)",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev:api": "pnpm --filter @ditofeito/api dev",
+    "dev:web": "pnpm --filter @ditofeito/web dev",
+    "typecheck": "pnpm --filter @ditofeito/core --filter @ditofeito/db run build && pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint"
+  }
+}

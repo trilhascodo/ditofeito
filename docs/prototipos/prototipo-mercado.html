@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quem vence a eleição para senador(a)/MA? — DitoFeito</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papel:#FAF8F3; --papel-2:#F1EDE4; --tinta:#1E2733; --grafite:#5C6672;
+  --violeta:#5B4B8A; --violeta-2:#EEEAF6; --conferido:#1F7A5C;
+  --carimbo:#B3402E; --linha:#E3DDD0;
+  --serif:'IBM Plex Serif',Georgia,serif; --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:var(--papel);color:var(--tinta);font:15px/1.55 var(--sans)}
+a{color:var(--violeta);text-decoration:none}
+.mono{font-family:var(--mono)}
+
+/* ---------- header ---------- */
+header{border-bottom:1px solid var(--linha);background:var(--papel)}
+.h-in{max-width:1080px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:24px}
+.logo{font:700 22px var(--serif);letter-spacing:-.02em}
+.logo b{color:var(--violeta);font-weight:700}
+.logo .selo{display:inline-block;font:600 10px var(--mono);color:var(--violeta);
+  border:1.5px solid var(--violeta);border-radius:3px;padding:0 4px;margin-left:6px;
+  transform:rotate(-3deg);vertical-align:3px}
+nav{display:flex;gap:18px;font-weight:500;font-size:14px;color:var(--grafite)}
+nav a{color:var(--grafite)} nav a.on{color:var(--tinta)}
+.saldo{margin-left:auto;font:600 14px var(--mono);background:var(--violeta-2);
+  color:var(--violeta);border-radius:8px;padding:6px 12px}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+.grid{display:grid;grid-template-columns:1fr 340px;gap:28px}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+
+/* ---------- mercado ---------- */
+.eyebrow{font:600 11px var(--mono);color:var(--grafite);text-transform:uppercase;
+  letter-spacing:.08em;margin-bottom:8px}
+h1{font:600 28px/1.25 var(--serif);letter-spacing:-.01em;max-width:640px}
+.meta{display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--grafite);flex-wrap:wrap}
+.meta .mono{font-weight:500}
+.regras{margin-top:6px;font-size:13px;color:var(--grafite)}
+.regras a{font-weight:500}
+
+.card{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:20px;margin-top:20px}
+
+/* gráfico */
+#chart{width:100%;height:220px;display:block}
+.legenda{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:13px}
+.legenda span{display:flex;align-items:center;gap:6px;color:var(--grafite)}
+.dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* outcomes */
+.out{display:flex;align-items:center;gap:14px;padding:12px 4px;border-bottom:1px solid var(--linha)}
+.out:last-child{border-bottom:0}
+.out .nome{flex:1;font-weight:500}
+.out .partido{color:var(--grafite);font-weight:400;font-size:13px}
+.out .preco{font:600 20px var(--mono);width:74px;text-align:right}
+.out .var{font:500 12px var(--mono);width:64px;text-align:right}
+.up{color:var(--conferido)} .down{color:var(--carimbo)}
+.out button{font:600 13px var(--sans);color:var(--violeta);background:var(--violeta-2);
+  border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
+.out button:hover{background:#E2DBF1}
+.out.sel{background:var(--violeta-2);border-radius:8px;border-bottom-color:transparent}
+
+/* ---------- painel de previsão ---------- */
+.painel{position:sticky;top:20px}
+.painel h2{font:600 18px var(--serif);margin-bottom:4px}
+.painel .sub{font-size:13px;color:var(--grafite);margin-bottom:16px}
+.campo{margin-bottom:14px}
+.campo label{display:block;font:600 12px var(--sans);color:var(--grafite);margin-bottom:6px}
+.campo .sel-out{font-weight:600}
+input[type=number]{width:100%;font:600 18px var(--mono);color:var(--tinta);
+  background:var(--papel);border:1px solid var(--linha);border-radius:8px;padding:10px 12px}
+input[type=number]:focus{outline:2px solid var(--violeta);border-color:transparent}
+.preview{background:var(--papel);border-radius:8px;padding:12px;font-size:13px;color:var(--grafite)}
+.preview .row{display:flex;justify-content:space-between;padding:3px 0}
+.preview .row b{font-family:var(--mono);color:var(--tinta)}
+.btn{width:100%;font:600 15px var(--sans);color:#fff;background:var(--violeta);
+  border:0;border-radius:8px;padding:14px;cursor:pointer;margin-top:14px}
+.btn:hover{background:#4A3C73}
+.btn:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--violeta);outline-offset:2px}
+.btn:disabled{background:var(--linha);color:var(--grafite);cursor:not-allowed}
+.posicao{margin-top:14px;font-size:13px;border-top:1px dashed var(--linha);padding-top:12px}
+.posicao .row{display:flex;justify-content:space-between;padding:2px 0;color:var(--grafite)}
+.posicao b{font-family:var(--mono);color:var(--tinta)}
+
+/* ---------- carimbo (assinatura) ---------- */
+.carimbo{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(30,39,51,.12);z-index:50}
+.carimbo.show{display:flex}
+.carimbo .selo-big{background:var(--papel);border:3px solid var(--violeta);color:var(--violeta);
+  font:700 26px var(--mono);letter-spacing:.05em;border-radius:10px;padding:22px 34px;
+  transform:rotate(-4deg);box-shadow:0 12px 40px rgba(30,39,51,.18)}
+.carimbo .selo-big small{display:block;font:500 13px var(--sans);color:var(--grafite);
+  letter-spacing:0;margin-top:6px;transform:none}
+@media(prefers-reduced-motion:no-preference){
+  .carimbo.show .selo-big{animation:bater .28s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes bater{from{transform:rotate(-4deg) scale(1.25);opacity:0}to{transform:rotate(-4deg) scale(1);opacity:1}}
+}
+
+/* ---------- debate ---------- */
+.debate h2{font:600 20px var(--serif);margin:34px 0 4px}
+.debate .sub{font-size:13px;color:var(--grafite);margin-bottom:16px}
+.com{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.com .quem{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:13px}
+.com .quem b{font-weight:600}
+.badge-pos{font:500 11px var(--mono);border-radius:5px;padding:2px 7px;background:var(--violeta-2);color:var(--violeta)}
+.badge-cal{font:500 11px var(--mono);color:var(--grafite)}
+.com p{font-size:14px}
+
+/* ---------- disclaimer ---------- */
+.disc{margin-top:40px;border-top:1px solid var(--linha);padding-top:14px;
+  font-size:12px;color:var(--grafite);max-width:640px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-in">
+    <span class="logo">Dito<b>Feito</b><span class="selo">✓</span></span>
+    <nav>
+      <a class="on" href="#">Mercados</a><a href="#">Ranking</a><a href="#">Índice</a><a href="#">Como funciona</a>
+    </nav>
+    <span class="saldo" id="saldo">1.000 pts</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="eyebrow">Eleições 2026 · Senado · Maranhão</p>
+  <h1>Quem vence a eleição para senador(a) pelo Maranhão?</h1>
+  <div class="meta">
+    <span>Encerra em <span class="mono">25 out 2026</span></span>
+    <span>Resolve por <span class="mono">TSE — resultado oficial</span></span>
+    <span><span class="mono" id="n-previsores">214</span> previsores</span>
+  </div>
+  <p class="regras">Resolve no candidato declarado eleito pela Justiça Eleitoral (2º turno, se houver). <a href="#">Critério completo</a></p>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <svg id="chart" viewBox="0 0 640 220" preserveAspectRatio="none" role="img" aria-label="Histórico de probabilidades dos candidatos"></svg>
+        <div class="legenda" id="legenda"></div>
+      </div>
+
+      <div class="card" id="outcomes"></div>
+
+      <section class="debate">
+        <h2>Debate</h2>
+        <p class="sub">Só vale com posição — todo comentário carrega o que o autor registrou.</p>
+
+        <div class="com">
+          <div class="quem"><b>@mariajose_codo</b>
+            <span class="badge-pos">● Cadu Mendes desde 24%</span>
+            <span class="badge-cal">calibração 87% · 34 resolvidas</span></div>
+          <p>O interior do sul do estado está fechado com ele desde a convenção do PL. Quem só olha capital não viu isso ainda.</p>
+        </div>
+        <div class="com">
+          <div class="quem"><b>@prof_ribamar</b>
+            <span class="badge-pos">● Ana Costa desde 31%</span>
+            <span class="badge-cal">calibração 79% · 51 resolvidas</span></div>
+          <p>Transferência de voto do governo estadual historicamente decide Senado no MA. Mantenho posição até ver pesquisa registrada dizendo o contrário.</p>
+        </div>
+        <div class="com">
+          <div class="quem"><b>@olheiro_mearim</b>
+            <span class="badge-pos">● Dr. Nonato desde 12%</span>
+            <span class="badge-cal">calibração 91% · 68 resolvidas</span></div>
+          <p>Comprei barato semana passada e o movimento de ontem me deu razão. O MDB vai unificar as prefeituras do Mearim — pode escrever.</p>
+        </div>
+      </section>
+
+      <p class="disc">Agregado de opiniões de participantes. Não é pesquisa eleitoral (Lei 9.504/97).
+      Aqui não existe dinheiro: pontos e reputação não têm valor monetário e não podem ser
+      trocados, vendidos ou sacados. <a href="#">Metodologia do Índice DitoFeito</a> · <a href="#">Por que não somos aposta</a></p>
+    </div>
+
+    <aside class="painel">
+      <div class="card">
+        <h2>O que você diz?</h2>
+        <p class="sub">Registre sua previsão. Se o feito confirmar o dito, sua reputação sobe.</p>
+        <div class="campo">
+          <label>Sua escolha</label>
+          <span class="sel-out" id="sel-nome">— selecione um candidato ao lado</span>
+        </div>
+        <div class="campo">
+          <label for="pts">Pontos a comprometer</label>
+          <input type="number" id="pts" min="1" max="1000" value="50" step="10">
+        </div>
+        <div class="preview" id="preview" hidden>
+          <div class="row"><span>Posições que você recebe</span><b id="pv-shares">—</b></div>
+          <div class="row"><span>Probabilidade vai a</span><b id="pv-preco">—</b></div>
+          <div class="row"><span>Se acertar, recebe</span><b id="pv-payout">—</b></div>
+        </div>
+        <button class="btn" id="registrar" disabled>Registrar previsão</button>
+        <div class="posicao" id="minha-pos" hidden>
+          <div class="row"><span>Sua posição</span><b id="mp-out">—</b></div>
+          <div class="row"><span>Posições</span><b id="mp-shares">—</b></div>
+          <div class="row"><span>Comprometido</span><b id="mp-custo">—</b></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="carimbo" id="carimbo" role="status">
+  <div class="selo-big">DITO ✓<small>Registrado. Agora é esperar o feito.</small></div>
+</div>
+
+<script>
+// ============ LMSR real (mesma matemática do backend) ============
+const b = 350; // profundidade p/ mercado visível
+const CORES = ["#5B4B8A","#B3402E","#1F7A5C","#B8860B","#0E7490","#888780"];
+const state = {
+  outcomes: [
+    { nome:"Cadu Mendes",  partido:"PL",  q: 717 },
+    { nome:"Dr. Nonato",   partido:"MDB", q: 694 },
+    { nome:"Ana Costa",    partido:"PT",  q: 655 },
+    { nome:"Chaguinha",    partido:"PSB", q: 0   },
+    { nome:"OUTROS",       partido:"",    q: 321 },
+  ],
+  hist: [],           // séries p/ o gráfico
+  saldo: 1000, sel: null, pos: null,
+};
+const lmsrCost = (q,b)=>{const m=Math.max(...q);return b*(m/b+Math.log(q.reduce((a,x)=>a+Math.exp((x-m)/b),0)))};
+const lmsrPrices = (q,b)=>{const m=Math.max(...q);const e=q.map(x=>Math.exp((x-m)/b));const s=e.reduce((a,x)=>a+x,0);return e.map(x=>x/s)};
+const sharesForPoints=(q,b,i,pts)=>{const tc=s=>{const q2=q.slice();q2[i]+=s;return lmsrCost(q2,b)-lmsrCost(q,b)};
+  let lo=0,hi=pts;while(tc(hi)<pts)hi*=2;while(hi-lo>1e-4){const m=(lo+hi)/2;tc(m)<pts?lo=m:hi=m}return lo};
+const fmt = n => n.toLocaleString("pt-BR",{maximumFractionDigits:0});
+const pct = p => (p*100).toFixed(p>=.10?0:1)+"%";
+
+// histórico sintético de 30 dias (narrativa: Ana liderava, Cadu virou, Nonato subiu)
+(function seed(){
+  const base=[[.18,.10,.34,.05,.33],[.22,.11,.33,.05,.29],[.24,.13,.31,.05,.27],
+  [.25,.15,.30,.04,.26],[.27,.18,.29,.04,.22],[.28,.22,.28,.04,.18],
+  [.30,.26,.27,.04,.13],[.31,.29,.26,.04,.10]];
+  for(let d=0;d<30;d++){
+    const t=d/29, i=Math.min(Math.floor(t*(base.length-1)),base.length-2), f=t*(base.length-1)-i;
+    state.hist.push(base[i].map((v,k)=>v+(base[i+1][k]-v)*f+ (Math.sin(d*2.7+k)*.004)));
+  }
+  state.hist.push(lmsrPrices(state.outcomes.map(o=>o.q),b));
+})();
+
+// ============ render ============
+const $ = id => document.getElementById(id);
+function precos(){ return lmsrPrices(state.outcomes.map(o=>o.q), b); }
+
+function renderChart(){
+  const svg=$("chart"); const W=640,H=220,P=8;
+  const n=state.hist.length;
+  let out="";
+  // grade sutil
+  for(const y of [.25,.5,.75]) out+=`<line x1="0" x2="${W}" y1="${H-y*H}" y2="${H-y*H}" stroke="#E3DDD0" stroke-width="1"/>`;
+  state.outcomes.forEach((o,k)=>{
+    const path=state.hist.map((row,i)=>`${i?"L":"M"}${(P+i/(n-1)*(W-2*P)).toFixed(1)},${(H-row[k]*H*0.92-P).toFixed(1)}`).join(" ");
+    out+=`<path d="${path}" fill="none" stroke="${CORES[k]}" stroke-width="${k===0?"3":"2"}" opacity="${o.nome==="OUTROS"?.45:.95}"/>`;
+  });
+  svg.innerHTML=out;
+  $("legenda").innerHTML = state.outcomes.map((o,k)=>
+    `<span><i class="dot" style="background:${CORES[k]}"></i>${o.nome}</span>`).join("");
+}
+
+function renderOutcomes(){
+  const ps=precos(); const antes=state.hist[state.hist.length-2]||ps;
+  $("outcomes").innerHTML = state.outcomes.map((o,k)=>{
+    const d=ps[k]-antes[k];
+    const varTxt = Math.abs(d)<.0005 ? `<span class="var mono" style="color:var(--grafite)">—</span>`
+      : `<span class="var mono ${d>0?"up":"down"}">${d>0?"▲":"▼"} ${(Math.abs(d)*100).toFixed(1)}</span>`;
+    return `<div class="out ${state.sel===k?"sel":""}">
+      <span class="dot" style="background:${CORES[k]}"></span>
+      <span class="nome">${o.nome} ${o.partido?`<span class="partido">(${o.partido})</span>`:""}</span>
+      ${varTxt}
+      <span class="preco mono">${pct(ps[k])}</span>
+      <button onclick="selecionar(${k})" aria-label="Prever ${o.nome}">Prever</button>
+    </div>`;
+  }).join("");
+}
+
+function renderPainel(){
+  const pts=Math.min(Math.max(+$("pts").value||0,0),state.saldo);
+  if(state.sel===null||pts<1){$("preview").hidden=true;$("registrar").disabled=true;return}
+  const q=state.outcomes.map(o=>o.q);
+  const sh=sharesForPoints(q,b,state.sel,pts);
+  const q2=q.slice();q2[state.sel]+=sh;
+  $("pv-shares").textContent=fmt(sh);
+  $("pv-preco").textContent=pct(lmsrPrices(q2,b)[state.sel]);
+  $("pv-payout").textContent=fmt(sh)+" pts";
+  $("preview").hidden=false;$("registrar").disabled=false;
+}
+
+window.selecionar=k=>{state.sel=k;$("sel-nome").textContent=
+  state.outcomes[k].nome+(state.outcomes[k].partido?` (${state.outcomes[k].partido})`:"");
+  renderOutcomes();renderPainel();};
+
+$("pts").addEventListener("input",renderPainel);
+
+$("registrar").addEventListener("click",()=>{
+  const pts=Math.min(+$("pts").value||0,state.saldo); if(state.sel===null||pts<1)return;
+  const q=state.outcomes.map(o=>o.q);
+  const sh=sharesForPoints(q,b,state.sel,pts);
+  state.outcomes[state.sel].q+=sh; state.saldo-=pts;
+  state.pos={out:state.sel,shares:(state.pos?.out===state.sel?state.pos.shares:0)+sh,
+             custo:(state.pos?.out===state.sel?state.pos.custo:0)+pts};
+  state.hist.push(precos());
+  $("saldo").textContent=fmt(state.saldo)+" pts";
+  $("mp-out").textContent=state.outcomes[state.sel].nome;
+  $("mp-shares").textContent=fmt(state.pos.shares);
+  $("mp-custo").textContent=fmt(state.pos.custo)+" pts";
+  $("minha-pos").hidden=false;
+  renderChart();renderOutcomes();renderPainel();
+  const c=$("carimbo");c.classList.add("show");
+  setTimeout(()=>c.classList.remove("show"),1400);
+});
+
+renderChart();renderOutcomes();renderPainel();
+</script>
+</body>
+</html>

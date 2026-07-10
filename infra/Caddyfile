@@ -1,0 +1,11 @@
+# TLS automático (Let's Encrypt) + headers de cache específicos do embed.
+# frame-ancestors * SOMENTE nas rotas de embed — em todo o resto, o padrão
+# do navegador (mesma origem) protege contra clickjacking.
+ditofeito.com.br {
+	encode gzip zstd
+
+	@embed path /embed/* /api/pub/* /card/*
+	header @embed Cache-Control "public, s-maxage=60, stale-while-revalidate=300"
+
+	reverse_proxy localhost:3000
+}

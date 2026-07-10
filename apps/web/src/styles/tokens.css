@@ -1,0 +1,33 @@
+/* Tokens de identidade — fonte: identidade-ditofeito.md §2–3.
+   Tema claro obrigatório: nada aqui pode lembrar cassino/corretora (sem dark
+   mode padrão, sem verde-dinheiro, sem odds piscando). */
+:root {
+  --papel: #FAF8F3;
+  --papel-2: #F1EDE4;
+  --tinta: #1E2733;
+  --grafite: #5C6672;
+  --violeta: #5B4B8A;
+  --violeta-2: #EEEAF6;
+  --conferido: #1F7A5C;
+  --carimbo: #B3402E;
+  --linha: #E3DDD0;
+
+  --serif: 'IBM Plex Serif', Georgia, serif;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font: 15px/1.55 var(--sans);
+}
+
+a { color: var(--violeta); }
+
+.mono { font-family: var(--mono); }
