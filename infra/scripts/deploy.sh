@@ -1,37 +1,24 @@
 #!/usr/bin/env bash
-# Roda NA VPS (disparado via SSH pelo .github/workflows/deploy.yml, ou à mão).
-# Pressupõe: repo clonado, infra/.env já configurado (nunca commitado),
-# usuário com acesso ao Docker. "commit -> VPS" = este script.
+# Roda NA VPS (disparado via SSH pelo .github/workflows/deploy.yml, ou à mão,
+# via authorized_keys com command= forçado — ver infra/nginx/README.md e a
+# chave dedicada de deploy). "commit -> VPS" = este script.
+#
+# Bootstrap FINO de propósito: um script bash não pode dar git reset --hard
+# em si mesmo com segurança. O processo já tem o arquivo bufferizado quando
+# a execução começa; se o reset troca o conteúdo em disco no meio do caminho,
+# o que roda depois do reset ainda é o conteúdo ANTIGO que o bash já tinha
+# lido (comportamento de buffer, não documentado/garantido) — foi assim que
+# a etapa de build do frontend, adicionada num commit, simplesmente não
+# rodou no deploy daquele mesmo commit (ficou pra próxima execução, um passo
+# atrasada, silenciosamente). Por isso deploy.sh só faz o reset e entrega
+# pra um processo NOVO (`exec bash`) rodar deploy-run.sh — que aí sim lê o
+# conteúdo atualizado do disco. Mudar a lógica de deploy = editar
+# deploy-run.sh, não este arquivo.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-
-# NÃO usar `source infra/.env` aqui: valores como
-# EMAIL_FROM="DitoFeito <endereco@dominio>" são válidos pro parser do
-# docker compose (KEY=VALUE puro) mas quebram o bash (< e > viram
-# redirecionamento). Extrai só o que o healthcheck abaixo precisa.
-API_HOST_PORT="$(grep -m1 '^API_HOST_PORT=' infra/.env 2>/dev/null | cut -d= -f2- || true)"
-API_HOST_PORT="${API_HOST_PORT:-3000}"
 
 echo "==> git fetch/reset para origin/main"
 git fetch origin main
 git reset --hard origin/main
 
-echo "==> build do frontend (apps/web/dist — nginx serve estático, ver infra/nginx/)"
-pnpm install --frozen-lockfile
-pnpm build
-
-echo "==> docker compose up --build"
-docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
-
-echo "==> aguardando /health"
-for i in $(seq 1 30); do
-  if curl -fs "http://127.0.0.1:${API_HOST_PORT}/health" > /dev/null; then
-    echo "==> saudável após $((i * 2))s"
-    docker image prune -f
-    exit 0
-  fi
-  sleep 2
-done
-
-echo "==> API não respondeu saudável a tempo — veja: docker compose -f infra/docker-compose.yml logs api"
-exit 1
+exec bash infra/scripts/deploy-run.sh
