@@ -2,11 +2,14 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { getPool } from "@ditofeito/db";
 import { mountEmbed } from "./http/embed.js";
 import { mountAuth } from "./http/auth.js";
 import { startJobs } from "./jobs/schedule.js";
 import { APP_CONFIG } from "./config.js";
+import { appRouter } from "./routers/_app.js";
+import { createContextFactory } from "./trpc/context.js";
 
 const app = express();
 // Atrás de nginx (TLS termina lá): sem isso, req.ip vira o IP do proxy e
@@ -23,8 +26,10 @@ app.use(cookieParser());
 app.use(cors({ origin: APP_CONFIG.webOrigin, credentials: true }));
 mountAuth(app, pool);
 
-// TODO F0→F1: montar envelope tRPC (routers/market, trade, candidate, comment, admin)
-// mapeando TradeError.code -> TRPCError, conforme README §6.3.
+app.use(
+  "/trpc",
+  createExpressMiddleware({ router: appRouter, createContext: createContextFactory(pool) }),
+);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
