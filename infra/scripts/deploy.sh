@@ -16,6 +16,10 @@ echo "==> git fetch/reset para origin/main"
 git fetch origin main
 git reset --hard origin/main
 
+echo "==> build do frontend (apps/web/dist — nginx serve estático, ver infra/nginx/)"
+pnpm install --frozen-lockfile
+pnpm build
+
 echo "==> docker compose up --build"
 docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
 

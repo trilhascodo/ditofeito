@@ -79,3 +79,27 @@ O certbot reescreve `/etc/nginx/sites-available/ditofeito` para adicionar o
 em `/etc/nginx/sites-enabled/` desta VPS). `WEB_ORIGIN`/`APP_BASE_URL`/
 `EMAIL_FROM` em `infra/.env` já apontam para `https://ditofeito.com`
 (cookies/CORS/links de e-mail usam o domínio real).
+
+## Frontend (apps/web) — estático, servido pelo próprio nginx
+
+Mesmo padrão do `cartoken-app.conf` desta VPS: nada de container/proxy pro
+frontend — `deploy.sh` roda `pnpm build` na própria VPS (Node 22 + pnpm via
+corepack já nativos no host, resolvem a versão fixada em `package.json`
+sozinhos) e o nginx serve `apps/web/dist` direto como `root` do `location /`,
+com fallback de SPA (`try_files ... /index.html`) pras rotas do
+react-router (`/entrar`, `/m/:slug` etc.).
+
+Só os prefixos que realmente são da API (`/trpc/`, `/auth/`, `/embed/`,
+`/api/pub/`, `/card/`, `/health`) são desviados pro container via um
+snippet compartilhado (`infra/nginx/proxy-snippet.conf` → copiar pra
+`/etc/nginx/ditofeito-proxy.conf` na VPS, referenciado com `include` nas
+location{} — evita repetir o mesmo bloco de proxy_set_header 6 vezes).
+
+```bash
+cp infra/nginx/proxy-snippet.conf /etc/nginx/ditofeito-proxy.conf
+# + o passo de "reaplicar ditofeito.conf + certbot --expand" de sempre (acima)
+```
+
+**Isso NÃO é automático no `deploy.sh`** — mudanças no nginx (novo prefixo de
+rota, ajuste de cache etc.) continuam manuais na VPS, só o build do
+`apps/web/dist` e os containers da API é que o pipeline cuida sozinho.
