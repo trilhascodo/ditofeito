@@ -83,6 +83,59 @@ export const marketRouter = router({
     }
   }),
 
+  // Só campos não-estruturais (nunca slug/type/outcomes/liquidez — mexer
+  // nisso com trades já registrados quebraria a matemática do LMSR).
+  // Só permitido em DRAFT/OPEN; CLOSED/RESOLVED/VOIDED são estados finais.
+  update: adminProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string().trim().min(1).max(300).optional(),
+        description: z.string().trim().max(2000).nullable().optional(),
+        resolutionCriteria: z.string().trim().min(10).optional(),
+        resolutionSource: z.string().trim().min(2).optional(),
+        closeAt: z.string().datetime().optional(),
+        resolveBy: z.string().datetime().optional(),
+        isElectoral: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...fields } = input;
+      const colMap: Record<string, string> = {
+        title: "title", description: "description", resolutionCriteria: "resolution_criteria",
+        resolutionSource: "resolution_source", closeAt: "close_at", resolveBy: "resolve_by",
+        isElectoral: "is_electoral",
+      };
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      for (const [k, v] of Object.entries(fields)) {
+        if (v === undefined) continue;
+        params.push(v);
+        sets.push(`${colMap[k]} = $${params.length}`);
+      }
+      if (!sets.length) throw new TRPCError({ code: "BAD_REQUEST", message: "nada para atualizar" });
+      params.push(id);
+
+      try {
+        const r = await ctx.pool.query(
+          `UPDATE markets SET ${sets.join(", ")} WHERE id = $${params.length} AND status IN ('DRAFT','OPEN')
+           RETURNING id`,
+          params,
+        );
+        if (!r.rowCount)
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "mercado não encontrado ou não editável (status atual não permite edição)",
+          });
+        return { id: r.rows[0].id as string };
+      } catch (e) {
+        if (e instanceof TRPCError) throw e;
+        if ((e as { code?: string }).code === "23514")
+          throw new TRPCError({ code: "BAD_REQUEST", message: "resolveBy deve ser depois de closeAt" });
+        throw e;
+      }
+    }),
+
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT id, slug, title, description, status, type, liquidity_b, is_electoral,
