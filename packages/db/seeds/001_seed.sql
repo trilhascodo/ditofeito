@@ -5,7 +5,7 @@
 -- password_hash = '!' — nunca casa com argon2.verify(); usuário sistema não
 -- faz login por senha, só existe como created_by/resolved_by de registros automáticos.
 INSERT INTO users (handle, display_name, email, password_hash, role)
-VALUES ('sistema', 'Sistema DitoFeito', 'sistema@ditofeito.com.br', '!', 'ADMIN')
+VALUES ('sistema', 'Sistema DitoFeito', 'sistema@ditofeito.com', '!', 'ADMIN')
 ON CONFLICT (handle) DO NOTHING;
 
 INSERT INTO categories (slug, name, vertical, brand_safe)

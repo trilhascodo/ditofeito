@@ -11,7 +11,7 @@ export interface TransactionalEmail {
 
 export async function sendTransactionalEmail(msg: TransactionalEmail): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM ?? "DitoFeito <nao-responda@ditofeito.com.br>";
+  const from = process.env.EMAIL_FROM ?? "DitoFeito <nao-responda@ditofeito.com>";
 
   if (!apiKey) {
     console.log(`[email:dev] para=${msg.to} assunto="${msg.subject}"\n${msg.html}`);

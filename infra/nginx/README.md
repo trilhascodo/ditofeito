@@ -20,18 +20,28 @@ com certbot gerenciando os certificados por domínio. Não existe Caddy — o
   `127.0.0.1:` fica exposta direto na internet. Sempre publicar com
   `127.0.0.1:`.
 
-## Domínio interino (nip.io)
+## Domínio interino (nip.io) — histórico
 
-`ditofeito.com.br` ainda não apontava para esta VPS no momento do primeiro
-deploy (resolvia para IPs de parking do registro.br). Para validar o deploy
-com HTTPS real sem esperar a propagação de DNS, usamos o mesmo truque já
-aplicado no `smartlicenca` deste servidor: um domínio `nip.io`, que resolve
-automaticamente para o IP contido no próprio nome — sem precisar configurar
-DNS nenhum.
+`ditofeito.com.br` (domínio do plano original) ainda não apontava para esta
+VPS no momento do primeiro deploy (resolvia para IPs de parking do
+registro.br). Para validar o deploy com HTTPS real sem esperar a propagação
+de DNS, usamos o mesmo truque já aplicado no `smartlicenca` deste servidor:
+um domínio `nip.io`, que resolve automaticamente para o IP contido no
+próprio nome — sem precisar configurar DNS nenhum.
 
 ```
 ditofeito.147-79-106-18.nip.io  ->  147.79.106.18
 ```
+
+Mantido como fallback no `server_name` (útil pra depurar sem depender de
+DNS), mesmo depois do domínio definitivo entrar.
+
+## Domínio definitivo: ditofeito.com
+
+O domínio efetivamente registrado foi **`ditofeito.com`** (sem `.br` — o
+plano original em `README.md` §7 previa `.com.br`, mas foi o `.com` que
+ficou disponível/escolhido na hora do registro). DNS apontado pelo usuário
+em 10/jul/2026 (`A @ 147.79.106.18`, `A www 147.79.106.18`).
 
 ## Comandos rodados na VPS (histórico, para repetir/auditar)
 
@@ -40,27 +50,19 @@ cp infra/nginx/ditofeito.conf /etc/nginx/sites-available/ditofeito
 ln -s /etc/nginx/sites-available/ditofeito /etc/nginx/sites-enabled/ditofeito
 nginx -t && systemctl reload nginx
 
+# Primeiro emitido só pro nip.io (antes do DNS apontar):
 certbot --nginx -d ditofeito.147-79-106-18.nip.io \
+  --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
+
+# Depois que o DNS de ditofeito.com apontou pra VPS, mesmo certificado
+# ampliado pro domínio real (SAN adicional, mesmo arquivo):
+certbot --nginx -d ditofeito.com -d www.ditofeito.com \
+  --cert-name ditofeito.147-79-106-18.nip.io \
   --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
 ```
 
 O certbot reescreve `/etc/nginx/sites-available/ditofeito` para adicionar o
 `server{}` de 443/ssl e o redirect 80→443 (mesmo padrão dos outros configs
-em `/etc/nginx/sites-enabled/` desta VPS).
-
-## Domínio definitivo (quando o DNS apontar)
-
-Depois que `ditofeito.com.br` resolver para `147.79.106.18` (A record `@` e
-`www` → `147.79.106.18`, ver instruções dadas ao usuário):
-
-```bash
-certbot --nginx -d ditofeito.com.br -d www.ditofeito.com.br \
-  --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
-```
-
-Isso adiciona mais um `server{}` ao mesmo arquivo (ou um novo, se preferir
-separar) — não precisa remover o bloco nip.io, mas dá pra limpar depois que o
-domínio real estiver estável. Atualizar `WEB_ORIGIN`/`APP_BASE_URL` em
-`infra/.env` para `https://ditofeito.com.br` nesse momento e reiniciar a API
-(`docker compose -f infra/docker-compose.yml --env-file infra/.env up -d`)
-para os cookies/CORS/links de e-mail passarem a usar o domínio real.
+em `/etc/nginx/sites-enabled/` desta VPS). `WEB_ORIGIN`/`APP_BASE_URL`/
+`EMAIL_FROM` em `infra/.env` já apontam para `https://ditofeito.com`
+(cookies/CORS/links de e-mail usam o domínio real).

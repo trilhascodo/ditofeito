@@ -17,7 +17,7 @@ import type { Pool } from "pg";
 import { lmsrPrices } from "@ditofeito/core";
 
 export const EMBED_CONFIG = {
-  baseUrl: "https://ditofeito.com.br",
+  baseUrl: "https://ditofeito.com",
   brand: "DitoFeito",
   sparklineDays: 30,
   sparklinePoints: 60,                     // downsample p/ SVG leve

@@ -1,6 +1,6 @@
 # DitoFeito — Plataforma de Predição Reputacional
 
-**ditofeito.com.br** · "pode escrever"
+**ditofeito.com** · "pode escrever"
 
 Backend de uma plataforma brasileira de mercados de predição **baseada em reputação,
 sem dinheiro real** — pontos fictícios, ranking por calibração, debate ancorado em
@@ -207,7 +207,10 @@ expansão por UF conforme a comunidade assume as sugestões.
 - **Plataforma:** DitoFeito — o *dito* é a posição registrada no ledger; o *feito* é a resolução.
 - **Produto citável:** Índice DitoFeito (metodologia pública versionada — é o que a imprensa cita).
 - **Slogan:** "pode escrever".
-- **Domínios a registrar:** ditofeito.com.br, ditoefeito.com.br (erro de grafia mais provável — defensivo), indiceditofeito.com.br, ditofeito.app. Evitar .io (TLD do lote bloqueado).
+- **Domínio registrado:** ditofeito.com (10/jul/2026 — o plano original previa .com.br,
+  mas o `.com` foi o que ficou disponível/escolhido). DNS já apontado para a VPS de produção.
+  Defensivos a avaliar: ditoefeito.com (erro de grafia mais provável), indiceditofeito.com.
+  Evitar .io (TLD do lote bloqueado).
 - **INPI:** depósito nas classes 35, 38, 41 e 42, em nome do CNPJ, o quanto antes (a prioridade conta do depósito).
 - **Handles:** Instagram, X, TikTok, YouTube e WhatsApp Business no mesmo dia do registro.
 - Critérios que o nome atravessou (registro histórico da decisão): compreensão imediata pelo
