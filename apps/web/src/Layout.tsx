@@ -25,7 +25,7 @@ export function Layout() {
           <div className="site-header-auth">
             {isLoading ? null : user ? (
               <>
-                <span className="saldo">{user.displayName}</span>
+                <Link to="/perfil" className="saldo">{user.displayName}</Link>
                 <button className="link-btn" onClick={onLogout}>Sair</button>
               </>
             ) : (
