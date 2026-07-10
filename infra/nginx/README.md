@@ -54,12 +54,25 @@ nginx -t && systemctl reload nginx
 certbot --nginx -d ditofeito.147-79-106-18.nip.io \
   --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
 
-# Depois que o DNS de ditofeito.com apontou pra VPS, mesmo certificado
-# ampliado pro domínio real (SAN adicional, mesmo arquivo):
-certbot --nginx -d ditofeito.com -d www.ditofeito.com \
-  --cert-name ditofeito.147-79-106-18.nip.io \
+# Depois que o DNS de ditofeito.com apontou pra VPS: reaplicar o
+# infra/nginx/ditofeito.conf por cima do arquivo (ele já traz os 3
+# server_name) SUBSTITUI o que o certbot tinha escrito — por isso o passo
+# seguinte é obrigatório logo em seguida, com --expand pra ampliar o mesmo
+# certificado em vez de criar um novo:
+cp infra/nginx/ditofeito.conf /etc/nginx/sites-available/ditofeito
+nginx -t && systemctl reload nginx
+
+certbot --nginx -d ditofeito.com -d www.ditofeito.com -d ditofeito.147-79-106-18.nip.io \
+  --cert-name ditofeito.147-79-106-18.nip.io --expand \
   --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
 ```
+
+**Atenção para o próximo deploy/expansão:** copiar `infra/nginx/ditofeito.conf`
+por cima do arquivo em produção sempre destrói o `server{}` de SSL que o
+certbot adicionou (o template do repo é só o bloco HTTP pré-certbot). Rodar o
+certbot de novo (comando acima, com `--expand`) logo depois sempre que copiar
+o arquivo — foi exatamente esse esquecimento que derrubou o HTTPS por alguns
+minutos no primeiro deploy do domínio real.
 
 O certbot reescreve `/etc/nginx/sites-available/ditofeito` para adicionar o
 `server{}` de 443/ssl e o redirect 80→443 (mesmo padrão dos outros configs
