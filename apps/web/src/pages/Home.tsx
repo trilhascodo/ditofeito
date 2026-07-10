@@ -11,6 +11,8 @@ const STATUS_LABEL: Record<string, string> = {
 // cor "de bandeira" por categoria — consistência de marca > variedade.
 const CATEGORY_EMOJI: Record<string, string> = {
   "eleicoes-2026": "🗳️",
+  "esportes": "🏆",
+  "entretenimento": "🎬",
 };
 const FALLBACK_EMOJI = "◆";
 

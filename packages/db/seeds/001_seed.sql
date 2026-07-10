@@ -12,4 +12,13 @@ INSERT INTO categories (slug, name, vertical, brand_safe)
 VALUES ('eleicoes-2026', 'Eleições 2026', 'POLITICA', false)
 ON CONFLICT (slug) DO NOTHING;
 
+-- Verticais não-políticas (decisão 10/jul/2026: mercados de esporte/cultura
+-- pop como atrativo de engajamento, sem o limite de só política). brand_safe
+-- = true aqui pro contrário de eleições — são exatamente as categorias
+-- elegíveis pro patrocínio nativo (sponsors/sponsorships) quando existir.
+INSERT INTO categories (slug, name, vertical, brand_safe) VALUES
+  ('esportes', 'Esportes', 'ESPORTE', true),
+  ('entretenimento', 'Entretenimento & Cultura Pop', 'ENTRETENIMENTO', true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- Moderadores reais: cadastrar manualmente via admin (não inventar contas aqui).
