@@ -7,6 +7,9 @@
 //   GET /card/:slug.svg     -> card 1200x630 (fonte; útil pra depurar)
 //   GET /card/:slug.png     -> card 1200x630 raster p/ og:image — é este que
 //                              vai na meta tag, WhatsApp não renderiza SVG
+//   GET /share/:slug        -> HTML com <meta og:*> de verdade; só alcançado
+//                              via nginx quando o User-Agent é bot de rede
+//                              social (o SPA não tem meta tag por rota)
 //
 // Requisitos de produto embutidos:
 //   - Zero dependência externa no HTML (funciona em qualquer site, offline-ish)
@@ -112,6 +115,13 @@ function sparklinePath(pts: [number, number][], w: number, h: number): string {
     `${i ? "L" : "M"}${(t * w).toFixed(1)},${(h - p * h).toFixed(1)}`).join(" ");
 }
 
+/** Outcome "manchete" p/ card e compartilhamento: SIM em BINARY, líder
+ *  (excluindo OUTROS) em MULTI — mesma escolha nos dois lugares. */
+function pickLeadingOutcome(d: PublicMarketData) {
+  if (d.type === "BINARY") return d.outcomes.find((o) => o.label === "SIM");
+  return [...d.outcomes].filter((o) => !o.isCatchall).sort((a, b) => b.price - a.price)[0];
+}
+
 export function renderEmbedHtml(d: PublicMarketData): string {
   const url = `${EMBED_CONFIG.baseUrl}/m/${d.slug}?utm_source=embed&utm_medium=widget`;
   // BINARY: destaque no SIM | MULTI: top 4 por preço (catchall sempre por último)
@@ -183,9 +193,7 @@ const TOKENS = {
 } as const;
 
 export function renderCardSvg(d: PublicMarketData): string {
-  const lider = [...d.outcomes]
-    .filter((o) => !o.isCatchall && o.label !== "NÃO")
-    .sort((a, b) => b.price - a.price)[0];
+  const lider = pickLeadingOutcome(d);
   const serie = d.series.find((s) => s.label === lider?.label);
   const path = sparklinePath(serie?.points ?? [], 640, 160);
   const titulo = d.title.length > 70 ? d.title.slice(0, 67) + "…" : d.title;
@@ -230,6 +238,44 @@ export function renderCardPng(d: PublicMarketData): Buffer {
 }
 
 // ---------------------------------------------------------------------------
+// 3b. PÁGINA DE COMPARTILHAMENTO (/share/:slug) — meta tags og:* de verdade
+//    apps/web é uma SPA: o index.html estático não tem og:image nenhum pra
+//    /m/:slug, então compartilhar o link direto não mostra nada. Em vez de
+//    SSR completo, o nginx detecta o crawler de rede social (WhatsApp,
+//    Twitterbot, facebookexternalhit etc. — ver infra/nginx/) e desvia SÓ
+//    ele pra cá; humano continua recebendo a SPA normalmente. Publicado
+//    aqui (não em /m/:slug) porque a API não deve competir com a rota da
+//    SPA — quem decide se um pedido é bot ou não é o nginx, na borda.
+// ---------------------------------------------------------------------------
+export function renderShareHtml(d: PublicMarketData): string {
+  const url = `${EMBED_CONFIG.baseUrl}/m/${d.slug}`;
+  const cardUrl = `${EMBED_CONFIG.baseUrl}/card/${d.slug}.png`;
+  const lider = pickLeadingOutcome(d);
+  const desc = lider
+    ? `${d.type === "BINARY" ? "Chance de SIM" : lider.label}: ${pct(lider.price)} — pode escrever.`
+    : "pode escrever.";
+
+  return `<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8">
+<title>${esc(d.title)} — ${esc(EMBED_CONFIG.brand)}</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(EMBED_CONFIG.brand)}">
+<meta property="og:title" content="${esc(d.title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${cardUrl}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="${url}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(d.title)}">
+<meta name="twitter:image" content="${cardUrl}">
+<meta http-equiv="refresh" content="0; url=${url}">
+</head><body>
+<p>Redirecionando… <a href="${url}">clique aqui</a> se a página não abrir sozinha.</p>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
 // 4. WIRING HTTP (Express — rotas públicas, fora do tRPC, cacheáveis na CDN)
 // ---------------------------------------------------------------------------
 import type express from "express";
@@ -244,6 +290,13 @@ export function mountEmbed(app: express.Express, pool: Pool) {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).send("mercado não encontrado");
     cache(res); res.type("html").send(renderEmbedHtml(d));
+  }));
+  // Só alcançada via nginx quando o User-Agent é um crawler de rede social
+  // (ver infra/nginx/) — humano nunca deveria bater aqui de propósito.
+  app.get("/share/:slug", asyncHandler(async (req, res) => {
+    const d = await getMarketPublicData(pool, req.params.slug);
+    if (!d) return res.status(404).send("mercado não encontrado");
+    cache(res); res.type("html").send(renderShareHtml(d));
   }));
   app.get("/api/pub/:slug.json", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);

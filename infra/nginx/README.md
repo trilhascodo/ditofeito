@@ -103,3 +103,32 @@ cp infra/nginx/proxy-snippet.conf /etc/nginx/ditofeito-proxy.conf
 **Isso NÃO é automático no `deploy.sh`** — mudanças no nginx (novo prefixo de
 rota, ajuste de cache etc.) continuam manuais na VPS, só o build do
 `apps/web/dist` e os containers da API é que o pipeline cuida sozinho.
+
+## Preview social (og:image) em /m/:slug
+
+O SPA não tem meta tag por rota (client-side render), então compartilhar um
+link `/m/:slug` no WhatsApp/Twitter/Discord não mostrava o card certo. Fix:
+um `map $http_user_agent $df_is_social_bot` (topo do arquivo, precisa estar
+em contexto `http{}` — por isso fora do `server{}`) detecta crawler de rede
+social e desvia só ELE (humano continua na SPA) pra rota
+`/share/:slug` da API (`apps/api/src/http/embed.ts`), que devolve HTML com
+`<meta property="og:*">` reais apontando pro `/card/:slug.png`.
+
+Aplicar na VPS (mesmo procedimento de sempre — reaplicar o template mexe no
+arquivo que o certbot editou, então `--expand` é obrigatório depois):
+
+```bash
+cp infra/nginx/ditofeito.conf /etc/nginx/sites-available/ditofeito
+nginx -t && systemctl reload nginx
+certbot --nginx -d ditofeito.com -d www.ditofeito.com -d ditofeito.147-79-106-18.nip.io \
+  --cert-name ditofeito.147-79-106-18.nip.io --expand \
+  --non-interactive --agree-tos -m trilhascodo@gmail.com --redirect
+```
+
+Testar com UA de bot direto na VPS (sem depender de cache do Facebook/etc.):
+
+```bash
+curl -sI -A "facebookexternalhit/1.1" https://ditofeito.com/m/<slug-real> | head -5
+# esperado: redireciona internamente pro /share/<slug> -> 200 text/html
+curl -s -A "facebookexternalhit/1.1" https://ditofeito.com/m/<slug-real> | grep 'og:image'
+```

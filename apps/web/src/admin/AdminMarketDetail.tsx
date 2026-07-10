@@ -40,6 +40,7 @@ export function AdminMarketDetail() {
 
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!market) return;
@@ -119,6 +120,14 @@ export function AdminMarketDetail() {
   if (error || !market) return <div className="card"><p className="error-text">Mercado não encontrado.</p></div>;
 
   const canResolveOrVoid = ["OPEN", "CLOSED"].includes(market.status);
+  const shareUrl = `${window.location.origin}/m/${market.slug}`;
+  const cardUrl = `${window.location.origin}/card/${market.slug}.png`;
+
+  async function onCopyLink() {
+    await navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <div>
@@ -131,6 +140,28 @@ export function AdminMarketDetail() {
 
       {msg && <div className="card" style={{ marginTop: 12, color: "var(--conferido)" }}>{msg}</div>}
       {err && <div className="card" style={{ marginTop: 12 }}><p className="error-text" style={{ margin: 0 }}>{err}</p></div>}
+
+      {market.status !== "DRAFT" && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Compartilhamento</h2>
+          <p className="hint-text" style={{ marginBottom: 12 }}>
+            Card exibido quando este link é compartilhado no WhatsApp, Twitter/X ou Discord.
+          </p>
+          <img
+            src={cardUrl} alt={`Card de compartilhamento — ${market.title}`}
+            style={{ width: "100%", maxWidth: 480, border: "1px solid var(--linha)", display: "block" }}
+          />
+          <div className="field" style={{ marginTop: 12 }}>
+            <label className="label">Link compartilhável</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className="input" readOnly value={shareUrl} onFocus={(e) => e.target.select()} />
+              <button type="button" className="btn-outline" style={{ width: "auto", whiteSpace: "nowrap" }} onClick={onCopyLink}>
+                {copied ? "Copiado!" : "Copiar link"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {market.status === "DRAFT" && canEdit && (
         <div className="card" style={{ marginTop: 20 }}>
