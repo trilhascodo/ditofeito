@@ -44,7 +44,7 @@ const CORES = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed",
 // ---------------------------------------------------------------------------
 export interface PublicMarketData {
   slug: string; title: string; status: string; isElectoral: boolean;
-  closeAt: string; type: "BINARY" | "MULTI";
+  closeAt: string; type: "BINARY" | "MULTI"; categoryName: string;
   outcomes: { label: string; price: number; isCatchall: boolean }[];
   /** série p/ sparkline: por outcome, pontos [t(0..1), price] */
   series: { label: string; points: [number, number][] }[];
@@ -55,9 +55,11 @@ export async function getMarketPublicData(
   pool: Pool, slug: string,
 ): Promise<PublicMarketData | null> {
   const m = await pool.query(
-    `SELECT id, slug, title, status, is_electoral, close_at, type, liquidity_b
-       FROM markets WHERE slug = $1
-        AND status IN ('OPEN','CLOSED','RESOLVED')`, [slug]);
+    `SELECT m.id, m.slug, m.title, m.status, m.is_electoral, m.close_at, m.type,
+            m.liquidity_b, c.name AS category_name
+       FROM markets m JOIN categories c ON c.id = m.category_id
+      WHERE m.slug = $1
+        AND m.status IN ('OPEN','CLOSED','RESOLVED')`, [slug]);
   if (!m.rowCount) return null;
   const mk = m.rows[0];
 
@@ -93,6 +95,7 @@ export async function getMarketPublicData(
   return {
     slug: mk.slug, title: mk.title, status: mk.status,
     isElectoral: mk.is_electoral, closeAt: mk.close_at, type: mk.type,
+    categoryName: mk.category_name,
     outcomes: out.rows.map((r, i) => ({
       label: r.label, price: prices[i], isCatchall: r.is_catchall })),
     series: out.rows.map((r) => ({
@@ -192,27 +195,81 @@ const TOKENS = {
   violeta: "#5B4B8A", linha: "#E3DDD0",
 } as const;
 
+// Sem engine de layout real disponível pro SVG (não é canvas/DOM), então
+// quebra de linha é heurística por largura média de glifo — mas por PIXEL,
+// não por nº de caracteres fixo. O bug que isso substitui: título cortado
+// em 70 chars vazava do canvas 1200px pra qualquer título que não fosse
+// curto (e a maioria dos enunciados de mercado não é).
+const AVG_CHAR_WIDTH_EM = 0.58; // IBM Plex Sans 600, medido contra render real
+
+function wrapText(text: string, maxWidthPx: number, fontSizePx: number, maxLines: number): string[] {
+  const maxChars = Math.max(4, Math.floor(maxWidthPx / (fontSizePx * AVG_CHAR_WIDTH_EM)));
+  const words = text.split(/\s+/).filter(Boolean);
+  const allLines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+    } else {
+      if (current) allLines.push(current);
+      current = word.length <= maxChars ? word : word.slice(0, maxChars);
+    }
+  }
+  if (current) allLines.push(current);
+  if (allLines.length <= maxLines) return allLines;
+
+  const shown = allLines.slice(0, maxLines);
+  const last = shown[maxLines - 1];
+  const room = Math.max(1, maxChars - 1);
+  shown[maxLines - 1] = (last.length > room ? last.slice(0, room).trimEnd() : last) + "…";
+  return shown;
+}
+
+const cardDateFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", timeZone: "America/Sao_Paulo" });
+
 export function renderCardSvg(d: PublicMarketData): string {
   const lider = pickLeadingOutcome(d);
   const serie = d.series.find((s) => s.label === lider?.label);
-  const path = sparklinePath(serie?.points ?? [], 640, 160);
-  const titulo = d.title.length > 70 ? d.title.slice(0, 67) + "…" : d.title;
+
+  const TITLE_SIZE = 40;
+  const TITLE_LINE_H = 50;
+  const titleLines = wrapText(d.title, 1040, TITLE_SIZE, 2);
+  const extraLine = titleLines.length > 1 ? 1 : 0;
+
+  const numberY = 310 + extraLine * TITLE_LINE_H;
+  const labelY = numberY + 55;
+  const sparkY = numberY - 90;
+  const path = sparklinePath(serie?.points ?? [], 560, 150);
+
+  const labelTexto = d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? "");
+  const labelWrapped = wrapText(labelTexto, 420, 34, 1)[0] ?? "";
+
+  const dataEncerra = `encerra ${cardDateFmt.format(new Date(d.closeAt))}`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="${TOKENS.papel}"/>
   <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
-  <text x="80" y="120" font-family="IBM Plex Sans" font-size="40"
-        font-weight="600" fill="${TOKENS.tinta}">${esc(titulo)}</text>
-  <text x="80" y="330" font-family="IBM Plex Mono" font-size="150"
+  <text x="80" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="600"
+        letter-spacing="1.4" fill="${TOKENS.grafite}">${esc(d.categoryName.toUpperCase())}</text>
+  ${titleLines.map((line, i) => `<text x="80" y="${118 + i * TITLE_LINE_H}" font-family="IBM Plex Sans" font-size="${TITLE_SIZE}"
+        font-weight="600" fill="${TOKENS.tinta}">${esc(line)}</text>`).join("\n  ")}
+  <text x="80" y="${numberY}" font-family="IBM Plex Mono" font-size="130"
         font-weight="700" fill="${TOKENS.violeta}">${pct(lider?.price ?? 0)}</text>
-  <text x="80" y="390" font-family="IBM Plex Mono" font-size="34"
-        font-weight="600" fill="${TOKENS.grafite}">${esc(d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? ""))}</text>
-  <g transform="translate(480,240)">
+  <text x="80" y="${labelY}" font-family="IBM Plex Mono" font-size="34"
+        font-weight="600" fill="${TOKENS.grafite}">${esc(labelWrapped)}</text>
+  <g transform="translate(560,${sparkY})">
     ${path ? `<path d="${path}" fill="none" stroke="${TOKENS.violeta}" stroke-width="5"
       stroke-linecap="round" stroke-linejoin="round"/>` : ""}
   </g>
   <text x="80" y="540" font-family="IBM Plex Serif" font-size="34" font-weight="700" fill="${TOKENS.tinta}">Dito<tspan fill="${TOKENS.violeta}">Feito</tspan></text>
-  ${d.isElectoral ? `<text x="80" y="580" font-family="IBM Plex Sans"
+  <g transform="translate(300,524) rotate(-8)">
+    <circle r="22" fill="none" stroke="${TOKENS.violeta}" stroke-width="2.5"/>
+    <text x="0" y="8" font-family="IBM Plex Mono" font-size="22" font-weight="700"
+          fill="${TOKENS.violeta}" text-anchor="middle">✓</text>
+  </g>
+  <text x="1120" y="551" font-family="IBM Plex Mono" font-size="18" fill="${TOKENS.grafite}" text-anchor="end">${esc(dataEncerra)}</text>
+  ${d.isElectoral ? `<text x="80" y="590" font-family="IBM Plex Sans"
         font-size="20" fill="${TOKENS.grafite}">${DISCLAIMER}</text>` : ""}
 </svg>`;
 }
