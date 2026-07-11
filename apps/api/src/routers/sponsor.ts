@@ -122,7 +122,7 @@ export const sponsorRouter = router({
       };
     }),
 
-  // ---- PÚBLICO: faixa de patrocínio da home (site-wide) -------------------
+  // ---- PÚBLICO: espaços de publicidade da home (até 3, layout.pdf) --------
   getActiveHome: publicProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
       `SELECT sp.label, s.name, s.logo_url, s.site_url
@@ -131,13 +131,11 @@ export const sponsorRouter = router({
         WHERE sp.is_home = true
           AND s.is_active = true
           AND now() BETWEEN sp.starts_at AND sp.ends_at
-        ORDER BY sp.starts_at DESC
-        LIMIT 1`);
-    if (!r.rowCount) return null;
-    const row = r.rows[0];
-    return {
+        ORDER BY sp.starts_at ASC
+        LIMIT 3`);
+    return r.rows.map((row) => ({
       label: row.label as string, sponsorName: row.name as string,
       logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
-    };
+    }));
   }),
 });

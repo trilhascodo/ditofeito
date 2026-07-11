@@ -303,12 +303,16 @@ export const marketRouter = router({
   // Público: nunca mostra DRAFT (revisão editorial ainda não publicada).
   // A tabela do admin usa admin.listMarkets, que inclui DRAFT.
   list: publicProcedure
-    .input(z.object({ status: z.string().optional(), categorySlug: z.string().optional() }).optional())
+    .input(z.object({
+      status: z.string().optional(), categorySlug: z.string().optional(),
+      q: z.string().trim().max(200).optional(),
+    }).optional())
     .query(async ({ ctx, input }) => {
       const conds: string[] = ["m.status != 'DRAFT'"];
       const params: unknown[] = [];
       if (input?.status) { params.push(input.status); conds.push(`m.status = $${params.length}`); }
       if (input?.categorySlug) { params.push(input.categorySlug); conds.push(`c.slug = $${params.length}`); }
+      if (input?.q) { params.push(`%${input.q}%`); conds.push(`m.title ILIKE $${params.length}`); }
       const where = `WHERE ${conds.join(" AND ")}`;
 
       const r = await ctx.pool.query(

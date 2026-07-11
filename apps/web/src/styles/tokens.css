@@ -45,6 +45,13 @@ a { color: var(--violeta); text-decoration: none; }
   border: 1.5px solid var(--violeta); border-radius: 3px; padding: 0 4px; margin-left: 6px;
   transform: rotate(-3deg); vertical-align: 3px;
 }
+.site-search { flex: 1; max-width: 380px; }
+.site-search input {
+  width: 100%; font: 500 14px var(--sans); color: var(--tinta);
+  background: var(--papel); border: 1px solid var(--linha); border-radius: 8px; padding: 8px 12px;
+}
+.site-search input:focus { outline: 2px solid var(--violeta); outline-offset: 0; border-color: transparent; }
+.site-search input::-webkit-search-cancel-button { cursor: pointer; }
 .site-nav { display: flex; gap: 18px; font-weight: 500; font-size: 14px; color: var(--grafite); }
 .site-nav a { color: var(--grafite); }
 .site-header-auth { margin-left: auto; display: flex; align-items: center; gap: 14px; font-size: 14px; }
@@ -86,6 +93,21 @@ a { color: var(--violeta); text-decoration: none; }
 
 .error-text { color: var(--carimbo); font-size: 13px; margin-top: 4px; }
 .hint-text { color: var(--grafite); font-size: 13px; }
+
+/* ---------- home: destaque + coluna de anúncios (layout.pdf) ---------- */
+.home-topo { display: grid; grid-template-columns: 1fr 300px; gap: 20px; margin-bottom: 28px; align-items: start; }
+.home-topo .destaque { margin-bottom: 0; }
+@media (max-width: 860px) { .home-topo { grid-template-columns: 1fr; } }
+
+.ad-slots { display: flex; flex-direction: column; gap: 14px; }
+.ad-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: var(--papel-2); border: 1px solid var(--linha); border-radius: 12px;
+  padding: 20px 16px; min-height: 100px; text-align: center; color: var(--grafite); font-size: 12px;
+}
+.ad-slot img { max-height: 32px; max-width: 100%; object-fit: contain; }
+.ad-slot b { color: var(--tinta); font-size: 13px; }
+a.ad-slot:hover { border-color: var(--violeta); }
 
 /* ---------- home: slide de destaque ---------- */
 /* Layout inspirado no carrossel do Polymarket — só a estrutura (1 card
@@ -264,13 +286,6 @@ input[type=number]:focus { outline: 2px solid var(--violeta); border-color: tran
 .patrocinio img { flex: none; object-fit: contain; }
 .patrocinio b { color: var(--tinta); font-weight: 600; }
 a.patrocinio:hover { background: var(--linha); }
-
-/* faixa da home: mesma linguagem visual, só maior/mais central — é o
-   "espaço de destaque" pedido, sem virar banner/pop-up. */
-.patrocinio-home {
-  max-width: none; margin-top: 36px; padding: 20px 24px; justify-content: center;
-  font-size: 13px; border: 1px solid var(--linha);
-}
 
 /* "leitura relacionada" — link curado manualmente pelo admin, sem preview
    automático (não busca favicon/thumbnail externo: zero dependência,

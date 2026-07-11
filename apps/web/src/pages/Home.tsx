@@ -62,6 +62,34 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
   );
 }
 
+interface HomeSponsor {
+  label: string; sponsorName: string; logoUrl: string | null; siteUrl: string | null;
+}
+
+// Até 3 espaços de publicidade ao lado do destaque (layout.pdf — coluna
+// lateral empilhada, não mais faixa única embaixo do grid). Só renderiza o
+// que tiver patrocínio ativo — sem caixa vazia "espaço disponível".
+function AdSlots({ items }: { items: HomeSponsor[] }) {
+  return (
+    <aside className="ad-slots">
+      {items.map((s, i) => {
+        const conteudo = (
+          <>
+            {s.logoUrl && <img src={s.logoUrl} alt="" />}
+            <span className="ad-slot-label">{s.label}</span>
+            <b>{s.sponsorName}</b>
+          </>
+        );
+        return s.siteUrl ? (
+          <a key={i} className="ad-slot" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+        ) : (
+          <div key={i} className="ad-slot">{conteudo}</div>
+        );
+      })}
+    </aside>
+  );
+}
+
 // Ícone por categoria — emoji, não foto (identidade §7: sem tratamento
 // heroico/pejorativo de candidatos). Fundo é sempre violeta-2, nunca uma
 // cor "de bandeira" por categoria — consistência de marca > variedade.
@@ -76,16 +104,32 @@ const FALLBACK_EMOJI = "◆";
 export function Home() {
   const [searchParams] = useSearchParams();
   const categorySlug = searchParams.get("categoria");
+  const busca = searchParams.get("busca");
   const { data: categories } = trpc.market.categories.useQuery();
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
-    categorySlug ? { categorySlug } : undefined,
+    (categorySlug || busca) ? { categorySlug: categorySlug ?? undefined, q: busca ?? undefined } : undefined,
   );
-  const { data: homeSponsor } = trpc.sponsor.getActiveHome.useQuery();
+  const { data: homeSponsors } = trpc.sponsor.getActiveHome.useQuery();
   const { data: featured } = trpc.market.featured.useQuery();
 
   return (
     <main className="page">
-      {featured && <Destaque items={featured} />}
+      {featured && (
+        homeSponsors && homeSponsors.length > 0 ? (
+          <div className="home-topo">
+            <Destaque items={featured} />
+            <AdSlots items={homeSponsors} />
+          </div>
+        ) : (
+          <Destaque items={featured} />
+        )
+      )}
+
+      {busca && (
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Resultado pra "{busca}"{markets ? ` — ${markets.length} mercado${markets.length === 1 ? "" : "s"}` : ""}
+        </p>
+      )}
 
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
@@ -143,18 +187,6 @@ export function Home() {
           ))}
         </div>
       )}
-
-      {homeSponsor && (homeSponsor.siteUrl ? (
-        <a className="patrocinio patrocinio-home" href={homeSponsor.siteUrl} target="_blank" rel="noopener noreferrer">
-          {homeSponsor.logoUrl && <img src={homeSponsor.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 160 }} />}
-          <span>{homeSponsor.label} <b>{homeSponsor.sponsorName}</b></span>
-        </a>
-      ) : (
-        <div className="patrocinio patrocinio-home">
-          {homeSponsor.logoUrl && <img src={homeSponsor.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 160 }} />}
-          <span>{homeSponsor.label} <b>{homeSponsor.sponsorName}</b></span>
-        </div>
-      ))}
     </main>
   );
 }

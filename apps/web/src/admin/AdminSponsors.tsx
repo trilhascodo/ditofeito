@@ -64,7 +64,7 @@ export function AdminSponsors() {
     e.preventDefault();
     setSpErr(null);
     if (!sponsorId || (!marketId && !isHome) || !endsAt) {
-      setSpErr("Preencha patrocinador, data de fim, e um mercado ou a faixa da home.");
+      setSpErr("Preencha patrocinador, data de fim, e um mercado ou um espaço de publicidade da home.");
       return;
     }
     try {
@@ -147,8 +147,8 @@ export function AdminSponsors() {
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Vincula um patrocinador a um mercado (card "Apresentado por" na página do
-          mercado e tag no card da home) ou à home inteira (faixa de destaque no
-          rodapé da lista de mercados) por um período.
+          mercado e tag no card da home) ou à home inteira (espaço de publicidade
+          ao lado do destaque — até 3 simultâneos) por um período.
         </p>
         <form onSubmit={onCreateSponsorship}>
           <div className="field">
@@ -160,7 +160,7 @@ export function AdminSponsors() {
           </div>
           <label className="checkbox-row">
             <input type="checkbox" checked={isHome} onChange={(e) => { setIsHome(e.target.checked); setMarketId(""); }} />
-            Faixa de destaque da home (não vincula a um mercado específico)
+            Espaço de publicidade da home (não vincula a um mercado específico — até 3 simultâneos)
           </label>
           {!isHome && (
             <div className="field">
@@ -203,7 +203,7 @@ export function AdminSponsors() {
               <div key={sp.id} className="admin-row">
                 <span className="titulo">
                   {sp.sponsor.name} → {sp.isHome
-                    ? "Faixa da home"
+                    ? "Espaço de publicidade da home"
                     : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
                     "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
