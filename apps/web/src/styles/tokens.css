@@ -156,11 +156,14 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
 .out .nome { flex: 1; font-weight: 500; }
 .out .preco { font: 600 20px var(--mono); width: 74px; text-align: right; }
 .out .var { text-align: right; width: 64px; }
-.up, .down {
+/* .up/.down sozinhas: só cor (extrato do perfil, valores maiores). Com
+   .var junto (VarBadge — indicador pequeno de variação): pill preenchido. */
+.up { color: var(--conferido); } .down { color: var(--carimbo); }
+.var.up, .var.down {
   display: inline-flex; align-items: center; gap: 2px; font: 700 12px var(--mono);
   color: #fff; padding: 2px 7px; border-radius: 99px;
 }
-.up { background: var(--conferido); } .down { background: var(--carimbo); }
+.var.up { background: var(--conferido); } .var.down { background: var(--carimbo); }
 .out button {
   font: 600 13px var(--sans); color: var(--violeta); background: var(--violeta-2);
   border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
