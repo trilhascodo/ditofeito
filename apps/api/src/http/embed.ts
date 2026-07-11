@@ -192,7 +192,7 @@ export function renderEmbedHtml(d: PublicMarketData): string {
 // ---------------------------------------------------------------------------
 const TOKENS = {
   papel: "#FAF8F3", tinta: "#1E2733", grafite: "#5C6672",
-  violeta: "#5B4B8A", linha: "#E3DDD0",
+  violeta: "#4F2E99", linha: "#E3DDD0",
 } as const;
 
 // Sem engine de layout real disponível pro SVG (não é canvas/DOM), então

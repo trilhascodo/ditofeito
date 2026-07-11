@@ -27,10 +27,9 @@ export function Home() {
 
   return (
     <main className="page">
-      <h1 style={{ fontFamily: "var(--serif)", fontSize: 32, marginBottom: 4 }}>
-        Dito<span style={{ color: "var(--violeta)" }}>Feito</span>
+      <h1 style={{ fontFamily: "var(--serif)", fontSize: 32, marginBottom: 20 }}>
+        pode escrever
       </h1>
-      <p className="hint-text" style={{ marginBottom: 20 }}>pode escrever</p>
 
       {categories && categories.length > 0 && (
         <div className="cat-tabs">

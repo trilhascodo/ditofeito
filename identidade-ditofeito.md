@@ -19,14 +19,23 @@ vocabulário de ganho financeiro.
 | Token | Hex | Papel |
 |---|---|---|
 | `--papel` | `#FAF8F3` | Fundo padrão (tema claro obrigatório) |
-| `--papel-2` | `#F1EDE4` | Superfícies elevadas, cartões |
+| `--papel-2` | `#F1EDE4` | Superfícies elevadas, cartões, fundo padrão de abas/chips |
 | `--tinta` | `#1E2733` | Texto principal, títulos |
 | `--grafite` | `#5C6672` | Texto secundário, legendas |
-| `--violeta` | `#5B4B8A` | **Primária.** Ações, links, marca, gráfico principal |
-| `--violeta-2` | `#EEEAF6` | Fundo de destaque suave (selos, hover) |
-| `--conferido` | `#1F7A5C` | "Feito", acertos, altas. Nunca neon |
-| `--carimbo` | `#B3402E` | Quedas, NÃO, alertas. Uso pontual |
+| `--violeta` | `#4F2E99` | **Primária.** Ações, links, marca, gráfico principal |
+| `--violeta-2` | `#E8DFF7` | Bloco de cor sólido (headline binário, chips de preço, selos, hover) |
+| `--conferido` | `#0F8F5F` | "Feito", acertos, altas. Vívido mas nunca neon — pill preenchido em variação de preço |
+| `--carimbo` | `#C93A1F` | Quedas, alertas. Vívido mas nunca neon — pill preenchido em variação de preço |
 | `--linha` | `#E3DDD0` | Bordas e divisores |
+
+**Decisão 11/jul/2026:** tokens reajustados pra mais saturação/contraste (feedback:
+"muito clean") — dentro do tema claro obrigatório, sem abrir mão da regra "sem
+dark mode/neon". O ganho de "vivo" vem de **blocos de cor sólidos** (fundo
+violeta-2 atrás do número-herói, chips preenchidos pra preço e variação), não de
+mudar o tema ou usar verde/vermelho pra marcar SIM/NÃO — isso continua proibido
+(seria exatamente o padrão de aposta que a marca evita). `--conferido`/`--carimbo`
+seguem reservados pra variação de preço (alta/baixa) e resolução, nunca pra
+"SIM bom, NÃO ruim".
 
 **Por que violeta:** é a cor do papel-carbono e do mimeógrafo — a cor brasileira
 do registro — e é a única faixa cromática sem dono na política nacional (vermelho

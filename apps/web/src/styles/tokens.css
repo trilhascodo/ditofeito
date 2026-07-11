@@ -6,10 +6,10 @@
   --papel-2: #F1EDE4;
   --tinta: #1E2733;
   --grafite: #5C6672;
-  --violeta: #5B4B8A;
-  --violeta-2: #EEEAF6;
-  --conferido: #1F7A5C;
-  --carimbo: #B3402E;
+  --violeta: #4F2E99;
+  --violeta-2: #E8DFF7;
+  --conferido: #0F8F5F;
+  --carimbo: #C93A1F;
   --linha: #E3DDD0;
 
   --serif: 'IBM Plex Serif', Georgia, serif;
@@ -75,7 +75,7 @@ a { color: var(--violeta); text-decoration: none; }
   width: 100%; font: 600 15px var(--sans); color: #fff; background: var(--violeta);
   border: 0; border-radius: 8px; padding: 14px; cursor: pointer;
 }
-.btn:hover { background: #4A3C73; }
+.btn:hover { background: #3B2178; }
 .btn:disabled { background: var(--linha); color: var(--grafite); cursor: not-allowed; }
 .btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--violeta); outline-offset: 2px; }
 
@@ -96,7 +96,7 @@ a { color: var(--violeta); text-decoration: none; }
   padding-bottom: 14px; border-bottom: 1px solid var(--linha);
 }
 .cat-tab {
-  font: 500 13px var(--sans); color: var(--grafite); background: none;
+  font: 500 13px var(--sans); color: var(--grafite); background: var(--papel-2);
   border: 1px solid var(--linha); border-radius: 99px; padding: 6px 14px; cursor: pointer;
 }
 .cat-tab:hover { border-color: var(--violeta); color: var(--tinta); }
@@ -124,7 +124,10 @@ a { color: var(--violeta); text-decoration: none; }
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .market-tile-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 12px; }
-.market-tile-price { font-weight: 700; font-size: 16px; color: var(--violeta); }
+.market-tile-price {
+  font-weight: 700; font-size: 14px; color: var(--violeta); background: var(--violeta-2);
+  padding: 3px 10px; border-radius: 99px;
+}
 
 .badge {
   font: 600 11px var(--sans); background: var(--papel-2); color: var(--grafite);
@@ -152,13 +155,17 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
 .out:last-child { border-bottom: 0; }
 .out .nome { flex: 1; font-weight: 500; }
 .out .preco { font: 600 20px var(--mono); width: 74px; text-align: right; }
-.out .var { font: 500 12px var(--mono); width: 64px; text-align: right; }
-.up { color: var(--conferido); } .down { color: var(--carimbo); }
+.out .var { text-align: right; width: 64px; }
+.up, .down {
+  display: inline-flex; align-items: center; gap: 2px; font: 700 12px var(--mono);
+  color: #fff; padding: 2px 7px; border-radius: 99px;
+}
+.up { background: var(--conferido); } .down { background: var(--carimbo); }
 .out button {
   font: 600 13px var(--sans); color: var(--violeta); background: var(--violeta-2);
   border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
 }
-.out button:hover { background: #E2DBF1; }
+.out button:hover { background: #DDD0F4; }
 .out.sel { background: var(--violeta-2); border-radius: 8px; border-bottom-color: transparent; }
 
 .painel { position: sticky; top: 20px; align-self: start; }
@@ -238,7 +245,7 @@ textarea { resize: vertical; min-height: 70px; font-family: var(--sans); }
 
 /* ---------- headline binário (identidade §6: "número mono grande + seta de
    variação 24h + sparkline violeta" — a probabilidade É a cara do produto) ---------- */
-.binary-headline { text-align: center; padding: 12px 20px 24px; }
+.binary-headline { text-align: center; padding: 28px 20px 32px; background: var(--violeta-2); }
 .binary-pct { font: 700 clamp(40px, 8vw, 60px) var(--mono); color: var(--violeta); line-height: 1; }
 .binary-pct-label { font-size: 14px; color: var(--grafite); margin-top: 10px; }
 .binary-pct-label b { color: var(--tinta); }
@@ -248,7 +255,7 @@ textarea { resize: vertical; min-height: 70px; font-family: var(--sans); }
   border: 1.5px solid var(--linha); background: #fff; color: var(--tinta);
 }
 .pill-outcome b { display: block; font: 700 22px var(--mono); margin-top: 4px; }
-.pill-outcome.sel { border-color: var(--violeta); background: var(--violeta-2); }
+.pill-outcome.sel { border-color: var(--violeta); background: var(--violeta); color: #fff; }
 .pill-outcome:hover { border-color: var(--violeta); }
 
 /* seleção atual no painel de previsão, em destaque acima do form */

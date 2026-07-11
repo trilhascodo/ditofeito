@@ -5,7 +5,7 @@ import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 
-const CORES = ["#5B4B8A", "#B3402E", "#1F7A5C", "#B8860B", "#0E7490", "#888780"];
+const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
 function pathFromSeries(points: [number, number][], w: number, h: number, pad: number): string {
   if (points.length < 2) return "";
