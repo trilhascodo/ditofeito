@@ -58,6 +58,20 @@ export const sponsorRouter = router({
       return { ok: true };
     }),
 
+  update: adminProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      name: z.string().trim().min(1).max(120),
+      logoUrl: z.string().trim().url().optional(),
+      siteUrl: z.string().trim().url().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(
+        `UPDATE sponsors SET name = $2, logo_url = $3, site_url = $4 WHERE id = $1`,
+        [input.id, input.name, input.logoUrl ?? null, input.siteUrl ?? null]);
+      return { ok: true };
+    }),
+
   // ---- ADMIN: vínculo patrocinador <-> mercado ----------------------------
   listSponsorships: adminProcedure
     .input(z.object({ marketId: z.string().uuid().optional() }).optional())

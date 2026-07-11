@@ -1,14 +1,21 @@
-import { Link, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/useAuth";
+import { trpc } from "../lib/trpc";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
+const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? "active" : "");
 
 export function AdminLayout() {
   const { user, isLoading } = useAuth();
+  const staff = !!user && STAFF_ROLES.has(user.role);
+  const { data: markets } = trpc.admin.listMarkets.useQuery(undefined, { enabled: staff });
+  const { data: pendingCandidates } = trpc.candidate.list.useQuery(
+    { status: "PRE_ANUNCIADO" }, { enabled: staff },
+  );
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
 
-  if (!user || !STAFF_ROLES.has(user.role)) {
+  if (!user || !staff) {
     return (
       <main className="page-narrow">
         <div className="card">
@@ -19,18 +26,35 @@ export function AdminLayout() {
     );
   }
 
+  const draftCount = markets?.filter((m) => m.status === "DRAFT").length ?? 0;
+  const overdueCount = markets?.filter((m) => m.overdue).length ?? 0;
+  const candidateCount = pendingCandidates?.length ?? 0;
+  const hasPending = draftCount > 0 || overdueCount > 0 || candidateCount > 0;
+
   return (
     <main className="page">
       <nav className="admin-nav">
-        <Link to="/admin/mercados">Mercados</Link>
-        <Link to="/admin/candidatos">Candidatos</Link>
-        {user.role === "ADMIN" && <Link to="/admin/patrocinadores">Patrocinadores</Link>}
+        <NavLink to="/admin/mercados" className={navClass}>Mercados</NavLink>
+        <NavLink to="/admin/candidatos" className={navClass}>Candidatos</NavLink>
+        {user.role === "ADMIN" && <NavLink to="/admin/patrocinadores" className={navClass}>Patrocinadores</NavLink>}
         {user.role === "ADMIN" && (
           <Link to="/admin/mercados/novo" className="btn-small" style={{ marginLeft: "auto" }}>
             + Novo mercado
           </Link>
         )}
       </nav>
+      {hasPending && (
+        <p className="hint-text" style={{ marginBottom: 20 }}>
+          Pendências:{" "}
+          {draftCount > 0 && <Link to="/admin/mercados">{draftCount} rascunho{draftCount === 1 ? "" : "s"}</Link>}
+          {draftCount > 0 && (overdueCount > 0 || candidateCount > 0) && " · "}
+          {overdueCount > 0 && <Link to="/admin/mercados">{overdueCount} vencido{overdueCount === 1 ? "" : "s"}</Link>}
+          {overdueCount > 0 && candidateCount > 0 && " · "}
+          {candidateCount > 0 && (
+            <Link to="/admin/candidatos">{candidateCount} candidato{candidateCount === 1 ? "" : "s"} pendente{candidateCount === 1 ? "" : "s"}</Link>
+          )}
+        </p>
+      )}
       <Outlet context={{ role: user.role }} />
     </main>
   );

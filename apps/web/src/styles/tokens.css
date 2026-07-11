@@ -339,6 +339,9 @@ a.patrocinio:hover { background: var(--linha); }
   padding-bottom: 12px; border-bottom: 1px solid var(--linha);
   font-weight: 500; font-size: 14px;
 }
+.admin-nav a { color: var(--grafite); }
+.admin-nav a:hover { color: var(--tinta); }
+.admin-nav a.active { color: var(--violeta); }
 .admin-row {
   display: flex; align-items: center; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--linha);
 }

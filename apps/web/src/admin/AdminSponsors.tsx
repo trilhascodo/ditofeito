@@ -21,6 +21,7 @@ export function AdminSponsors() {
 
   const createSponsor = trpc.sponsor.create.useMutation();
   const setActive = trpc.sponsor.setActive.useMutation();
+  const updateSponsor = trpc.sponsor.update.useMutation();
   const createSponsorship = trpc.sponsor.createSponsorship.useMutation();
   const removeSponsorship = trpc.sponsor.removeSponsorship.useMutation();
 
@@ -28,6 +29,12 @@ export function AdminSponsors() {
   const [logoUrl, setLogoUrl] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
   const [sponsorErr, setSponsorErr] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
+  const [editSiteUrl, setEditSiteUrl] = useState("");
+  const [editErr, setEditErr] = useState<string | null>(null);
 
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
@@ -58,6 +65,30 @@ export function AdminSponsors() {
   async function onToggleActive(id: string, isActive: boolean) {
     await setActive.mutateAsync({ id, isActive: !isActive });
     await refresh();
+  }
+
+  function onStartEdit(s: { id: string; name: string; logoUrl: string | null; siteUrl: string | null }) {
+    setEditingId(s.id); setEditName(s.name); setEditLogoUrl(s.logoUrl ?? ""); setEditSiteUrl(s.siteUrl ?? ""); setEditErr(null);
+  }
+
+  function onCancelEdit() {
+    setEditingId(null); setEditErr(null);
+  }
+
+  async function onSaveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditErr(null);
+    try {
+      await updateSponsor.mutateAsync({
+        id: editingId, name: editName.trim(),
+        logoUrl: editLogoUrl.trim() || undefined, siteUrl: editSiteUrl.trim() || undefined,
+      });
+      setEditingId(null);
+      await refresh();
+    } catch (err) {
+      setEditErr(err instanceof Error ? err.message : "Erro ao salvar patrocinador");
+    }
   }
 
   async function onCreateSponsorship(e: FormEvent) {
@@ -123,23 +154,48 @@ export function AdminSponsors() {
         {!sponsors || sponsors.length === 0 ? (
           <p className="hint-text">Nenhum patrocinador ainda.</p>
         ) : (
-          sponsors.map((s) => (
-            <div key={s.id} className="admin-row">
-              <span className="titulo">
-                {s.name}
-                <div className="meta">
-                  {s.siteUrl ? <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">{s.siteUrl}</a> : "sem site cadastrado"}
+          sponsors.map((s) =>
+            editingId === s.id ? (
+              <form key={s.id} onSubmit={onSaveEdit} className="admin-row" style={{ flexWrap: "wrap" }}>
+                <div className="field" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+                  <input className="input" value={editName} onChange={(e) => setEditName(e.target.value)} required placeholder="Nome" />
                 </div>
-              </span>
-              <span className={`badge ${s.isActive ? "" : "badge-draft"}`}>{s.isActive ? "ATIVO" : "INATIVO"}</span>
-              <button
-                className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
-                onClick={() => onToggleActive(s.id, s.isActive)} disabled={setActive.isPending}
-              >
-                {s.isActive ? "Desativar" : "Ativar"}
-              </button>
-            </div>
-          ))
+                <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+                  <input className="input" type="url" value={editLogoUrl} onChange={(e) => setEditLogoUrl(e.target.value)} placeholder="URL do logo" />
+                </div>
+                <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+                  <input className="input" type="url" value={editSiteUrl} onChange={(e) => setEditSiteUrl(e.target.value)} placeholder="URL do site" />
+                </div>
+                {editErr && <p className="error-text" style={{ flexBasis: "100%" }}>{editErr}</p>}
+                <button className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }} disabled={updateSponsor.isPending}>
+                  {updateSponsor.isPending ? "Salvando…" : "Salvar"}
+                </button>
+                <button type="button" className="link-btn" onClick={onCancelEdit}>Cancelar</button>
+              </form>
+            ) : (
+              <div key={s.id} className="admin-row">
+                <span className="titulo">
+                  {s.name}
+                  <div className="meta">
+                    {s.siteUrl ? <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">{s.siteUrl}</a> : "sem site cadastrado"}
+                  </div>
+                </span>
+                <span className={`badge ${s.isActive ? "" : "badge-draft"}`}>{s.isActive ? "ATIVO" : "INATIVO"}</span>
+                <button
+                  className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
+                  onClick={() => onStartEdit(s)}
+                >
+                  Editar
+                </button>
+                <button
+                  className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
+                  onClick={() => onToggleActive(s.id, s.isActive)} disabled={setActive.isPending}
+                >
+                  {s.isActive ? "Desativar" : "Ativar"}
+                </button>
+              </div>
+            ),
+          )
         )}
       </div>
 
