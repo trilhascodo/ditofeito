@@ -64,7 +64,7 @@ const sufixoLocal = (c: Candidato) =>
 // ============================================================================
 export async function gerarBinariosCandidatos(
   pool: Pool, opts: { categoriaEleicoesId: string; sistemaUserId: string;
-                      incluirRegistro?: boolean },
+                      incluirRegistro?: boolean; publicarDireto?: boolean },
 ): Promise<{ criados: number }> {
   const c = await pool.connect();
   let criados = 0;
@@ -97,7 +97,7 @@ export async function gerarBinariosCandidatos(
           closeAt: CALENDARIO_2026.prazoRegistro,
           resolveBy: "2026-08-31T23:59:59-03:00",
           categoriaId: opts.categoriaEleicoesId, criadoPor: opts.sistemaUserId,
-          candidateId: cand.id,
+          candidateId: cand.id, publicarDireto: opts.publicarDireto,
         });
       }
 
@@ -115,7 +115,7 @@ export async function gerarBinariosCandidatos(
         closeAt: CALENDARIO_2026.primeiroTurno,
         resolveBy: CALENDARIO_2026.prazoResolucaoEleito,
         categoriaId: opts.categoriaEleicoesId, criadoPor: opts.sistemaUserId,
-        candidateId: cand.id,
+        candidateId: cand.id, publicarDireto: opts.publicarDireto,
       });
     }
     await c.query("COMMIT");
@@ -126,7 +126,7 @@ export async function gerarBinariosCandidatos(
 async function criarBinario(c: PoolClient, p: {
   slug: string; titulo: string; criterio: string; fonte: string;
   closeAt: string; resolveBy: string; categoriaId: string; criadoPor: string;
-  candidateId: string;
+  candidateId: string; publicarDireto?: boolean;
 }): Promise<number> {
   const b = suggestB(2, GERADOR_CONFIG.depthBinario);
   const r = await c.query(
@@ -136,7 +136,7 @@ async function criarBinario(c: PoolClient, p: {
      VALUES ($1,$2,$3,'BINARY',$4,$5,$6,$7,$8,$9,true,$10)
      ON CONFLICT (slug) DO NOTHING RETURNING id`,
     [p.slug, p.titulo, p.categoriaId, b.toFixed(4),
-     GERADOR_CONFIG.publicarDireto ? "OPEN" : "DRAFT",
+     (p.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
      p.criterio, p.fonte, p.closeAt, p.resolveBy, p.criadoPor]);
   if (!r.rowCount) return 0; // já existia — idempotência
   const mid = r.rows[0].id;
@@ -150,7 +150,7 @@ async function criarBinario(c: PoolClient, p: {
 // 2. MULTI POR DISPUTA MAJORITÁRIA — "quem vence?" com sync de outcomes
 // ============================================================================
 export async function gerarDisputasMajoritarias(
-  pool: Pool, opts: { categoriaEleicoesId: string; sistemaUserId: string },
+  pool: Pool, opts: { categoriaEleicoesId: string; sistemaUserId: string; publicarDireto?: boolean },
 ): Promise<{ mercadosCriados: number; outcomesAdicionados: number }> {
   const c = await pool.connect();
   let mercadosCriados = 0, outcomesAdicionados = 0;
@@ -199,7 +199,7 @@ export async function gerarDisputasMajoritarias(
         [`quem-vence-${slugDisputa}`,
          `Quem vence a eleição para ${cargoTxt}${local} em 2026?`,
          opts.categoriaEleicoesId, groupId, b.toFixed(4),
-         GERADOR_CONFIG.publicarDireto ? "OPEN" : "DRAFT",
+         (opts.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
          `Resolve no candidato declarado eleito ${cargoTxt}${local} pela Justiça Eleitoral ` +
          `(2º turno, se houver). Candidato não listado nominalmente resolve em "OUTROS". ` +
          `Anulação da eleição pela Justiça Eleitoral antes da diplomação ANULA o mercado.`,
@@ -259,7 +259,7 @@ export async function gerarDisputasMajoritarias(
 // ============================================================================
 // 3. ORQUESTRADOR — rodar como job diário (novos pré-candidatos -> mercados)
 // ============================================================================
-export async function rodarGerador(pool: Pool) {
+export async function rodarGerador(pool: Pool, opts: { publicarDireto?: boolean } = {}) {
   const cat = await pool.query(
     `SELECT id FROM categories WHERE slug = 'eleicoes-2026'`);
   const sys = await pool.query(
@@ -267,9 +267,11 @@ export async function rodarGerador(pool: Pool) {
   if (!cat.rowCount || !sys.rowCount)
     throw new Error("Seed ausente: categoria 'eleicoes-2026' e usuário 'sistema'");
   const a = await gerarBinariosCandidatos(pool, {
-    categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id });
+    categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
+    publicarDireto: opts.publicarDireto });
   const b = await gerarDisputasMajoritarias(pool, {
-    categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id });
+    categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
+    publicarDireto: opts.publicarDireto });
   return { binarios: a.criados, multis: b.mercadosCriados,
            outcomesSincronizados: b.outcomesAdicionados };
 }
