@@ -24,6 +24,7 @@ export function AdminLayout() {
       <nav className="admin-nav">
         <Link to="/admin/mercados">Mercados</Link>
         <Link to="/admin/candidatos">Candidatos</Link>
+        {user.role === "ADMIN" && <Link to="/admin/patrocinadores">Patrocinadores</Link>}
         {user.role === "ADMIN" && (
           <Link to="/admin/mercados/novo" className="btn-small" style={{ marginLeft: "auto" }}>
             + Novo mercado

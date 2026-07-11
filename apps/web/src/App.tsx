@@ -10,6 +10,7 @@ import { AdminMarkets } from "./admin/AdminMarkets";
 import { AdminMarketNew } from "./admin/AdminMarketNew";
 import { AdminMarketDetail } from "./admin/AdminMarketDetail";
 import { AdminCandidates } from "./admin/AdminCandidates";
+import { AdminSponsors } from "./admin/AdminSponsors";
 
 const router = createBrowserRouter([
   {
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
           { path: "mercados/novo", element: <AdminMarketNew /> },
           { path: "mercados/:slug", element: <AdminMarketDetail /> },
           { path: "candidatos", element: <AdminCandidates /> },
+          { path: "patrocinadores", element: <AdminSponsors /> },
         ],
       },
     ],
