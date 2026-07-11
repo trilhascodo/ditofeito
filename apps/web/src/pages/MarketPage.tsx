@@ -238,12 +238,12 @@ export function MarketPage() {
 
           {sponsorship && (sponsorship.siteUrl ? (
             <a className="patrocinio" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
               <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
             </a>
           ) : (
             <div className="patrocinio">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
               <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
             </div>
           ))}
