@@ -148,10 +148,24 @@ export function Home() {
         </div>
       )}
 
-      {isLoading && <p className="hint-text">Carregando mercados…</p>}
+      {isLoading && (
+        <div className="market-grid">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div key={i} className="market-tile-skel">
+              <div className="skel-block" style={{ width: 26, height: 26, borderRadius: 7 }} />
+              <div className="skel-block" style={{ width: "70%", height: 14 }} />
+              <div className="skel-block" style={{ width: "90%", height: 14 }} />
+              <div className="skel-block" style={{ width: "40%", height: 14, marginTop: "auto" }} />
+            </div>
+          ))}
+        </div>
+      )}
       {error && <p className="error-text">Não deu pra carregar os mercados agora.</p>}
       {markets && markets.length === 0 && (
-        <p className="hint-text">Ninguém disse nada ainda. Diga primeiro.</p>
+        <div className="empty-state">
+          <span className="emoji" aria-hidden="true">◆</span>
+          <p className="hint-text">Ninguém disse nada ainda. Diga primeiro.</p>
+        </div>
       )}
 
       {markets && markets.length > 0 && (

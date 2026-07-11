@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { logout } from "./lib/auth";
 import { useAuth } from "./lib/useAuth";
 
@@ -36,8 +36,10 @@ export function Layout() {
             />
           </form>
           <nav className="site-nav">
-            <Link to="/">Mercados</Link>
-            {user && STAFF_ROLES.has(user.role) && <Link to="/admin">Admin</Link>}
+            <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>Mercados</NavLink>
+            {user && STAFF_ROLES.has(user.role) && (
+              <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>Admin</NavLink>
+            )}
           </nav>
           <div className="site-header-auth">
             {isLoading ? null : user ? (
