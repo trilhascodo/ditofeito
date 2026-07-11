@@ -18,16 +18,12 @@ const CATEGORY_EMOJI: Record<string, string> = {
 const FALLBACK_EMOJI = "◆";
 
 export function Home() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const categorySlug = searchParams.get("categoria");
   const { data: categories } = trpc.market.categories.useQuery();
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
     categorySlug ? { categorySlug } : undefined,
   );
-
-  function selectCategory(slug: string | null) {
-    setSearchParams(slug ? { categoria: slug } : {});
-  }
 
   return (
     <main className="page">
@@ -38,20 +34,17 @@ export function Home() {
 
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
-          <button
-            className={`cat-tab ${categorySlug === null ? "on" : ""}`}
-            onClick={() => selectCategory(null)}
-          >
+          <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to="/">
             Todos
-          </button>
+          </Link>
           {categories.map((c) => (
-            <button
+            <Link
               key={c.slug}
               className={`cat-tab ${categorySlug === c.slug ? "on" : ""}`}
-              onClick={() => selectCategory(c.slug)}
+              to={`/?categoria=${c.slug}`}
             >
               {c.name}
-            </button>
+            </Link>
           ))}
         </div>
       )}

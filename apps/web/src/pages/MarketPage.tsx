@@ -204,7 +204,7 @@ export function MarketPage() {
                 <div className="campo">
                   <label htmlFor="pts">Pontos a comprometer</label>
                   <input
-                    type="number" id="pts" min={1} max={1000} step={10}
+                    type="number" id="pts" name="pontos" autoComplete="off" min={1} max={1000} step={10}
                     value={points} onChange={(e) => setPoints(Number(e.target.value))}
                   />
                 </div>
@@ -215,7 +215,7 @@ export function MarketPage() {
                     <div className="row"><span>Se acertar, recebe</span><b>{fmtPoints(preview.shares)} pts</b></div>
                   </div>
                 )}
-                {tradeError && <p className="error-text">{tradeError}</p>}
+                {tradeError && <p className="error-text" aria-live="polite">{tradeError}</p>}
                 <button
                   className="btn" disabled={!preview || tradeMutation.isPending}
                   onClick={onRegistrar}

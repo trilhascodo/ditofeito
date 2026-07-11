@@ -117,8 +117,12 @@ a { color: var(--violeta); text-decoration: none; }
 }
 .market-tile-category {
   font: 600 11px var(--mono); color: var(--grafite); text-transform: uppercase; letter-spacing: .04em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.market-tile-title { font: 500 15px/1.4 var(--sans); margin: 0; flex: 1; }
+.market-tile-title {
+  font: 500 15px/1.4 var(--sans); margin: 0; flex: 1;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 .market-tile-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 12px; }
 .market-tile-price { font-weight: 700; font-size: 16px; color: var(--violeta); }
 
