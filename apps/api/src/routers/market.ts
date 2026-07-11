@@ -251,6 +251,22 @@ export const marketRouter = router({
         byMarket.set(o.market_id, arr);
       }
 
+      // Patrocínio ativo agora, por mercado — mesma regra de sponsor.getActiveForMarket,
+      // batelada aqui pra não disparar 1 query por card no grid da home.
+      const spRes = await ctx.pool.query(
+        `SELECT sp.market_id, sp.label, s.name, s.logo_url
+           FROM sponsorships sp JOIN sponsors s ON s.id = sp.sponsor_id
+          WHERE sp.market_id = ANY($1) AND s.is_active = true
+            AND now() BETWEEN sp.starts_at AND sp.ends_at`,
+        [marketIds],
+      );
+      const sponsorByMarket = new Map<string, { label: string; name: string; logoUrl: string | null }>();
+      for (const row of spRes.rows) {
+        sponsorByMarket.set(row.market_id, {
+          label: row.label as string, name: row.name as string, logoUrl: row.logo_url as string | null,
+        });
+      }
+
       return r.rows.map((row) => {
         const outcomes = byMarket.get(row.id as string) ?? [];
         const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
@@ -270,6 +286,7 @@ export const marketRouter = router({
           closeAt: row.close_at as Date,
           categorySlug: row.category_slug as string, categoryName: row.category_name as string,
           summary,
+          sponsor: sponsorByMarket.get(row.id as string) ?? null,
         };
       });
     }),

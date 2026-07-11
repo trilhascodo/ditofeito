@@ -167,18 +167,6 @@ export function MarketPage() {
             </div>
           )}
 
-          {sponsorship && (sponsorship.siteUrl ? (
-            <a className="patrocinio" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
-              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
-            </a>
-          ) : (
-            <div className="patrocinio">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
-              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
-            </div>
-          ))}
-
           {market.isElectoral && (
             <p className="disc">
               Agregado de opiniões de participantes. Não é pesquisa eleitoral (Lei 9.504/97).
@@ -247,6 +235,18 @@ export function MarketPage() {
               </>
             )}
           </div>
+
+          {sponsorship && (sponsorship.siteUrl ? (
+            <a className="patrocinio" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+            </a>
+          ) : (
+            <div className="patrocinio">
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+            </div>
+          ))}
         </aside>
       </div>
 
