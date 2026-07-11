@@ -50,6 +50,8 @@ export interface PublicMarketData {
   outcomes: { label: string; price: number; isCatchall: boolean }[];
   /** série p/ sparkline: por outcome, pontos [t(0..1), price] */
   series: { label: string; points: [number, number][] }[];
+  /** só quando status === 'RESOLVED' — outcome vencedor (carimbo "FEITO") */
+  resolvedOutcomeLabel: string | null;
   updatedAt: string;
 }
 
@@ -94,6 +96,14 @@ export async function getMarketPublicData(
     byOutcome.set(s.outcome_id, arr);
   }
 
+  let resolvedOutcomeLabel: string | null = null;
+  if (mk.status === "RESOLVED") {
+    const res = await pool.query(
+      `SELECT o.label FROM resolutions r JOIN market_outcomes o ON o.id = r.resolved_outcome_id
+        WHERE r.market_id = $1 AND r.kind = 'RESOLVED'`, [mk.id]);
+    resolvedOutcomeLabel = res.rows[0]?.label ?? null;
+  }
+
   return {
     slug: mk.slug, title: mk.title, status: mk.status,
     isElectoral: mk.is_electoral, closeAt: mk.close_at, type: mk.type,
@@ -102,6 +112,7 @@ export async function getMarketPublicData(
       label: r.label, price: prices[i], isCatchall: r.is_catchall })),
     series: out.rows.map((r) => ({
       label: r.label, points: byOutcome.get(r.id) ?? [] })),
+    resolvedOutcomeLabel,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -136,13 +147,16 @@ export function renderEmbedHtml(d: PublicMarketData): string {
         (a.isCatchall ? 1 : 0) - (b.isCatchall ? 1 : 0) || b.price - a.price
       ).slice(0, 4);
 
+  const resolvido = d.status === "RESOLVED" && d.resolvedOutcomeLabel;
   const linhas = vis.map((o, i) => {
     const serie = d.series.find((s) => s.label === o.label);
     const path = sparklinePath(serie?.points ?? [], 120, 28);
     const cor = d.type === "BINARY" ? CORES[0] : CORES[i % CORES.length];
+    const lbl = resolvido && d.type === "BINARY"
+      ? `Feito: ${d.resolvedOutcomeLabel}`
+      : d.type === "BINARY" ? "Chance de SIM" : o.label;
     return `<div class="row">
-      <span class="lbl" title="${esc(o.label)}">${esc(
-        d.type === "BINARY" ? "Chance de SIM" : o.label)}</span>
+      <span class="lbl" title="${esc(o.label)}">${esc(lbl)}</span>
       <svg class="spark" viewBox="0 0 120 28" preserveAspectRatio="none">${
         path ? `<path d="${path}" fill="none" stroke="${cor}" stroke-width="2"/>` : ""
       }</svg>
@@ -251,16 +265,26 @@ export function renderCardSvg(d: PublicMarketData): string {
   const sparkY = numberY - 90;
   const path = sparklinePath(serie?.points ?? [], 560, 150);
 
-  const labelTexto = d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? "");
+  // Mercado RESOLVED não é mais "chance de X%" — é resultado decidido
+  // (identidade §4: carimbo "FEITO" sobre o outcome vencedor). Card
+  // compartilhado tempos depois de resolvido não pode parecer aposta ainda
+  // em aberto.
+  const labelTexto = d.status === "RESOLVED" && d.resolvedOutcomeLabel
+    ? `feito: ${d.resolvedOutcomeLabel}`
+    : d.type === "BINARY" ? "chance de SIM" : (lider?.label ?? "");
   const labelWrapped = wrapText(labelTexto, 420, 34, 1)[0] ?? "";
 
   const dataEncerra = `encerra ${cardDateFmt.format(new Date(d.closeAt))}`;
+  const statusBadge = d.status === "RESOLVED" ? "FEITO ✓"
+                     : d.status === "CLOSED"   ? "ENCERRADO" : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <rect width="1200" height="630" fill="${TOKENS.papel}"/>
   <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
   <text x="80" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="600"
         letter-spacing="1.4" fill="${TOKENS.grafite}">${esc(d.categoryName.toUpperCase())}</text>
+  ${statusBadge ? `<text x="1120" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="700"
+        letter-spacing="1.4" fill="${TOKENS.violeta}" text-anchor="end">${esc(statusBadge)}</text>` : ""}
   ${titleLines.map((line, i) => `<text x="80" y="${118 + i * TITLE_LINE_H}" font-family="IBM Plex Sans" font-size="${TITLE_SIZE}"
         font-weight="600" fill="${TOKENS.tinta}">${esc(line)}</text>`).join("\n  ")}
   <text x="80" y="${numberY}" font-family="IBM Plex Mono" font-size="130"
@@ -317,7 +341,9 @@ export function renderShareHtml(d: PublicMarketData): string {
   const url = `${EMBED_CONFIG.baseUrl}/m/${d.slug}`;
   const cardUrl = `${EMBED_CONFIG.baseUrl}/card/${d.slug}.png`;
   const lider = pickLeadingOutcome(d);
-  const desc = lider
+  const desc = d.status === "RESOLVED" && d.resolvedOutcomeLabel
+    ? `Feito: ${d.resolvedOutcomeLabel} — pode escrever.`
+    : lider
     ? `${d.type === "BINARY" ? "Chance de SIM" : lider.label}: ${pct(lider.price)} — pode escrever.`
     : "pode escrever.";
 
