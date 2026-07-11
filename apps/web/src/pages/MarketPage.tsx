@@ -4,15 +4,9 @@ import { sharesForPoints, tradeCost } from "@ditofeito/core";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
+import { pathFromSeries } from "../lib/chart";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
-
-function pathFromSeries(points: [number, number][], w: number, h: number, pad: number): string {
-  if (points.length < 2) return "";
-  return points
-    .map(([t, p], i) => `${i ? "L" : "M"}${(pad + t * (w - 2 * pad)).toFixed(1)},${(h - p * h * 0.92 - pad).toFixed(1)}`)
-    .join(" ");
-}
 
 function priceDelta(o: { price: number; series: [number, number][] }): number {
   const serie = o.series;

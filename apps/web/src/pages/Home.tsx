@@ -1,10 +1,66 @@
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { pct, relativeClose } from "../lib/format";
+import { pathFromSeries } from "../lib/chart";
 
 const STATUS_LABEL: Record<string, string> = {
   CLOSED: "ENCERRADO", RESOLVED: "RESOLVIDO", VOIDED: "ANULADO",
 };
+
+interface FeaturedMarket {
+  slug: string; title: string; type: string; closeAt: string; categoryName: string;
+  summary: { label: string; price: number } | null;
+  series: [number, number][];
+}
+
+// Slide de destaque (layout inspirado no carrossel do Polymarket — só a
+// estrutura: 1 card grande por vez + navegação. Sem spread/combo/alavancagem,
+// sem "$volume" — número é ponto e "chance de SIM" no nosso vocabulário).
+function Destaque({ items }: { items: FeaturedMarket[] }) {
+  const [idx, setIdx] = useState(0);
+  if (items.length === 0) return null;
+  const m = items[idx % items.length];
+  const path = pathFromSeries(m.series, 640, 100, 4);
+
+  return (
+    <div className="destaque">
+      <Link to={`/m/${m.slug}`} className="destaque-card">
+        <span className="eyebrow">{m.categoryName}</span>
+        <h2 className="destaque-titulo">{m.title}</h2>
+        <div className="destaque-corpo">
+          {m.summary && (
+            <div className="destaque-stat">
+              <b className="mono">{pct(m.summary.price)}</b>
+              <span>{m.summary.label === "SIM" ? "chance de SIM" : m.summary.label}</span>
+            </div>
+          )}
+          <svg viewBox="0 0 640 100" className="destaque-spark" preserveAspectRatio="none" aria-hidden="true">
+            {path && <path d={path} fill="none" stroke="var(--violeta)" strokeWidth={3}
+                            strokeLinecap="round" strokeLinejoin="round" />}
+          </svg>
+        </div>
+        <span className="hint-text">{relativeClose(m.closeAt)}</span>
+      </Link>
+      {items.length > 1 && (
+        <div className="destaque-nav">
+          <button type="button" aria-label="Destaque anterior"
+                  onClick={() => setIdx((i) => (i - 1 + items.length) % items.length)}>‹</button>
+          <div className="destaque-dots">
+            {items.map((it, i) => (
+              <button
+                key={it.slug} type="button" aria-label={`Ir pro destaque ${i + 1}`}
+                className={i === idx ? "on" : ""} onClick={() => setIdx(i)}
+              />
+            ))}
+          </div>
+          <button type="button" aria-label="Próximo destaque"
+                  onClick={() => setIdx((i) => (i + 1) % items.length)}>›</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Ícone por categoria — emoji, não foto (identidade §7: sem tratamento
 // heroico/pejorativo de candidatos). Fundo é sempre violeta-2, nunca uma
@@ -25,9 +81,12 @@ export function Home() {
     categorySlug ? { categorySlug } : undefined,
   );
   const { data: homeSponsor } = trpc.sponsor.getActiveHome.useQuery();
+  const { data: featured } = trpc.market.featured.useQuery();
 
   return (
     <main className="page">
+      {featured && <Destaque items={featured} />}
+
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
           <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to="/">

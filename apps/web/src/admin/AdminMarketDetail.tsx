@@ -28,6 +28,7 @@ export function AdminMarketDetail() {
   const voidMutation = trpc.admin.voidMarket.useMutation();
   const addNewsMutation = trpc.news.add.useMutation();
   const removeNewsMutation = trpc.news.remove.useMutation();
+  const setFeaturedMutation = trpc.market.setFeatured.useMutation();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -142,6 +143,12 @@ export function AdminMarketDetail() {
     await utils.news.list.invalidate({ marketId: market.id });
   }
 
+  async function onToggleFeatured() {
+    if (!market) return;
+    await setFeaturedMutation.mutateAsync({ id: market.id, featured: !market.featured });
+    await refresh();
+  }
+
   if (isLoading) return <div className="card"><p className="hint-text">Carregando…</p></div>;
   if (error || !market) return <div className="card"><p className="error-text">Mercado não encontrado.</p></div>;
 
@@ -166,6 +173,15 @@ export function AdminMarketDetail() {
 
       {msg && <div className="card" style={{ marginTop: 12, color: "var(--conferido)" }}>{msg}</div>}
       {err && <div className="card" style={{ marginTop: 12 }}><p className="error-text" style={{ margin: 0 }}>{err}</p></div>}
+
+      {canEdit && market.status === "OPEN" && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <label className="checkbox-row" style={{ marginBottom: 0 }}>
+            <input type="checkbox" checked={market.featured} onChange={onToggleFeatured} disabled={setFeaturedMutation.isPending} />
+            Destacar na home (aparece no slide de destaque)
+          </label>
+        </div>
+      )}
 
       {market.status !== "DRAFT" && (
         <div className="card" style={{ marginTop: 20 }}>

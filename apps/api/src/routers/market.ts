@@ -142,6 +142,89 @@ export const marketRouter = router({
       }
     }),
 
+  setFeatured: adminProcedure
+    .input(z.object({ id: z.string().uuid(), featured: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(`UPDATE markets SET featured = $2 WHERE id = $1`, [input.id, input.featured]);
+      return { ok: true };
+    }),
+
+  // Slide de destaque da home (inspirado no carrossel do Polymarket — só o
+  // layout). Prioriza featured=true (curadoria do admin); completa com quem
+  // fecha mais cedo se tiver menos de 3 marcados, pro slide nunca ficar vazio.
+  featured: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT m.id, m.slug, m.title, m.type, m.close_at, m.liquidity_b,
+              c.name AS category_name
+         FROM markets m JOIN categories c ON c.id = m.category_id
+        WHERE m.status = 'OPEN'
+        ORDER BY m.featured DESC, m.close_at ASC LIMIT 6`,
+    );
+    if (!r.rowCount) return [];
+    const marketIds = r.rows.map((row) => row.id as string);
+
+    const out = await ctx.pool.query(
+      `SELECT market_id, id, label, q, is_catchall FROM market_outcomes
+        WHERE market_id = ANY($1) ORDER BY market_id, display_order, id`,
+      [marketIds],
+    );
+    const outcomesByMarket = new Map<string, { id: string; label: string; q: number; isCatchall: boolean }[]>();
+    for (const o of out.rows) {
+      const arr = outcomesByMarket.get(o.market_id) ?? [];
+      arr.push({ id: o.id, label: o.label, q: Number(o.q), isCatchall: o.is_catchall });
+      outcomesByMarket.set(o.market_id, arr);
+    }
+
+    // Outcome "manchete" por mercado (mesma regra do embed.ts: SIM em
+    // BINARY, líder excluindo OUTROS em MULTI) — é o que ganha a sparkline.
+    const leaderOutcomeId = new Map<string, string>();
+    const marketSummary = new Map<string, { label: string; price: number }>();
+    for (const row of r.rows) {
+      const outcomes = outcomesByMarket.get(row.id) ?? [];
+      const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
+      let idx = row.type === "BINARY" ? outcomes.findIndex((o) => o.label === "SIM") : -1;
+      if (idx < 0) {
+        let best = -1;
+        outcomes.forEach((o, i) => { if (!o.isCatchall && (best < 0 || prices[i] > prices[best])) best = i; });
+        idx = best;
+      }
+      if (idx >= 0) {
+        leaderOutcomeId.set(row.id, outcomes[idx].id);
+        marketSummary.set(row.id, { label: outcomes[idx].label, price: prices[idx] });
+      }
+    }
+
+    const leaderIds = [...leaderOutcomeId.values()];
+    const snaps = leaderIds.length ? await ctx.pool.query(
+      `WITH win AS (
+         SELECT outcome_id, price, ts, extract(epoch FROM ts) AS ep
+           FROM price_snapshots
+          WHERE outcome_id = ANY($1) AND ts > now() - ($2 || ' days')::interval
+       ), lim AS (SELECT outcome_id, min(ep) AS t0, max(ep) AS t1 FROM win GROUP BY outcome_id)
+       SELECT w.outcome_id,
+              width_bucket(w.ep, lim.t0, lim.t1 + 1, $3) AS bucket,
+              avg(w.price) AS price,
+              (avg(w.ep) - lim.t0) / greatest(lim.t1 - lim.t0, 1) AS t
+         FROM win w JOIN lim ON lim.outcome_id = w.outcome_id
+        GROUP BY w.outcome_id, bucket, lim.t0, lim.t1
+        ORDER BY w.outcome_id, bucket`,
+      [leaderIds, SERIES_DAYS, SERIES_POINTS],
+    ) : { rows: [] as { outcome_id: string; t: number; price: number }[] };
+    const seriesByOutcome = new Map<string, [number, number][]>();
+    for (const s of snaps.rows) {
+      const arr = seriesByOutcome.get(s.outcome_id) ?? [];
+      arr.push([Number(s.t), Number(s.price)]);
+      seriesByOutcome.set(s.outcome_id, arr);
+    }
+
+    return r.rows.map((row) => ({
+      slug: row.slug as string, title: row.title as string, type: row.type as string,
+      closeAt: row.close_at as Date, categoryName: row.category_name as string,
+      summary: marketSummary.get(row.id) ?? null,
+      series: seriesByOutcome.get(leaderOutcomeId.get(row.id) ?? "") ?? [],
+    }));
+  }),
+
   publish: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
     const r = await ctx.pool.query(
       `UPDATE markets SET status = 'OPEN' WHERE id = $1 AND status = 'DRAFT' RETURNING id`,
@@ -160,7 +243,7 @@ export const marketRouter = router({
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
-              m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source,
+              m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source, m.featured,
               c.slug AS category_slug, c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
         WHERE m.slug = $1`,
@@ -208,7 +291,7 @@ export const marketRouter = router({
       closeAt: mk.close_at as Date, resolveBy: mk.resolve_by as Date,
       resolutionCriteria: mk.resolution_criteria as string, resolutionSource: mk.resolution_source as string,
       categorySlug: mk.category_slug as string, categoryName: mk.category_name as string,
-      liquidityB: Number(mk.liquidity_b),
+      liquidityB: Number(mk.liquidity_b), featured: mk.featured as boolean,
       outcomes: out.rows.map((r, i) => ({
         id: r.id as string, label: r.label as string,
         isCatchall: r.is_catchall as boolean, price: prices[i],
