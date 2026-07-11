@@ -8,6 +8,11 @@ function dtLocal(iso: string | Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const dtDisplay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function fmtPeriod(iso: string | Date): string {
+  return dtDisplay.format(new Date(iso));
+}
+
 export function AdminSponsors() {
   const utils = trpc.useUtils();
   const { data: sponsors } = trpc.sponsor.list.useQuery();
@@ -187,7 +192,7 @@ export function AdminSponsors() {
                 <span className="titulo">
                   {sp.sponsor.name} → {sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
-                    "{sp.label}" · {dtLocal(sp.startsAt)} até {dtLocal(sp.endsAt)}
+                    "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
                   </div>
                 </span>
                 <span className={`badge ${active ? "" : "badge-draft"}`}>{active ? "VIGENTE" : "FORA DO PERÍODO"}</span>
