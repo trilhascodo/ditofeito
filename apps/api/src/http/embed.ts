@@ -35,9 +35,11 @@ export const EMBED_CONFIG = {
 const DISCLAIMER =
   "Agregado de opiniões de participantes. Não é pesquisa eleitoral (Lei 9.504/97).";
 
-// Paleta neutra p/ outcomes (sem cor partidária — neutralidade visual)
-const CORES = ["#2563eb", "#dc2626", "#059669", "#d97706", "#7c3aed",
-               "#0891b2", "#be185d", "#4d7c0f", "#b45309", "#6b7280"];
+// Paleta neutra p/ outcomes (sem cor partidária — neutralidade visual).
+// Mesma paleta de apps/web/src/pages/MarketPage.tsx (CORES) — o widget
+// embedado em site de terceiro é o principal canal de reconhecimento de
+// marca fora do próprio site, não pode parecer um widget azul genérico.
+const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
 // ---------------------------------------------------------------------------
 // 1. DADOS PÚBLICOS DO MERCADO
@@ -151,32 +153,39 @@ export function renderEmbedHtml(d: PublicMarketData): string {
   const badge = d.status === "RESOLVED" ? `<span class="badge">RESOLVIDO</span>`
               : d.status === "CLOSED"   ? `<span class="badge">ENCERRADO</span>` : "";
 
+  // Sem fonte externa (requisito "zero dependência" — funciona offline em
+  // qualquer site de terceiro): Georgia é o próprio fallback de --serif no
+  // resto do produto (tokens.css), não uma escolha nova pra esse widget.
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   :root{color-scheme:light}
   body{margin:0;font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;
-       background:#fff;color:#111827}
-  .card{border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;max-width:420px}
+       background:#FAF8F3;color:#1E2733}
+  .card{border:1px solid #E3DDD0;border-radius:10px;padding:14px 16px;max-width:420px}
   .title{font-weight:600;font-size:15px;margin:0 0 10px}
   .title a{color:inherit;text-decoration:none}
   .row{display:flex;align-items:center;gap:10px;padding:5px 0}
-  .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#374151}
+  .lbl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#5C6672}
   .spark{width:120px;height:28px;flex:none}
   .pct{font-weight:700;font-variant-numeric:tabular-nums;width:52px;text-align:right}
   .foot{display:flex;justify-content:space-between;align-items:center;
-        margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6}
-  .brand{font-size:12px;font-weight:700;color:#2563eb;text-decoration:none}
-  .badge{font-size:10px;font-weight:700;background:#f3f4f6;color:#6b7280;
+        margin-top:10px;padding-top:10px;border-top:1px solid #E3DDD0}
+  .brand{font:700 13px Georgia,serif;color:#1E2733;text-decoration:none}
+  .brand b{color:#4F2E99}
+  .selo{display:inline-block;font:600 9px ui-monospace,monospace;color:#4F2E99;
+        border:1.5px solid #4F2E99;border-radius:3px;padding:0 3px;margin-left:3px;
+        transform:rotate(-3deg);vertical-align:2px}
+  .badge{font-size:10px;font-weight:700;background:#F1EDE4;color:#5C6672;
          border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:middle}
-  .disc{font-size:10px;color:#9ca3af;margin-top:8px}
+  .disc{font-size:10px;color:#5C6672;margin-top:8px}
 </style></head><body>
 <div class="card">
   <p class="title"><a href="${url}" target="_blank" rel="noopener">${esc(d.title)}</a>${badge}</p>
   ${linhas}
   <div class="foot">
-    <a class="brand" href="${url}" target="_blank" rel="noopener">${esc(EMBED_CONFIG.brand)} →</a>
-    <span style="font-size:11px;color:#9ca3af">participe da previsão</span>
+    <a class="brand" href="${url}" target="_blank" rel="noopener">Dito<b>Feito</b><span class="selo">✓</span></a>
+    <span style="font-size:11px;color:#5C6672">participe da previsão</span>
   </div>
   ${d.isElectoral ? `<p class="disc">${DISCLAIMER}</p>` : ""}
 </div>
