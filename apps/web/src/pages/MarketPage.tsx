@@ -35,6 +35,9 @@ export function MarketPage() {
   const utils = trpc.useUtils();
   const { data: market, isLoading, error } = trpc.market.get.useQuery({ slug }, { enabled: !!slug });
   const { data: positions } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
+  const { data: sponsorship } = trpc.sponsor.getActiveForMarket.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!market },
+  );
   const tradeMutation = trpc.trade.execute.useMutation();
 
   const [selected, setSelected] = useState<string | null>(null);
@@ -163,6 +166,18 @@ export function MarketPage() {
               ))}
             </div>
           )}
+
+          {sponsorship && (sponsorship.siteUrl ? (
+            <a className="patrocinio" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+            </a>
+          ) : (
+            <div className="patrocinio">
+              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" width={20} height={20} />}
+              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+            </div>
+          ))}
 
           {market.isElectoral && (
             <p className="disc">
