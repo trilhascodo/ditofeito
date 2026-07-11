@@ -69,21 +69,23 @@ interface HomeSponsor {
 // Até 3 espaços de publicidade ao lado do destaque (layout.pdf — coluna
 // lateral empilhada, não mais faixa única embaixo do grid). Só renderiza o
 // que tiver patrocínio ativo — sem caixa vazia "espaço disponível".
-function AdSlots({ items }: { items: HomeSponsor[] }) {
+// Nomes de classe em português de propósito: "ad-slot" em inglês cai nos
+// filtros genéricos de ad blocker (escondia o bloco inteiro no desktop).
+function PatroSlots({ items }: { items: HomeSponsor[] }) {
   return (
-    <aside className="ad-slots">
+    <aside className="patro-slots">
       {items.map((s, i) => {
         const conteudo = (
           <>
             {s.logoUrl && <img src={s.logoUrl} alt="" />}
-            <span className="ad-slot-label">{s.label}</span>
+            <span className="patro-slot-label">{s.label}</span>
             <b>{s.sponsorName}</b>
           </>
         );
         return s.siteUrl ? (
-          <a key={i} className="ad-slot" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+          <a key={i} className="patro-slot" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
         ) : (
-          <div key={i} className="ad-slot">{conteudo}</div>
+          <div key={i} className="patro-slot">{conteudo}</div>
         );
       })}
     </aside>
@@ -118,7 +120,7 @@ export function Home() {
         homeSponsors && homeSponsors.length > 0 ? (
           <div className="home-topo">
             <Destaque items={featured} />
-            <AdSlots items={homeSponsors} />
+            <PatroSlots items={homeSponsors} />
           </div>
         ) : (
           <Destaque items={featured} />

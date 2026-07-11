@@ -24,11 +24,11 @@
 /* transição base pra qualquer elemento interativo — a identidade proíbe
    animação decorativa (§7), mas feedback de hover/foco é usabilidade, não
    enfeite; sempre respeita prefers-reduced-motion. */
-a, button, .market-tile, .destaque-card, .ad-slot, .cat-tab {
+a, button, .market-tile, .destaque-card, .patro-slot, .cat-tab {
   transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease, color .16s ease, transform .1s ease;
 }
 @media (prefers-reduced-motion: reduce) {
-  a, button, .market-tile, .destaque-card, .ad-slot, .cat-tab { transition: none; }
+  a, button, .market-tile, .destaque-card, .patro-slot, .cat-tab { transition: none; }
 }
 
 body {
@@ -112,15 +112,15 @@ a { color: var(--violeta); text-decoration: none; }
 .home-topo .destaque { margin-bottom: 0; }
 @media (max-width: 860px) { .home-topo { grid-template-columns: minmax(0, 1fr); } }
 
-.ad-slots { display: flex; flex-direction: column; gap: 14px; }
-.ad-slot {
+.patro-slots { display: flex; flex-direction: column; gap: 14px; }
+.patro-slot {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   background: var(--papel-2); border: 1px solid var(--linha); border-radius: 12px;
   padding: 20px 16px; min-height: 100px; text-align: center; color: var(--grafite); font-size: 12px;
 }
-.ad-slot img { max-height: 32px; max-width: 100%; object-fit: contain; }
-.ad-slot b { color: var(--tinta); font-size: 13px; }
-a.ad-slot:hover { border-color: var(--violeta); }
+.patro-slot img { max-height: 32px; max-width: 100%; object-fit: contain; }
+.patro-slot b { color: var(--tinta); font-size: 13px; }
+a.patro-slot:hover { border-color: var(--violeta); }
 
 /* ---------- home: slide de destaque ---------- */
 /* Layout inspirado no carrossel do Polymarket — só a estrutura (1 card
