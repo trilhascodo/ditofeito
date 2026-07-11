@@ -233,7 +233,7 @@ export const marketRouter = router({
                 c.slug AS category_slug, c.name AS category_name
            FROM markets m JOIN categories c ON c.id = m.category_id
            ${where}
-          ORDER BY m.created_at DESC LIMIT 50`,
+          ORDER BY m.created_at DESC LIMIT 300`,
         params,
       );
       if (!r.rowCount) return [];
