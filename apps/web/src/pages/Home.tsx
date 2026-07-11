@@ -71,9 +71,9 @@ export function Home() {
               <div className="market-tile-bottom">
                 <span className="hint-text">{relativeClose(m.closeAt)}</span>
                 {m.summary && (
-                  <span className="market-tile-price mono">
-                    {m.summary.label !== "SIM" ? `${m.summary.label} ` : ""}
-                    {pct(m.summary.price)}
+                  <span className="market-tile-price">
+                    <small>{m.summary.label === "SIM" ? "chance de SIM" : m.summary.label}</small>
+                    <b className="mono">{pct(m.summary.price)}</b>
                   </span>
                 )}
               </div>
