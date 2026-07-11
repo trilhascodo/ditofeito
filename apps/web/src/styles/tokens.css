@@ -35,16 +35,11 @@ a { color: var(--violeta); text-decoration: none; }
 /* ---------- primitivos reusados nas páginas (gabarito: docs/prototipos/prototipo-mercado.html) ---------- */
 .site-header { border-bottom: 1px solid var(--linha); background: var(--papel); }
 .site-header-in {
-  max-width: 1080px; margin: 0 auto; padding: 14px 20px;
-  display: flex; align-items: center; gap: 24px;
+  max-width: 1280px; margin: 0 auto; padding: 14px 20px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px;
 }
-.logo { font: 700 22px var(--serif); letter-spacing: -.02em; color: var(--tinta); }
-.logo b { color: var(--violeta); font-weight: 700; }
-.logo .selo {
-  display: inline-block; font: 600 10px var(--mono); color: var(--violeta);
-  border: 1.5px solid var(--violeta); border-radius: 3px; padding: 0 4px; margin-left: 6px;
-  transform: rotate(-3deg); vertical-align: 3px;
-}
+.logo { display: flex; align-items: center; }
+.logo img { height: 26px; width: auto; display: block; }
 .site-search { flex: 1; max-width: 380px; }
 .site-search input {
   width: 100%; font: 500 14px var(--sans); color: var(--tinta);
@@ -65,7 +60,12 @@ a { color: var(--violeta); text-decoration: none; }
 }
 .link-btn:hover { color: var(--tinta); }
 
-.page { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+@media (max-width: 720px) {
+  .site-search { order: 3; flex-basis: 100%; max-width: none; }
+  .site-nav { order: 4; flex-basis: 100%; }
+}
+
+.page { max-width: 1280px; margin: 0 auto; padding: 28px 20px 60px; }
 .page-narrow { max-width: 420px; margin: 60px auto; padding: 0 20px; }
 
 .card { background: #fff; border: 1px solid var(--linha); border-radius: 10px; padding: 24px; }
@@ -355,3 +355,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--violeta); }
 }
 .painel-sel .nome { font-weight: 600; }
 .painel-sel .preco { font: 700 22px var(--mono); color: var(--violeta); }
+
+/* ---------- rodapé ---------- */
+.site-footer { border-top: 1px solid var(--linha); margin-top: 40px; }
+.site-footer-in {
+  max-width: 1280px; margin: 0 auto; padding: 32px 20px 20px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px;
+}
+.site-footer-brand { max-width: 420px; }
+.site-footer-brand img { height: 22px; width: auto; display: block; margin-bottom: 10px; }
+.site-footer-brand p { font-size: 12px; color: var(--grafite); margin: 0; }
+.site-footer-nav { display: flex; gap: 16px; font-size: 14px; font-weight: 500; }
+.site-footer-nav a { color: var(--grafite); }
+.site-footer-nav a:hover { color: var(--violeta); }
+.site-footer-copy {
+  max-width: 1280px; margin: 0 auto; padding: 0 20px 24px;
+  font-size: 12px; color: var(--grafite);
+}

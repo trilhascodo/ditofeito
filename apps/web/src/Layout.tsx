@@ -27,7 +27,7 @@ export function Layout() {
       <header className="site-header">
         <div className="site-header-in">
           <Link to="/" className="logo">
-            Dito<b>Feito</b><span className="selo">✓</span>
+            <img src="/logo.png" alt="DitoFeito" />
           </Link>
           <form className="site-search" onSubmit={onSearch} role="search">
             <input
@@ -55,6 +55,21 @@ export function Layout() {
         </div>
       </header>
       <Outlet />
+      <footer className="site-footer">
+        <div className="site-footer-in">
+          <div className="site-footer-brand">
+            <img src="/logo.png" alt="DitoFeito" />
+            <p>
+              Mercado de previsão por reputação. Pontos e reputação não têm valor
+              monetário — não podem ser trocados, vendidos ou sacados.
+            </p>
+          </div>
+          <nav className="site-footer-nav">
+            <Link to="/">Mercados</Link>
+          </nav>
+        </div>
+        <p className="site-footer-copy">© {new Date().getFullYear()} DitoFeito</p>
+      </footer>
     </>
   );
 }
