@@ -20,11 +20,14 @@ export function AdminMarketDetail() {
   const canEdit = role === "ADMIN";
   const utils = trpc.useUtils();
   const { data: market, isLoading, error } = trpc.market.get.useQuery({ slug }, { enabled: !!slug });
+  const { data: news } = trpc.news.list.useQuery({ marketId: market?.id ?? "" }, { enabled: !!market });
 
   const updateMutation = trpc.market.update.useMutation();
   const publishMutation = trpc.market.publish.useMutation();
   const resolveMutation = trpc.admin.resolveMarket.useMutation();
   const voidMutation = trpc.admin.voidMarket.useMutation();
+  const addNewsMutation = trpc.news.add.useMutation();
+  const removeNewsMutation = trpc.news.remove.useMutation();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -41,6 +44,10 @@ export function AdminMarketDetail() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [newsTitle, setNewsTitle] = useState("");
+  const [newsUrl, setNewsUrl] = useState("");
+  const [newsErr, setNewsErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!market) return;
@@ -116,6 +123,25 @@ export function AdminMarketDetail() {
     }
   }
 
+  async function onAddNews(e: FormEvent) {
+    e.preventDefault();
+    if (!market) return;
+    setNewsErr(null);
+    try {
+      await addNewsMutation.mutateAsync({ marketId: market.id, title: newsTitle.trim(), url: newsUrl.trim() });
+      setNewsTitle(""); setNewsUrl("");
+      await utils.news.list.invalidate({ marketId: market.id });
+    } catch (e2) {
+      setNewsErr(e2 instanceof Error ? e2.message : "Erro ao adicionar notícia");
+    }
+  }
+
+  async function onRemoveNews(id: string) {
+    if (!market) return;
+    await removeNewsMutation.mutateAsync({ id });
+    await utils.news.list.invalidate({ marketId: market.id });
+  }
+
   if (isLoading) return <div className="card"><p className="hint-text">Carregando…</p></div>;
   if (error || !market) return <div className="card"><p className="error-text">Mercado não encontrado.</p></div>;
 
@@ -162,6 +188,48 @@ export function AdminMarketDetail() {
           </div>
         </div>
       )}
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Notícias relacionadas</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Aparecem como "Leitura relacionada" na página do mercado.
+        </p>
+        {!news || news.length === 0 ? (
+          <p className="hint-text" style={{ marginBottom: canEdit ? 12 : 0 }}>Nenhuma ainda.</p>
+        ) : (
+          news.map((n) => (
+            <div key={n.id} className="admin-row">
+              <span className="titulo">
+                <a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a>
+              </span>
+              {canEdit && (
+                <button
+                  className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
+                  onClick={() => onRemoveNews(n.id)} disabled={removeNewsMutation.isPending}
+                >
+                  Remover
+                </button>
+              )}
+            </div>
+          ))
+        )}
+        {canEdit && (
+          <form onSubmit={onAddNews} style={{ marginTop: 12 }}>
+            <div className="field">
+              <label className="label">Título</label>
+              <input className="input" value={newsTitle} onChange={(e) => setNewsTitle(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="label">URL</label>
+              <input className="input" type="url" value={newsUrl} onChange={(e) => setNewsUrl(e.target.value)} required />
+            </div>
+            {newsErr && <p className="error-text">{newsErr}</p>}
+            <button className="btn-outline" style={{ width: "auto", padding: "10px 16px" }} disabled={addNewsMutation.isPending}>
+              {addNewsMutation.isPending ? "Adicionando…" : "Adicionar notícia"}
+            </button>
+          </form>
+        )}
+      </div>
 
       {market.status === "DRAFT" && canEdit && (
         <div className="card" style={{ marginTop: 20 }}>

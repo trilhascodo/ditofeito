@@ -38,6 +38,9 @@ export function MarketPage() {
   const { data: sponsorship } = trpc.sponsor.getActiveForMarket.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!market },
   );
+  const { data: news } = trpc.news.list.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!market },
+  );
   const tradeMutation = trpc.trade.execute.useMutation();
 
   const [selected, setSelected] = useState<string | null>(null);
@@ -163,6 +166,17 @@ export function MarketPage() {
                     <button onClick={() => setSelected(o.id)} aria-label={`Prever ${o.label}`}>Prever</button>
                   )}
                 </div>
+              ))}
+            </div>
+          )}
+
+          {news && news.length > 0 && (
+            <div className="card" style={{ marginTop: 20 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 10px" }}>Leitura relacionada</h2>
+              {news.map((n) => (
+                <a key={n.id} href={n.url} target="_blank" rel="noopener noreferrer" className="noticia">
+                  {n.title}
+                </a>
               ))}
             </div>
           )}

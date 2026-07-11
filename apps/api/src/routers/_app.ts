@@ -5,6 +5,7 @@ import { adminRouter } from "./admin.js";
 import { candidateRouter } from "./candidate.js";
 import { userRouter } from "./user.js";
 import { sponsorRouter } from "./sponsor.js";
+import { newsRouter } from "./news.js";
 
 export const appRouter = router({
   market: marketRouter,
@@ -13,6 +14,7 @@ export const appRouter = router({
   candidate: candidateRouter,
   user: userRouter,
   sponsor: sponsorRouter,
+  news: newsRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -31,6 +31,7 @@ export function AdminSponsors() {
 
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
+  const [isHome, setIsHome] = useState(false);
   const [label, setLabel] = useState("Apresentado por");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
@@ -62,13 +63,17 @@ export function AdminSponsors() {
   async function onCreateSponsorship(e: FormEvent) {
     e.preventDefault();
     setSpErr(null);
-    if (!sponsorId || !marketId || !endsAt) { setSpErr("Preencha patrocinador, mercado e data de fim."); return; }
+    if (!sponsorId || (!marketId && !isHome) || !endsAt) {
+      setSpErr("Preencha patrocinador, data de fim, e um mercado ou a faixa da home.");
+      return;
+    }
     try {
       await createSponsorship.mutateAsync({
-        sponsorId, marketId, label: label.trim() || "Apresentado por",
+        sponsorId, marketId: isHome ? undefined : marketId, isHome,
+        label: label.trim() || "Apresentado por",
         startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
       });
-      setMarketId(""); setEndsAt("");
+      setMarketId(""); setIsHome(false); setEndsAt("");
       await refresh();
     } catch (err) {
       setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
@@ -141,8 +146,9 @@ export function AdminSponsors() {
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
-          Vincula um patrocinador a um mercado por um período — aparece como card
-          "Apresentado por" na página do mercado enquanto estiver dentro do período.
+          Vincula um patrocinador a um mercado (card "Apresentado por" na página do
+          mercado e tag no card da home) ou à home inteira (faixa de destaque no
+          rodapé da lista de mercados) por um período.
         </p>
         <form onSubmit={onCreateSponsorship}>
           <div className="field">
@@ -152,13 +158,19 @@ export function AdminSponsors() {
               {sponsors?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-          <div className="field">
-            <label className="label" htmlFor="sp-market">Mercado</label>
-            <select id="sp-market" value={marketId} onChange={(e) => setMarketId(e.target.value)} required>
-              <option value="">selecione</option>
-              {markets?.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-            </select>
-          </div>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={isHome} onChange={(e) => { setIsHome(e.target.checked); setMarketId(""); }} />
+            Faixa de destaque da home (não vincula a um mercado específico)
+          </label>
+          {!isHome && (
+            <div className="field">
+              <label className="label" htmlFor="sp-market">Mercado</label>
+              <select id="sp-market" value={marketId} onChange={(e) => setMarketId(e.target.value)} required>
+                <option value="">selecione</option>
+                {markets?.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
+              </select>
+            </div>
+          )}
           <div className="field">
             <label className="label" htmlFor="sp-label">Rótulo</label>
             <input className="input" id="sp-label" value={label} onChange={(e) => setLabel(e.target.value)} required />
@@ -190,7 +202,9 @@ export function AdminSponsors() {
             return (
               <div key={sp.id} className="admin-row">
                 <span className="titulo">
-                  {sp.sponsor.name} → {sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
+                  {sp.sponsor.name} → {sp.isHome
+                    ? "Faixa da home"
+                    : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
                     "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
                   </div>

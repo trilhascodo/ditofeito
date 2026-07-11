@@ -234,6 +234,24 @@ input[type=number]:focus { outline: 2px solid var(--violeta); border-color: tran
 .patrocinio b { color: var(--tinta); font-weight: 600; }
 a.patrocinio:hover { background: var(--linha); }
 
+/* faixa da home: mesma linguagem visual, só maior/mais central — é o
+   "espaço de destaque" pedido, sem virar banner/pop-up. */
+.patrocinio-home {
+  max-width: none; margin-top: 36px; padding: 20px 24px; justify-content: center;
+  font-size: 13px; border: 1px solid var(--linha);
+}
+
+/* "leitura relacionada" — link curado manualmente pelo admin, sem preview
+   automático (não busca favicon/thumbnail externo: zero dependência,
+   consistente com o resto do produto que evita puxar conteúdo de terceiro). */
+.noticia {
+  display: block; padding: 10px 0; border-bottom: 1px solid var(--linha);
+  font-size: 14px; color: var(--tinta); font-weight: 500;
+}
+.noticia:last-child { border-bottom: 0; }
+.noticia::before { content: "📰 "; }
+.noticia:hover { color: var(--violeta); }
+
 /* ---------- painel admin ---------- */
 .admin-nav {
   display: flex; align-items: center; gap: 20px; margin-bottom: 20px;

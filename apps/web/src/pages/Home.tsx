@@ -24,13 +24,10 @@ export function Home() {
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
     categorySlug ? { categorySlug } : undefined,
   );
+  const { data: homeSponsor } = trpc.sponsor.getActiveHome.useQuery();
 
   return (
     <main className="page">
-      <h1 style={{ fontFamily: "var(--serif)", fontSize: 32, marginBottom: 20 }}>
-        pode escrever
-      </h1>
-
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
           <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to="/">
@@ -87,6 +84,18 @@ export function Home() {
           ))}
         </div>
       )}
+
+      {homeSponsor && (homeSponsor.siteUrl ? (
+        <a className="patrocinio patrocinio-home" href={homeSponsor.siteUrl} target="_blank" rel="noopener noreferrer">
+          {homeSponsor.logoUrl && <img src={homeSponsor.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 160 }} />}
+          <span>{homeSponsor.label} <b>{homeSponsor.sponsorName}</b></span>
+        </a>
+      ) : (
+        <div className="patrocinio patrocinio-home">
+          {homeSponsor.logoUrl && <img src={homeSponsor.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 160 }} />}
+          <span>{homeSponsor.label} <b>{homeSponsor.sponsorName}</b></span>
+        </div>
+      ))}
     </main>
   );
 }
