@@ -87,7 +87,7 @@ export async function signup(
   }
 
   const link = `${APP_CONFIG.appBaseUrl}/auth/verify-email?token=${verifyRaw}`;
-  await sendTransactionalEmail({
+  await sendTransactionalEmail(pool, {
     to: input.email,
     subject: "Confirme seu e-mail — DitoFeito",
     html: `<p>Pode escrever. Confirme seu e-mail para registrar previsões:</p>
@@ -193,7 +193,7 @@ export async function requestPasswordReset(pool: Pool, input: RequestPasswordRes
     [userId, hashToken(raw), expires.toISOString()]);
 
   const link = `${APP_CONFIG.webOrigin}/redefinir-senha?token=${raw}`;
-  await sendTransactionalEmail({
+  await sendTransactionalEmail(pool, {
     to: input.email,
     subject: "Redefinir senha — DitoFeito",
     html: `<p>Pediram uma nova senha pra essa conta. Se foi você, clique no link
