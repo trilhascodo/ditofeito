@@ -5,9 +5,11 @@
 // ============================================================================
 import { randomBytes, createHash } from "node:crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
+import { isDisposableEmail } from "@ditofeito/core";
 import type { Pool } from "pg";
 import { appendLedger } from "./trade.js";
 import { sendTransactionalEmail } from "../lib/email.js";
+import { verifyCaptcha } from "../lib/captcha.js";
 import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
 import type { SignupInput, LoginInput } from "./auth.schemas.js";
 
@@ -33,8 +35,13 @@ function hashToken(raw: string): string {
 
 // ------------------------------ Cadastro --------------------------------------
 export async function signup(
-  pool: Pool, input: SignupInput,
+  pool: Pool, input: SignupInput, meta: { ip?: string; userAgent?: string } = {},
 ): Promise<{ userId: string }> {
+  const captchaOk = await verifyCaptcha(input.captchaToken, meta.ip);
+  if (!captchaOk) throw new AuthError("CAPTCHA_INVALIDO", "Não foi possível validar o captcha");
+  if (isDisposableEmail(input.email))
+    throw new AuthError("EMAIL_DESCARTAVEL", "E-mails temporários não são aceitos");
+
   const passwordHash = await argonHash(input.password);
   const client = await pool.connect();
   let userId: string;
@@ -43,19 +50,22 @@ export async function signup(
     await client.query("BEGIN");
 
     const dup = await client.query(
-      `SELECT handle, email FROM users WHERE handle=$1 OR email=$2`,
-      [input.handle, input.email]);
+      `SELECT handle, email, cpf FROM users WHERE handle=$1 OR email=$2 OR cpf=$3`,
+      [input.handle, input.email, input.cpf]);
     if (dup.rowCount) {
       const row = dup.rows[0];
-      throw new AuthError(
-        row.email === input.email ? "EMAIL_EM_USO" : "HANDLE_EM_USO",
-        row.email === input.email ? "E-mail já cadastrado" : "Nome de usuário já em uso");
+      const code = row.email === input.email ? "EMAIL_EM_USO"
+        : row.cpf === input.cpf ? "CPF_EM_USO" : "HANDLE_EM_USO";
+      const message = { EMAIL_EM_USO: "E-mail já cadastrado", CPF_EM_USO: "CPF já cadastrado",
+        HANDLE_EM_USO: "Nome de usuário já em uso" }[code];
+      throw new AuthError(code, message);
     }
 
     const u = await client.query(
-      `INSERT INTO users (handle, display_name, email, password_hash)
-       VALUES ($1,$2,$3,$4) RETURNING id`,
-      [input.handle, input.displayName, input.email, passwordHash]);
+      `INSERT INTO users (handle, display_name, email, password_hash, cpf, signup_ip, signup_user_agent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [input.handle, input.displayName, input.email, passwordHash, input.cpf,
+        meta.ip ?? null, meta.userAgent ?? null]);
     userId = u.rows[0].id;
 
     await appendLedger(client, userId, AUTH_CONFIG.signupBonusPoints, "SIGNUP_BONUS", null, null);

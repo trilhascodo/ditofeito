@@ -2,7 +2,7 @@
 // numérica, registrando cada arquivo já aplicado em schema_migrations.
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getPool } from "./pool.js";
 
 const MIGRATIONS_DIR = path.join(
@@ -53,7 +53,10 @@ export async function runMigrations(): Promise<{ applied: string[] }> {
   return { applied };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL (em vez de `file://${...}`) — no Windows o path usa `\` e
+// precisa de um `/` extra após o esquema pra virar uma file URL válida;
+// comparar string crua nunca batia e o CLI virava no-op silencioso.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runMigrations()
     .then(({ applied }) => {
       console.log(applied.length ? `Aplicadas: ${applied.join(", ")}` : "Nada a aplicar — já em dia.");

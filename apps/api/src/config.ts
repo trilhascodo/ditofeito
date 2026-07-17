@@ -16,3 +16,9 @@ export const AUTH_CONFIG = {
     loginMax: 20,
   },
 } as const;
+
+export const CAPTCHA_CONFIG = {
+  /** Vazio (dev/local) = captcha sempre passa, mesmo padrão do RESEND_API_KEY. */
+  secretKey: process.env.TURNSTILE_SECRET_KEY ?? "",
+  verifyUrl: "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+} as const;

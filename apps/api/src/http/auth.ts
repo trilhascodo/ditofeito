@@ -10,6 +10,9 @@ import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
 const AUTH_ERROR_STATUS: Record<string, number> = {
   EMAIL_EM_USO: 409,
   HANDLE_EM_USO: 409,
+  CPF_EM_USO: 409,
+  CAPTCHA_INVALIDO: 400,
+  EMAIL_DESCARTAVEL: 400,
   CREDENCIAIS_INVALIDAS: 401,
   USUARIO_SUSPENSO: 403,
   TOKEN_INVALIDO: 400,
@@ -39,7 +42,9 @@ export function mountAuth(app: express.Express, pool: Pool) {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
     try {
-      const { userId } = await signup(pool, parsed.data);
+      const { userId } = await signup(pool, parsed.data, {
+        ip: req.ip, userAgent: req.get("user-agent"),
+      });
       res.status(201).json({ userId });
     } catch (e) {
       if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });

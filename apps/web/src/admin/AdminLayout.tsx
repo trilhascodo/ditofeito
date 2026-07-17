@@ -12,6 +12,9 @@ export function AdminLayout() {
   const { data: pendingCandidates } = trpc.candidate.list.useQuery(
     { status: "PRE_ANUNCIADO" }, { enabled: staff },
   );
+  const { data: suspiciousClusters } = trpc.moderation.listSuspiciousAccounts.useQuery(
+    undefined, { enabled: staff },
+  );
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
 
@@ -29,13 +32,15 @@ export function AdminLayout() {
   const draftCount = markets?.filter((m) => m.status === "DRAFT").length ?? 0;
   const overdueCount = markets?.filter((m) => m.overdue).length ?? 0;
   const candidateCount = pendingCandidates?.length ?? 0;
-  const hasPending = draftCount > 0 || overdueCount > 0 || candidateCount > 0;
+  const suspiciousCount = suspiciousClusters?.length ?? 0;
+  const hasPending = draftCount > 0 || overdueCount > 0 || candidateCount > 0 || suspiciousCount > 0;
 
   return (
     <main className="page">
       <nav className="admin-nav">
         <NavLink to="/admin/mercados" className={navClass}>Mercados</NavLink>
         <NavLink to="/admin/candidatos" className={navClass}>Candidatos</NavLink>
+        <NavLink to="/admin/suspeitas" className={navClass}>Contas suspeitas</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin/patrocinadores" className={navClass}>Patrocinadores</NavLink>}
         {user.role === "ADMIN" && (
           <Link to="/admin/mercados/novo" className="btn-small" style={{ marginLeft: "auto" }}>
@@ -52,6 +57,10 @@ export function AdminLayout() {
           {overdueCount > 0 && candidateCount > 0 && " · "}
           {candidateCount > 0 && (
             <Link to="/admin/candidatos">{candidateCount} candidato{candidateCount === 1 ? "" : "s"} pendente{candidateCount === 1 ? "" : "s"}</Link>
+          )}
+          {(draftCount > 0 || overdueCount > 0 || candidateCount > 0) && suspiciousCount > 0 && " · "}
+          {suspiciousCount > 0 && (
+            <Link to="/admin/suspeitas">{suspiciousCount} cluster{suspiciousCount === 1 ? "" : "s"} suspeito{suspiciousCount === 1 ? "" : "s"}</Link>
           )}
         </p>
       )}

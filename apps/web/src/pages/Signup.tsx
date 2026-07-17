@@ -1,14 +1,21 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
 import { signup } from "../lib/auth";
+import { Turnstile } from "../components/Turnstile";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+// Sem chave configurada (dev/local): backend também aceita qualquer token
+// quando TURNSTILE_SECRET_KEY está vazio, então o front não trava sem captcha.
+const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
 export function Signup() {
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [captchaToken, setCaptchaToken] = useState(CAPTCHA_REQUIRED ? "" : "dev");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -20,9 +27,17 @@ export function Signup() {
       setError("Nome de usuário: 3–30 caracteres, letras minúsculas, números e _");
       return;
     }
+    if (!isValidCpf(cpf)) {
+      setError("CPF inválido");
+      return;
+    }
+    if (!captchaToken) {
+      setError("Confirme o captcha");
+      return;
+    }
     setLoading(true);
     try {
-      await signup({ handle, displayName, email, password });
+      await signup({ handle, displayName, email, password, cpf: onlyDigits(cpf), captchaToken });
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar");
@@ -76,6 +91,17 @@ export function Signup() {
               minLength={8} required
               value={password} onChange={(e) => setPassword(e.target.value)}
             />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="cpf">CPF</label>
+            <input
+              className="input" id="cpf" inputMode="numeric" placeholder="000.000.000-00" required
+              value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))}
+            />
+            <p className="hint-text">Usado só pra garantir 1 conta por pessoa — não é público.</p>
+          </div>
+          <div className="field">
+            <Turnstile onToken={setCaptchaToken} />
           </div>
           {error && <p className="error-text">{error}</p>}
           <button className="btn" type="submit" disabled={loading}>

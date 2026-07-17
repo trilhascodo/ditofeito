@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidCpf, onlyDigits } from "@ditofeito/core";
 
 // Regra de handle espelha o CHECK de users.handle no schema (packages/db/migrations/001_schema.sql).
 export const signupSchema = z.object({
@@ -6,6 +7,8 @@ export const signupSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8).max(200),
+  cpf: z.string().refine(isValidCpf, "CPF inválido").transform(onlyDigits),
+  captchaToken: z.string().min(1, "Captcha obrigatório"),
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
