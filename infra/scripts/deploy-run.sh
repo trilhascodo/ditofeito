@@ -12,6 +12,13 @@ cd "$(dirname "$0")/../.."
 API_HOST_PORT="$(grep -m1 '^API_HOST_PORT=' infra/.env 2>/dev/null | cut -d= -f2- || true)"
 API_HOST_PORT="${API_HOST_PORT:-3000}"
 
+# Vite só embute VITE_* no bundle se a var existir no ambiente do processo
+# `vite build` — site key é pública por natureza (ok expor no bundle), mas
+# ainda mora só em infra/.env (não no git) pra ficar no mesmo lugar que o
+# resto da config da VPS.
+VITE_TURNSTILE_SITE_KEY="$(grep -m1 '^VITE_TURNSTILE_SITE_KEY=' infra/.env 2>/dev/null | cut -d= -f2- || true)"
+export VITE_TURNSTILE_SITE_KEY
+
 echo "==> build do frontend (apps/web/dist — nginx serve estático, ver infra/nginx/)"
 pnpm install --frozen-lockfile
 pnpm build
