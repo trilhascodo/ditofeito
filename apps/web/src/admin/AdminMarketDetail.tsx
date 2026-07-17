@@ -110,11 +110,27 @@ export function AdminMarketDetail() {
     }
   }
 
+  function isValidUrl(s: string): boolean {
+    try { new URL(s); return true; } catch { return false; }
+  }
+
   async function onVoid(e: FormEvent) {
     e.preventDefault();
     if (!market) return;
-    if (!confirm("Anular este mercado? Todo o comprometido é devolvido.")) return;
     setMsg(null); setErr(null);
+    // Anular é um botão avulso (type="button"), não um submit — não passa pela
+    // validação nativa do <form> (que exige esses campos só pro Resolver).
+    // Sem isso, clicar aqui com justificativa/fonte vazias manda direto pro
+    // servidor e volta um 400 cru, sem dizer o que falta preencher.
+    if (justification.trim().length < 10) {
+      setErr("Preencha a justificativa (mín. 10 caracteres) antes de anular.");
+      return;
+    }
+    if (!isValidUrl(sourceUrl)) {
+      setErr("Preencha uma URL de fonte válida antes de anular.");
+      return;
+    }
+    if (!confirm("Anular este mercado? Todo o comprometido é devolvido.")) return;
     try {
       const r = await voidMutation.mutateAsync({ marketId: market.id, justification, sourceUrl });
       setMsg(`Anulado — ${r.refunds} posições devolvidas.`);
