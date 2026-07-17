@@ -18,6 +18,11 @@ const PLACEMENT_LABEL: Record<string, string> = {
 };
 type HomePlacement = "SIDEBAR" | "BANNER" | "GRID";
 
+const PLAN_LABEL: Record<string, string> = {
+  BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium",
+};
+type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
+
 export function AdminSponsors() {
   const utils = trpc.useUtils();
   const { data: sponsors } = trpc.sponsor.list.useQuery();
@@ -29,17 +34,25 @@ export function AdminSponsors() {
   const updateSponsor = trpc.sponsor.update.useMutation();
   const createSponsorship = trpc.sponsor.createSponsorship.useMutation();
   const removeSponsorship = trpc.sponsor.removeSponsorship.useMutation();
+  const linkUser = trpc.sponsor.linkUser.useMutation();
 
   const [name, setName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
+  const [plan, setPlan] = useState<Plan>("BASICO");
   const [sponsorErr, setSponsorErr] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editSiteUrl, setEditSiteUrl] = useState("");
+  const [editPlan, setEditPlan] = useState<Plan>("BASICO");
   const [editErr, setEditErr] = useState<string | null>(null);
+
+  const [linkSponsorId, setLinkSponsorId] = useState("");
+  const [linkHandle, setLinkHandle] = useState("");
+  const [linkErr, setLinkErr] = useState<string | null>(null);
+  const [linkOk, setLinkOk] = useState(false);
 
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
@@ -59,9 +72,9 @@ export function AdminSponsors() {
     setSponsorErr(null);
     try {
       await createSponsor.mutateAsync({
-        name: name.trim(), logoUrl: logoUrl.trim() || undefined, siteUrl: siteUrl.trim() || undefined,
+        name: name.trim(), logoUrl: logoUrl.trim() || undefined, siteUrl: siteUrl.trim() || undefined, plan,
       });
-      setName(""); setLogoUrl(""); setSiteUrl("");
+      setName(""); setLogoUrl(""); setSiteUrl(""); setPlan("BASICO");
       await refresh();
     } catch (err) {
       setSponsorErr(err instanceof Error ? err.message : "Erro ao criar patrocinador");
@@ -73,8 +86,9 @@ export function AdminSponsors() {
     await refresh();
   }
 
-  function onStartEdit(s: { id: string; name: string; logoUrl: string | null; siteUrl: string | null }) {
-    setEditingId(s.id); setEditName(s.name); setEditLogoUrl(s.logoUrl ?? ""); setEditSiteUrl(s.siteUrl ?? ""); setEditErr(null);
+  function onStartEdit(s: { id: string; name: string; logoUrl: string | null; siteUrl: string | null; plan: string }) {
+    setEditingId(s.id); setEditName(s.name); setEditLogoUrl(s.logoUrl ?? ""); setEditSiteUrl(s.siteUrl ?? "");
+    setEditPlan(s.plan as Plan); setEditErr(null);
   }
 
   function onCancelEdit() {
@@ -89,6 +103,7 @@ export function AdminSponsors() {
       await updateSponsor.mutateAsync({
         id: editingId, name: editName.trim(),
         logoUrl: editLogoUrl.trim() || undefined, siteUrl: editSiteUrl.trim() || undefined,
+        plan: editPlan,
       });
       setEditingId(null);
       await refresh();
@@ -123,6 +138,21 @@ export function AdminSponsors() {
     await refresh();
   }
 
+  async function onLinkUser(e: FormEvent) {
+    e.preventDefault();
+    setLinkErr(null); setLinkOk(false);
+    if (!linkSponsorId || !linkHandle.trim()) {
+      setLinkErr("Escolha o patrocinador e o nome de usuário da conta.");
+      return;
+    }
+    try {
+      await linkUser.mutateAsync({ sponsorId: linkSponsorId, handle: linkHandle.trim() });
+      setLinkOk(true); setLinkHandle("");
+    } catch (err) {
+      setLinkErr(err instanceof Error ? err.message : "Erro ao vincular");
+    }
+  }
+
   const now = Date.now();
 
   return (
@@ -148,6 +178,14 @@ export function AdminSponsors() {
             <input className="input" id="sp-site" type="url" placeholder="https://…"
                    value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} />
           </div>
+          <div className="field">
+            <label className="label" htmlFor="sp-plan">Plano</label>
+            <select id="sp-plan" value={plan} onChange={(e) => setPlan(e.target.value as Plan)}>
+              <option value="BASICO">Básico (até 1 rede social)</option>
+              <option value="PROFISSIONAL">Profissional (até 3 redes sociais)</option>
+              <option value="PREMIUM">Premium (até 5 redes sociais)</option>
+            </select>
+          </div>
           {sponsorErr && <p className="error-text">{sponsorErr}</p>}
           <button className="btn" style={{ width: "auto" }} disabled={createSponsor.isPending}>
             {createSponsor.isPending ? "Criando…" : "Criar patrocinador"}
@@ -172,6 +210,13 @@ export function AdminSponsors() {
                 <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
                   <input className="input" type="url" value={editSiteUrl} onChange={(e) => setEditSiteUrl(e.target.value)} placeholder="URL do site" />
                 </div>
+                <div className="field" style={{ flex: "1 1 160px", marginBottom: 0 }}>
+                  <select value={editPlan} onChange={(e) => setEditPlan(e.target.value as Plan)}>
+                    <option value="BASICO">Básico</option>
+                    <option value="PROFISSIONAL">Profissional</option>
+                    <option value="PREMIUM">Premium</option>
+                  </select>
+                </div>
                 {editErr && <p className="error-text" style={{ flexBasis: "100%" }}>{editErr}</p>}
                 <button className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }} disabled={updateSponsor.isPending}>
                   {updateSponsor.isPending ? "Salvando…" : "Salvar"}
@@ -184,6 +229,7 @@ export function AdminSponsors() {
                   {s.name}
                   <div className="meta">
                     {s.siteUrl ? <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">{s.siteUrl}</a> : "sem site cadastrado"}
+                    {" · "}{PLAN_LABEL[s.plan] ?? s.plan}
                   </div>
                 </span>
                 <span className={`badge ${s.isActive ? "" : "badge-draft"}`}>{s.isActive ? "ATIVO" : "INATIVO"}</span>
@@ -203,6 +249,33 @@ export function AdminSponsors() {
             ),
           )
         )}
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Vincular conta de anunciante</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          O anunciante precisa ter uma conta normal no site primeiro (cadastro
+          comum). Vincular libera o painel dele em /patrocinador pra editar
+          logo, site e redes sociais, dentro do limite do plano.
+        </p>
+        <form onSubmit={onLinkUser}>
+          <div className="field">
+            <label className="label" htmlFor="link-sponsor">Patrocinador</label>
+            <select id="link-sponsor" value={linkSponsorId} onChange={(e) => setLinkSponsorId(e.target.value)} required>
+              <option value="">selecione</option>
+              {sponsors?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="link-handle">Nome de usuário da conta</label>
+            <input className="input" id="link-handle" value={linkHandle} onChange={(e) => setLinkHandle(e.target.value)} required />
+          </div>
+          {linkErr && <p className="error-text">{linkErr}</p>}
+          {linkOk && <p className="hint-text" style={{ color: "var(--conferido)" }}>Vinculado.</p>}
+          <button className="btn" style={{ width: "auto" }} disabled={linkUser.isPending}>
+            {linkUser.isPending ? "Vinculando…" : "Vincular"}
+          </button>
+        </form>
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>

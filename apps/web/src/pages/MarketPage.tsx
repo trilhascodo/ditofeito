@@ -5,6 +5,7 @@ import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
+import { SocialLinks } from "../lib/socialIcons";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
@@ -250,17 +251,22 @@ export function MarketPage() {
             )}
           </div>
 
-          {sponsorship && (sponsorship.siteUrl ? (
-            <a className="patrocinio" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
-            </a>
-          ) : (
+          {sponsorship && (
             <div className="patrocinio">
-              {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-              <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+              {sponsorship.siteUrl ? (
+                <a className="patrocinio-main" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
+                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
+                  <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+                </a>
+              ) : (
+                <>
+                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
+                  <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+                </>
+              )}
+              <SocialLinks items={sponsorship.socialLinks} />
             </div>
-          ))}
+          )}
         </aside>
       </div>
 

@@ -23,6 +23,7 @@ export interface SessionUser {
   displayName: string;
   role: string;
   emailVerified: boolean;
+  sponsorId: string | null;
 }
 
 // ------------------------------ Tokens ---------------------------------------
@@ -102,7 +103,7 @@ export async function login(
   pool: Pool, input: LoginInput, meta: { userAgent?: string; ip?: string },
 ): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
   const u = await pool.query(
-    `SELECT id, handle, display_name, role, password_hash, is_banned, email_verified_at
+    `SELECT id, handle, display_name, role, password_hash, is_banned, email_verified_at, sponsor_id
        FROM users WHERE email = $1`, [input.email]);
   const invalid = () => new AuthError("CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos");
   if (!u.rowCount) throw invalid();
@@ -124,6 +125,7 @@ export async function login(
     user: {
       id: row.id, handle: row.handle, displayName: row.display_name,
       role: row.role, emailVerified: row.email_verified_at !== null,
+      sponsorId: row.sponsor_id,
     },
   };
 }
@@ -135,7 +137,7 @@ export async function logout(pool: Pool, rawToken: string): Promise<void> {
 export async function getSessionUser(pool: Pool, rawToken: string | undefined): Promise<SessionUser | null> {
   if (!rawToken) return null;
   const { rows, rowCount } = await pool.query(
-    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at
+    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [hashToken(rawToken)]);
@@ -144,6 +146,7 @@ export async function getSessionUser(pool: Pool, rawToken: string | undefined): 
   return {
     id: row.id, handle: row.handle, displayName: row.display_name,
     role: row.role, emailVerified: row.email_verified_at !== null,
+    sponsorId: row.sponsor_id,
   };
 }
 

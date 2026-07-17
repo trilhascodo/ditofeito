@@ -120,7 +120,10 @@ a { color: var(--violeta); text-decoration: none; }
 }
 .patro-slot img { max-height: 32px; max-width: 100%; object-fit: contain; }
 .patro-slot b { color: var(--tinta); font-size: 13px; }
-a.patro-slot:hover { border-color: var(--violeta); }
+.patro-slot:hover { border-color: var(--violeta); }
+/* Link interno (nunca o <div> externo — <a> não pode aninhar <a>, e os
+   ícones de rede social ficam como irmãos dele, fora do link principal). */
+.patro-slot-main { display: flex; flex-direction: column; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
 
 /* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
    formato baixo (logo + nome numa linha), rola no mobile em vez de empilhar. */
@@ -132,7 +135,8 @@ a.patro-slot:hover { border-color: var(--violeta); }
 }
 .patro-faixa-item img { max-height: 22px; max-width: 80px; object-fit: contain; }
 .patro-faixa-item b { color: var(--tinta); font-size: 13px; }
-a.patro-faixa-item:hover { border-color: var(--violeta); }
+.patro-faixa-item:hover { border-color: var(--violeta); }
+.patro-faixa-main { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 
 /* ---------- home: slide de destaque ---------- */
 /* Layout inspirado no carrossel do Polymarket — só a estrutura (1 card
@@ -240,6 +244,19 @@ a.patro-faixa-item:hover { border-color: var(--violeta); }
 }
 .market-tile-ad img { max-height: 32px; max-width: 100%; object-fit: contain; }
 .market-tile-ad b { color: var(--tinta); font-size: 14px; }
+.market-tile-ad-main {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; color: inherit; text-decoration: none;
+}
+
+/* Ícones de rede social nos anúncios — badges circulares monocromáticos
+   (socialIcons.tsx), reusados nos 3 slots de anúncio da home + card de
+   patrocínio do mercado. */
+.social-links { display: flex; gap: 6px; margin-top: 2px; }
+.social-link {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 24px; height: 24px; border-radius: 99px; background: var(--violeta-2); color: var(--violeta);
+}
+.social-link:hover { background: var(--violeta); color: #fff; }
 
 .badge {
   font: 600 11px var(--sans); background: var(--papel-2); color: var(--grafite);
@@ -351,7 +368,8 @@ input[type=number]:focus { outline: 2px solid var(--violeta); border-color: tran
 }
 .patrocinio img { flex: none; object-fit: contain; }
 .patrocinio b { color: var(--tinta); font-weight: 600; }
-a.patrocinio:hover { background: var(--linha); }
+.patrocinio:hover { background: var(--linha); }
+.patrocinio-main { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 
 /* "leitura relacionada" — link curado manualmente pelo admin, sem preview
    automático (não busca favicon/thumbnail externo: zero dependência,

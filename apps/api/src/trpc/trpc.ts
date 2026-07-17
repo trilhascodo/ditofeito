@@ -36,3 +36,10 @@ export const resolverProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!RESOLVER_ROLES.has(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN" });
   return next({ ctx });
 });
+
+// Painel de autoatendimento do anunciante — só conta SPONSOR vinculada a um
+// sponsor_id (nunca deixa passar um SPONSOR "órfão" por engano de dado).
+export const sponsorProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "SPONSOR" || !ctx.user.sponsorId) throw new TRPCError({ code: "FORBIDDEN" });
+  return next({ ctx: { ...ctx, sponsorId: ctx.user.sponsorId } });
+});

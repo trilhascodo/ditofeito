@@ -5,6 +5,7 @@ import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { MarketPage } from "./pages/MarketPage";
 import { Profile } from "./pages/Profile";
+import { SponsorPanel } from "./pages/SponsorPanel";
 import { AdminLayout } from "./admin/AdminLayout";
 import { AdminMarkets } from "./admin/AdminMarkets";
 import { AdminMarketNew } from "./admin/AdminMarketNew";
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: "/cadastro", element: <Signup /> },
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
+      { path: "/patrocinador", element: <SponsorPanel /> },
       {
         path: "/admin",
         element: <AdminLayout />,

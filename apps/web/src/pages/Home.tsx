@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { pct, relativeClose } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
+import { SocialLinks, type SocialLinkItem } from "../lib/socialIcons";
 
 const STATUS_LABEL: Record<string, string> = {
   CLOSED: "ENCERRADO", RESOLVED: "RESOLVIDO", VOIDED: "ANULADO",
@@ -92,13 +93,17 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
 
 interface HomeSponsor {
   label: string; sponsorName: string; logoUrl: string | null; siteUrl: string | null;
+  socialLinks: SocialLinkItem[];
 }
 
-// Até 3 espaços de publicidade ao lado do destaque (layout.pdf — coluna
+// Até 5 espaços de publicidade ao lado do destaque (layout.pdf — coluna
 // lateral empilhada, não mais faixa única embaixo do grid). Só renderiza o
 // que tiver patrocínio ativo — sem caixa vazia "espaço disponível".
 // Nomes de classe em português de propósito: "ad-slot" em inglês cai nos
 // filtros genéricos de ad blocker (escondia o bloco inteiro no desktop).
+// O <div> externo nunca é um link (HTML não permite <a> aninhado) — o link
+// pro site do patrocinador fica só no .patro-slot-main interno, e os ícones
+// de rede social ficam como irmãos, fora do link principal.
 function PatroSlots({ items }: { items: HomeSponsor[] }) {
   return (
     <aside className="patro-slots">
@@ -110,10 +115,13 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
             <b>{s.sponsorName}</b>
           </>
         );
-        return s.siteUrl ? (
-          <a key={i} className="patro-slot" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
-        ) : (
-          <div key={i} className="patro-slot">{conteudo}</div>
+        return (
+          <div key={i} className="patro-slot">
+            {s.siteUrl ? (
+              <a className="patro-slot-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+            ) : conteudo}
+            <SocialLinks items={s.socialLinks} />
+          </div>
         );
       })}
     </aside>
@@ -134,10 +142,13 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
             <span>{s.label} <b>{s.sponsorName}</b></span>
           </>
         );
-        return s.siteUrl ? (
-          <a key={i} className="patro-faixa-item" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
-        ) : (
-          <div key={i} className="patro-faixa-item">{conteudo}</div>
+        return (
+          <div key={i} className="patro-faixa-item">
+            {s.siteUrl ? (
+              <a className="patro-faixa-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+            ) : conteudo}
+            <SocialLinks items={s.socialLinks} />
+          </div>
         );
       })}
     </div>
@@ -167,10 +178,13 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
       <b>{ad.sponsorName}</b>
     </>
   );
-  return ad.siteUrl ? (
-    <a className="market-tile market-tile-ad" href={ad.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
-  ) : (
-    <div className="market-tile market-tile-ad">{conteudo}</div>
+  return (
+    <div className="market-tile market-tile-ad">
+      {ad.siteUrl ? (
+        <a className="market-tile-ad-main" href={ad.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+      ) : conteudo}
+      <SocialLinks items={ad.socialLinks} />
+    </div>
   );
 }
 

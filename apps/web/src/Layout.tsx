@@ -40,6 +40,9 @@ export function Layout() {
             {user && STAFF_ROLES.has(user.role) && (
               <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>Admin</NavLink>
             )}
+            {user && user.role === "SPONSOR" && (
+              <NavLink to="/patrocinador" className={({ isActive }) => (isActive ? "active" : "")}>Meu anúncio</NavLink>
+            )}
           </nav>
           <div className="site-header-auth">
             {isLoading ? null : user ? (
