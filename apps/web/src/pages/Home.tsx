@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { pct, relativeClose } from "../lib/format";
@@ -17,14 +17,28 @@ interface FeaturedMarket {
 // Slide de destaque (layout inspirado no carrossel do Polymarket — só a
 // estrutura: 1 card grande por vez + navegação. Sem spread/combo/alavancagem,
 // sem "$volume" — número é ponto e "chance de SIM" no nosso vocabulário).
+const DESTAQUE_INTERVAL_MS = 6000;
+
 function Destaque({ items }: { items: FeaturedMarket[] }) {
   const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Timeout (não interval) que se rearma a cada mudança de idx — assim um
+  // clique manual reinicia a contagem em vez de brigar com o próximo tick
+  // automático. Pausa no hover e respeita prefers-reduced-motion.
+  useEffect(() => {
+    if (items.length <= 1 || paused) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = setTimeout(() => setIdx((i) => (i + 1) % items.length), DESTAQUE_INTERVAL_MS);
+    return () => clearTimeout(t);
+  }, [idx, items.length, paused]);
+
   if (items.length === 0) return null;
   const m = items[idx % items.length];
   const path = pathFromSeries(m.series, 640, 100, 4);
 
   return (
-    <div className="destaque">
+    <div className="destaque" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <Link to={`/m/${m.slug}`} className="destaque-card">
         <span className="eyebrow">{m.categoryName}</span>
         <h2 className="destaque-titulo">{m.title}</h2>
