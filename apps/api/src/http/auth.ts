@@ -1,8 +1,8 @@
 import type express from "express";
 import rateLimit from "express-rate-limit";
 import type { Pool } from "pg";
-import { signup, login, logout, verifyEmail, AuthError } from "../domain/auth.js";
-import { signupSchema, loginSchema } from "../domain/auth.schemas.js";
+import { signup, login, logout, verifyEmail, requestPasswordReset, resetPassword, AuthError } from "../domain/auth.js";
+import { signupSchema, loginSchema, requestPasswordResetSchema, resetPasswordSchema } from "../domain/auth.schemas.js";
 import { optionalAuth, requireAuth } from "./middleware.js";
 import { asyncHandler } from "./asyncHandler.js";
 import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
@@ -61,6 +61,28 @@ export function mountAuth(app: express.Express, pool: Pool) {
       });
       res.cookie(AUTH_CONFIG.sessionCookieName, token, cookieOptions());
       res.json({ user });
+    } catch (e) {
+      if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });
+      throw e;
+    }
+  }));
+
+  // Sempre responde a mesma mensagem genérica, exista ou não o e-mail —
+  // requestPasswordReset() já não revela isso (evita enumeração de contas).
+  app.post("/auth/request-password-reset",
+    authLimiter(AUTH_CONFIG.rateLimit.passwordResetMax), asyncHandler(async (req, res) => {
+      const parsed = requestPasswordResetSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
+      await requestPasswordReset(pool, parsed.data);
+      res.json({ mensagem: "Se esse e-mail tiver conta, chega um link de redefinição em instantes." });
+    }));
+
+  app.post("/auth/reset-password", asyncHandler(async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
+    try {
+      await resetPassword(pool, parsed.data);
+      res.json({ ok: true });
     } catch (e) {
       if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });
       throw e;

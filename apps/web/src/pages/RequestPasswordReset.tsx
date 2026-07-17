@@ -1,35 +1,43 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { login } from "../lib/auth";
-import { useAuth } from "../lib/useAuth";
+import { Link } from "react-router-dom";
+import { requestPasswordReset } from "../lib/auth";
 
-export function Login() {
+export function RequestPasswordReset() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { refresh } = useAuth();
+  const [done, setDone] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      await login({ email, password });
-      refresh();
-      navigate("/");
+      await requestPasswordReset({ email });
+      setDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao entrar");
+      setError(err instanceof Error ? err.message : "Erro ao pedir redefinição");
     } finally {
       setLoading(false);
     }
   }
 
+  if (done) {
+    return (
+      <main className="page-narrow">
+        <div className="card">
+          <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, marginTop: 0 }}>Verifique seu e-mail</h1>
+          <p>Se esse e-mail tiver conta no DitoFeito, chega um link de redefinição em instantes.</p>
+          <p><Link to="/entrar">Voltar pro login</Link></p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="page-narrow">
       <div className="card">
-        <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, marginTop: 0 }}>Entrar</h1>
+        <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, marginTop: 0 }}>Esqueci minha senha</h1>
         <form onSubmit={onSubmit}>
           <div className="field">
             <label className="label" htmlFor="email">E-mail</label>
@@ -38,22 +46,13 @@ export function Login() {
               value={email} onChange={(e) => setEmail(e.target.value)}
             />
           </div>
-          <div className="field">
-            <label className="label" htmlFor="password">Senha</label>
-            <input
-              className="input" id="password" type="password" autoComplete="current-password" required
-              value={password} onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
           {error && <p className="error-text">{error}</p>}
           <button className="btn" type="submit" disabled={loading}>
-            {loading ? "Entrando…" : "Entrar"}
+            {loading ? "Enviando…" : "Enviar link de redefinição"}
           </button>
         </form>
         <p className="hint-text" style={{ marginTop: 16 }}>
-          Não tem conta? <Link to="/cadastro">Cadastre-se</Link>
-          {" · "}
-          <Link to="/esqueci-senha">Esqueci minha senha</Link>
+          <Link to="/entrar">Voltar pro login</Link>
         </p>
       </div>
     </main>

@@ -8,12 +8,16 @@ export const AUTH_CONFIG = {
   signupBonusPoints: 1000,
   sessionTtlDays: 30,
   emailVerificationTtlHours: 48,
+  /** Mais curto que a verificação de e-mail — token de reset é mais sensível
+   *  (troca a senha na hora), então a janela de uso fica menor. */
+  passwordResetTtlHours: 2,
   sessionCookieName: "df_session",
   /** Piso de segurança contra brute force (segurança mínima inominável). */
   rateLimit: {
     windowMs: 15 * 60 * 1000,
     signupMax: 10,
     loginMax: 20,
+    passwordResetMax: 5,
   },
 } as const;
 

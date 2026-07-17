@@ -30,6 +30,14 @@ export function login(input: { email: string; password: string }) {
   return call<{ user: AuthUser }>("/auth/login", { method: "POST", body: JSON.stringify(input) });
 }
 
+export function requestPasswordReset(input: { email: string }) {
+  return call<{ mensagem: string }>("/auth/request-password-reset", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function resetPassword(input: { token: string; password: string }) {
+  return call<{ ok: boolean }>("/auth/reset-password", { method: "POST", body: JSON.stringify(input) });
+}
+
 export async function logout(): Promise<void> {
   await fetch("/auth/logout", { method: "POST", credentials: "include" });
 }

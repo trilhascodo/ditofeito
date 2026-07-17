@@ -11,7 +11,7 @@ import { appendLedger } from "./trade.js";
 import { sendTransactionalEmail } from "../lib/email.js";
 import { verifyCaptcha } from "../lib/captcha.js";
 import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
-import type { SignupInput, LoginInput } from "./auth.schemas.js";
+import type { SignupInput, LoginInput, RequestPasswordResetInput, ResetPasswordInput } from "./auth.schemas.js";
 
 export class AuthError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -169,6 +169,62 @@ export async function verifyEmail(pool: Pool, rawToken: string): Promise<void> {
       [row.user_id]);
     await client.query(`UPDATE email_verification_tokens SET consumed_at = now() WHERE id = $1`,
       [row.id]);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------- Recuperação de senha -------------------------------
+// requestPasswordReset nunca revela se o e-mail existe (a rota HTTP sempre
+// responde a mesma mensagem genérica) — evita enumeração de contas.
+export async function requestPasswordReset(pool: Pool, input: RequestPasswordResetInput): Promise<void> {
+  const u = await pool.query(`SELECT id, is_banned FROM users WHERE email = $1`, [input.email]);
+  if (!u.rowCount || u.rows[0].is_banned) return;
+  const userId = u.rows[0].id;
+
+  const raw = randomToken();
+  const expires = new Date(Date.now() + AUTH_CONFIG.passwordResetTtlHours * 3600_000);
+  await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)`,
+    [userId, hashToken(raw), expires.toISOString()]);
+
+  const link = `${APP_CONFIG.webOrigin}/redefinir-senha?token=${raw}`;
+  await sendTransactionalEmail({
+    to: input.email,
+    subject: "Redefinir senha — DitoFeito",
+    html: `<p>Pediram uma nova senha pra essa conta. Se foi você, clique no link
+           abaixo (vale por ${AUTH_CONFIG.passwordResetTtlHours}h):</p>
+           <p><a href="${link}">${link}</a></p>
+           <p>Se não foi você, ignore esta mensagem — sua senha continua a mesma.</p>`,
+  }).catch((e) => console.error("[auth] envio de recuperação de senha falhou", e));
+}
+
+export async function resetPassword(pool: Pool, input: ResetPasswordInput): Promise<void> {
+  const passwordHash = await argonHash(input.password);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const t = await client.query(
+      `SELECT id, user_id, expires_at, consumed_at FROM password_reset_tokens
+        WHERE token_hash = $1 FOR UPDATE`,
+      [hashToken(input.token)]);
+    if (!t.rowCount) throw new AuthError("TOKEN_INVALIDO", "Link de redefinição inválido");
+    const row = t.rows[0];
+    if (row.consumed_at) throw new AuthError("TOKEN_JA_USADO", "Link já utilizado");
+    if (new Date(row.expires_at) <= new Date())
+      throw new AuthError("TOKEN_EXPIRADO", "Link de redefinição expirado");
+
+    await client.query(`UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`,
+      [passwordHash, row.user_id]);
+    await client.query(`UPDATE password_reset_tokens SET consumed_at = now() WHERE id = $1`,
+      [row.id]);
+    // Redefinir senha invalida sessões existentes — se a conta foi
+    // comprometida, o reset também derruba quem estava logado antes.
+    await client.query(`DELETE FROM sessions WHERE user_id = $1`, [row.user_id]);
     await client.query("COMMIT");
   } catch (e) {
     await client.query("ROLLBACK");

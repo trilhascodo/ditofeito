@@ -3,6 +3,8 @@ import { Layout } from "./Layout";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
+import { RequestPasswordReset } from "./pages/RequestPasswordReset";
+import { ResetPassword } from "./pages/ResetPassword";
 import { MarketPage } from "./pages/MarketPage";
 import { Profile } from "./pages/Profile";
 import { SponsorPanel } from "./pages/SponsorPanel";
@@ -21,6 +23,8 @@ const router = createBrowserRouter([
       { path: "/", element: <Home /> },
       { path: "/entrar", element: <Login /> },
       { path: "/cadastro", element: <Signup /> },
+      { path: "/esqueci-senha", element: <RequestPasswordReset /> },
+      { path: "/redefinir-senha", element: <ResetPassword /> },
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
       { path: "/patrocinador", element: <SponsorPanel /> },
