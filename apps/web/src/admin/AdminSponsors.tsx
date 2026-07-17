@@ -13,6 +13,11 @@ function fmtPeriod(iso: string | Date): string {
   return dtDisplay.format(new Date(iso));
 }
 
+const PLACEMENT_LABEL: Record<string, string> = {
+  SIDEBAR: "coluna lateral", BANNER: "faixa horizontal", GRID: "nativo na grade",
+};
+type HomePlacement = "SIDEBAR" | "BANNER" | "GRID";
+
 export function AdminSponsors() {
   const utils = trpc.useUtils();
   const { data: sponsors } = trpc.sponsor.list.useQuery();
@@ -39,6 +44,7 @@ export function AdminSponsors() {
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
   const [isHome, setIsHome] = useState(false);
+  const [homePlacement, setHomePlacement] = useState<HomePlacement>("SIDEBAR");
   const [label, setLabel] = useState("Apresentado por");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
@@ -100,11 +106,11 @@ export function AdminSponsors() {
     }
     try {
       await createSponsorship.mutateAsync({
-        sponsorId, marketId: isHome ? undefined : marketId, isHome,
+        sponsorId, marketId: isHome ? undefined : marketId, isHome, homePlacement,
         label: label.trim() || "Apresentado por",
         startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
       });
-      setMarketId(""); setIsHome(false); setEndsAt("");
+      setMarketId(""); setIsHome(false); setHomePlacement("SIDEBAR"); setEndsAt("");
       await refresh();
     } catch (err) {
       setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
@@ -203,8 +209,8 @@ export function AdminSponsors() {
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Vincula um patrocinador a um mercado (card "Apresentado por" na página do
-          mercado e tag no card da home) ou à home inteira (espaço de publicidade
-          ao lado do destaque — até 3 simultâneos) por um período.
+          mercado e tag no card da home) ou a um espaço de publicidade da home
+          (coluna lateral, faixa horizontal ou nativo na grade) por um período.
         </p>
         <form onSubmit={onCreateSponsorship}>
           <div className="field">
@@ -216,8 +222,19 @@ export function AdminSponsors() {
           </div>
           <label className="checkbox-row">
             <input type="checkbox" checked={isHome} onChange={(e) => { setIsHome(e.target.checked); setMarketId(""); }} />
-            Espaço de publicidade da home (não vincula a um mercado específico — até 3 simultâneos)
+            Espaço de publicidade da home (não vincula a um mercado específico)
           </label>
+          {isHome && (
+            <div className="field">
+              <label className="label" htmlFor="sp-placement">Onde?</label>
+              <select id="sp-placement" value={homePlacement}
+                      onChange={(e) => setHomePlacement(e.target.value as HomePlacement)}>
+                <option value="SIDEBAR">Coluna lateral (até 5)</option>
+                <option value="BANNER">Faixa horizontal abaixo do destaque (até 4)</option>
+                <option value="GRID">Nativo, intercalado na grade de mercados (até 2)</option>
+              </select>
+            </div>
+          )}
           {!isHome && (
             <div className="field">
               <label className="label" htmlFor="sp-market">Mercado</label>
@@ -259,7 +276,7 @@ export function AdminSponsors() {
               <div key={sp.id} className="admin-row">
                 <span className="titulo">
                   {sp.sponsor.name} → {sp.isHome
-                    ? "Espaço de publicidade da home"
+                    ? `Espaço da home (${PLACEMENT_LABEL[sp.homePlacement] ?? sp.homePlacement})`
                     : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
                     "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}

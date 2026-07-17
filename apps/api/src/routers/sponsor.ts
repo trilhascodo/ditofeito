@@ -13,6 +13,9 @@ const sponsorshipInput = z
     // mesma regra do CHECK no banco (migrations/004_sponsor_home_news.sql).
     marketId: z.string().uuid().optional(),
     isHome: z.boolean().default(false),
+    // Só importa quando isHome; SIDEBAR é o comportamento de sempre
+    // (migrations/008_home_ad_placement.sql).
+    homePlacement: z.enum(["SIDEBAR", "BANNER", "GRID"]).default("SIDEBAR"),
     label: z.string().trim().min(1).max(60).default("Apresentado por"),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
@@ -80,7 +83,7 @@ export const sponsorRouter = router({
       let where = "";
       if (input?.marketId) { params.push(input.marketId); where = "WHERE sp.market_id = $1"; }
       const r = await ctx.pool.query(
-        `SELECT sp.id, sp.label, sp.starts_at, sp.ends_at, sp.market_id, sp.is_home,
+        `SELECT sp.id, sp.label, sp.starts_at, sp.ends_at, sp.market_id, sp.is_home, sp.home_placement,
                 s.id AS sponsor_id, s.name AS sponsor_name, s.logo_url, s.site_url,
                 m.title AS market_title, m.slug AS market_slug
            FROM sponsorships sp
@@ -92,6 +95,7 @@ export const sponsorRouter = router({
         id: row.id as string, label: row.label as string,
         startsAt: row.starts_at as string, endsAt: row.ends_at as string,
         marketId: row.market_id as string | null, isHome: row.is_home as boolean,
+        homePlacement: row.home_placement as "SIDEBAR" | "BANNER" | "GRID",
         marketTitle: row.market_title as string | null, marketSlug: row.market_slug as string | null,
         sponsor: {
           id: row.sponsor_id as string, name: row.sponsor_name as string,
@@ -102,9 +106,10 @@ export const sponsorRouter = router({
 
   createSponsorship: adminProcedure.input(sponsorshipInput).mutation(async ({ ctx, input }) => {
     const r = await ctx.pool.query(
-      `INSERT INTO sponsorships (sponsor_id, market_id, is_home, label, starts_at, ends_at)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-      [input.sponsorId, input.marketId ?? null, input.isHome, input.label, input.startsAt, input.endsAt]);
+      `INSERT INTO sponsorships (sponsor_id, market_id, is_home, home_placement, label, starts_at, ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [input.sponsorId, input.marketId ?? null, input.isHome, input.homePlacement,
+        input.label, input.startsAt, input.endsAt]);
     return { id: r.rows[0].id as string };
   }),
 
@@ -136,20 +141,28 @@ export const sponsorRouter = router({
       };
     }),
 
-  // ---- PÚBLICO: espaços de publicidade da home (até 3, layout.pdf) --------
+  // ---- PÚBLICO: espaços de publicidade da home, por posição ---------------
+  // 3 superfícies (migrations/008_home_ad_placement.sql): coluna lateral do
+  // carrossel, faixa horizontal abaixo dele, e cards nativos na grade de
+  // mercados. Uma query só, agrupada em JS — evita 3 round-trips da home.
   getActiveHome: publicProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
-      `SELECT sp.label, s.name, s.logo_url, s.site_url
+      `SELECT sp.label, sp.home_placement, s.name, s.logo_url, s.site_url
          FROM sponsorships sp
          JOIN sponsors s ON s.id = sp.sponsor_id
         WHERE sp.is_home = true
           AND s.is_active = true
           AND now() BETWEEN sp.starts_at AND sp.ends_at
-        ORDER BY sp.starts_at ASC
-        LIMIT 3`);
-    return r.rows.map((row) => ({
+        ORDER BY sp.starts_at ASC`);
+    const toItem = (row: (typeof r.rows)[number]) => ({
       label: row.label as string, sponsorName: row.name as string,
       logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
-    }));
+    });
+    const byPlacement = (p: string) => r.rows.filter((row) => row.home_placement === p).map(toItem);
+    return {
+      sidebar: byPlacement("SIDEBAR").slice(0, 5),
+      banner: byPlacement("BANNER").slice(0, 4),
+      grid: byPlacement("GRID").slice(0, 2),
+    };
   }),
 });

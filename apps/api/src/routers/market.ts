@@ -179,6 +179,9 @@ export const marketRouter = router({
     // BINARY, líder excluindo OUTROS em MULTI) — é o que ganha a sparkline.
     const leaderOutcomeId = new Map<string, string>();
     const marketSummary = new Map<string, { label: string; price: number }>();
+    // Mini-ranking pro slide de destaque: top outcomes (sem catchall), preço
+    // desc — mesmos `prices` já calculados acima, só reaproveita.
+    const marketRanking = new Map<string, { label: string; price: number }[]>();
     for (const row of r.rows) {
       const outcomes = outcomesByMarket.get(row.id) ?? [];
       const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
@@ -192,6 +195,12 @@ export const marketRouter = router({
         leaderOutcomeId.set(row.id, outcomes[idx].id);
         marketSummary.set(row.id, { label: outcomes[idx].label, price: prices[idx] });
       }
+      marketRanking.set(row.id, outcomes
+        .map((o, i) => ({ label: o.label, price: prices[i], isCatchall: o.isCatchall }))
+        .filter((o) => !o.isCatchall)
+        .sort((a, b) => b.price - a.price)
+        .slice(0, 4)
+        .map(({ label, price }) => ({ label, price })));
     }
 
     const leaderIds = [...leaderOutcomeId.values()];
@@ -222,6 +231,7 @@ export const marketRouter = router({
       closeAt: row.close_at as Date, categoryName: row.category_name as string,
       summary: marketSummary.get(row.id) ?? null,
       series: seriesByOutcome.get(leaderOutcomeId.get(row.id) ?? "") ?? [],
+      outcomes: marketRanking.get(row.id) ?? [],
     }));
   }),
 

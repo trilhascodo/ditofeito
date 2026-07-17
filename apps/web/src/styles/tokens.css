@@ -122,6 +122,18 @@ a { color: var(--violeta); text-decoration: none; }
 .patro-slot b { color: var(--tinta); font-size: 13px; }
 a.patro-slot:hover { border-color: var(--violeta); }
 
+/* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
+   formato baixo (logo + nome numa linha), rola no mobile em vez de empilhar. */
+.patro-faixa { display: flex; gap: 12px; overflow-x: auto; margin-bottom: 28px; }
+.patro-faixa-item {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  background: var(--papel-2); border: 1px solid var(--linha); border-radius: 10px;
+  padding: 10px 16px; color: var(--grafite); font-size: 12px; white-space: nowrap;
+}
+.patro-faixa-item img { max-height: 22px; max-width: 80px; object-fit: contain; }
+.patro-faixa-item b { color: var(--tinta); font-size: 13px; }
+a.patro-faixa-item:hover { border-color: var(--violeta); }
+
 /* ---------- home: slide de destaque ---------- */
 /* Layout inspirado no carrossel do Polymarket — só a estrutura (1 card
    grande + navegação). Sem spread/combo/alavancagem, sem "$volume": número
@@ -142,6 +154,12 @@ a.patro-slot:hover { border-color: var(--violeta); }
 .destaque-stat b { display: block; font-size: 44px; color: var(--violeta); line-height: 1; }
 .destaque-stat span { font-size: 13px; color: var(--grafite); }
 .destaque-spark { flex: 1; height: 70px; min-width: 0; }
+.destaque-ranking { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.destaque-ranking-pill {
+  font: 500 12px var(--sans); color: var(--grafite); background: var(--violeta-2);
+  border-radius: 99px; padding: 5px 12px;
+}
+.destaque-ranking-pill b { font: 700 12px var(--mono); color: var(--violeta); margin-left: 5px; }
 .destaque-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
 .destaque-nav button {
   background: none; border: 0; cursor: pointer; color: var(--grafite); font-size: 20px;
@@ -209,6 +227,19 @@ a.patro-slot:hover { border-color: var(--violeta); }
 }
 .market-tile-sponsor img { flex: none; object-fit: contain; }
 .market-tile-sponsor b { color: var(--tinta); font-weight: 600; }
+
+/* Terceira superfície de anúncio: card nativo intercalado na grade — mesma
+   base de .market-tile, mas fundo diferenciado + rótulo explícito
+   "PUBLICIDADE" (transparência sobre o que é conteúdo vs. anúncio). */
+.market-tile-ad {
+  align-items: center; justify-content: center; text-align: center; gap: 8px;
+  background: var(--papel-2); border-style: dashed;
+}
+.market-tile-ad-label {
+  font: 700 10px var(--mono); color: var(--grafite); text-transform: uppercase; letter-spacing: .06em;
+}
+.market-tile-ad img { max-height: 32px; max-width: 100%; object-fit: contain; }
+.market-tile-ad b { color: var(--tinta); font-size: 14px; }
 
 .badge {
   font: 600 11px var(--sans); background: var(--papel-2); color: var(--grafite);
