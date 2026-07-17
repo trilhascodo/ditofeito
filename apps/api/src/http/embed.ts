@@ -307,6 +307,30 @@ export function renderCardSvg(d: PublicMarketData): string {
 </svg>`;
 }
 
+// ---------------------------------------------------------------------------
+// 3c. CARD OG GENÉRICO DA HOME (og:image de ditofeito.com — sem mercado
+//     específico, só marca + prova social simples). Mesmo canvas 1200x630
+//     e paleta do card de mercado, pra manter consistência quando os dois
+//     tipos de link circulam juntos numa conversa.
+// ---------------------------------------------------------------------------
+export function renderHomeCardSvg(openMarketsCount: number): string {
+  const stat = openMarketsCount > 0
+    ? `${openMarketsCount} mercado${openMarketsCount === 1 ? "" : "s"} aberto${openMarketsCount === 1 ? "" : "s"} agora`
+    : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="${TOKENS.papel}"/>
+  <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
+  <text x="80" y="300" font-family="IBM Plex Serif" font-size="90" font-weight="700" fill="${TOKENS.tinta}">Dito<tspan fill="${TOKENS.violeta}">Feito</tspan></text>
+  <g transform="translate(1040,265) rotate(-8)">
+    <circle r="34" fill="none" stroke="${TOKENS.violeta}" stroke-width="4"/>
+    <text x="0" y="13" font-family="IBM Plex Mono" font-size="36" font-weight="700"
+          fill="${TOKENS.violeta}" text-anchor="middle">✓</text>
+  </g>
+  <text x="80" y="368" font-family="IBM Plex Sans" font-size="32" font-weight="500" fill="${TOKENS.grafite}">Mercado de previsão por reputação — pontos, não dinheiro.</text>
+  ${stat ? `<text x="80" y="540" font-family="IBM Plex Mono" font-size="24" font-weight="600" fill="${TOKENS.violeta}">${esc(stat)}</text>` : ""}
+</svg>`;
+}
+
 const FONTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "assets", "fonts");
 const CARD_FONT_FILES = [
   path.join(FONTS_DIR, "IBMPlexSans-Variable.ttf"),
@@ -315,8 +339,7 @@ const CARD_FONT_FILES = [
   path.join(FONTS_DIR, "IBMPlexSerif-Bold.ttf"),
 ];
 
-export function renderCardPng(d: PublicMarketData): Buffer {
-  const svg = renderCardSvg(d);
+function svgToPng(svg: string): Buffer {
   const resvg = new Resvg(svg, {
     font: {
       fontFiles: CARD_FONT_FILES,
@@ -325,6 +348,14 @@ export function renderCardPng(d: PublicMarketData): Buffer {
     },
   });
   return resvg.render().asPng();
+}
+
+export function renderCardPng(d: PublicMarketData): Buffer {
+  return svgToPng(renderCardSvg(d));
+}
+
+export function renderHomeCardPng(openMarketsCount: number): Buffer {
+  return svgToPng(renderHomeCardSvg(openMarketsCount));
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +399,30 @@ export function renderShareHtml(d: PublicMarketData): string {
 }
 
 // ---------------------------------------------------------------------------
+// 3d. SITEMAP.XML — gerado na hora a partir dos mercados publicados (nunca
+//    DRAFT); mais simples que gerar em build time e sempre reflete o banco.
+// ---------------------------------------------------------------------------
+async function renderSitemap(pool: Pool): Promise<string> {
+  const r = await pool.query(
+    `SELECT slug, created_at FROM markets WHERE status != 'DRAFT' ORDER BY created_at DESC`);
+  const iso = (d: Date) => new Date(d).toISOString();
+  const staticUrls = [
+    { loc: `${EMBED_CONFIG.baseUrl}/`, priority: "1.0" },
+    { loc: `${EMBED_CONFIG.baseUrl}/entrar`, priority: "0.3" },
+    { loc: `${EMBED_CONFIG.baseUrl}/cadastro`, priority: "0.3" },
+  ];
+  const urls = [
+    ...staticUrls.map((u) => `<url><loc>${u.loc}</loc><priority>${u.priority}</priority></url>`),
+    ...r.rows.map((m) =>
+      `<url><loc>${EMBED_CONFIG.baseUrl}/m/${m.slug}</loc><lastmod>${iso(m.created_at)}</lastmod><priority>0.8</priority></url>`),
+  ];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+}
+
+// ---------------------------------------------------------------------------
 // 4. WIRING HTTP (Express — rotas públicas, fora do tRPC, cacheáveis na CDN)
 // ---------------------------------------------------------------------------
 import type express from "express";
@@ -378,6 +433,10 @@ export function mountEmbed(app: express.Express, pool: Pool) {
     "Cache-Control": `public, s-maxage=${EMBED_CONFIG.cacheSeconds}, stale-while-revalidate=300`,
     "Content-Security-Policy": "frame-ancestors *",   // embed liberado
   });
+  app.get("/sitemap.xml", asyncHandler(async (req, res) => {
+    res.set({ "Cache-Control": `public, s-maxage=3600, stale-while-revalidate=86400` });
+    res.type("application/xml").send(await renderSitemap(pool));
+  }));
   app.get("/embed/:slug", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).send("mercado não encontrado");
@@ -394,6 +453,16 @@ export function mountEmbed(app: express.Express, pool: Pool) {
     const d = await getMarketPublicData(pool, req.params.slug);
     if (!d) return res.status(404).json({ erro: "não encontrado" });
     cache(res); res.json(d);
+  }));
+  // Card genérico da home (og:image de ditofeito.com) — registrado antes do
+  // /card/:slug.* genérico, senão "home" seria lido como um slug de mercado.
+  app.get("/card/home.svg", asyncHandler(async (req, res) => {
+    const r = await pool.query(`SELECT count(*)::int AS n FROM markets WHERE status = 'OPEN'`);
+    cache(res); res.type("image/svg+xml").send(renderHomeCardSvg(r.rows[0].n));
+  }));
+  app.get("/card/home.png", asyncHandler(async (req, res) => {
+    const r = await pool.query(`SELECT count(*)::int AS n FROM markets WHERE status = 'OPEN'`);
+    cache(res); res.type("image/png").send(renderHomeCardPng(r.rows[0].n));
   }));
   app.get("/card/:slug.svg", asyncHandler(async (req, res) => {
     const d = await getMarketPublicData(pool, req.params.slug);

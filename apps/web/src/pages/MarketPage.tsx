@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { sharesForPoints, tradeCost } from "@ditofeito/core";
 import { trpc } from "../lib/trpc";
@@ -41,6 +41,12 @@ export function MarketPage() {
   const [points, setPoints] = useState(50);
   const [showStamp, setShowStamp] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!market) return;
+    document.title = `${market.title} — DitoFeito`;
+    return () => { document.title = "DitoFeito — pode escrever"; };
+  }, [market?.title]);
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
   if (error || !market) return <main className="page"><p className="error-text">Mercado não encontrado.</p></main>;
