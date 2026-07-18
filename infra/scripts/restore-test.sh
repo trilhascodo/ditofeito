@@ -36,6 +36,13 @@ for i in $(seq 1 60); do
 done
 [ "$ready" = true ] || { echo "Postgres descartável não ficou pronto em 60s"; exit 1; }
 
+# Extensões que o schema depende (packages/db/migrations/001_schema.sql,
+# 002_tse.sql) -- criar explicitamente antes do restore em vez de confiar
+# que o dump vai criar sozinho na ordem certa.
+docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
+  psql -h 127.0.0.1 -U postgres -d ditofeito -c \
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS unaccent; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
 docker cp "$TMP" "$CONTAINER":/tmp/restore.dump
 docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
   pg_restore --clean --if-exists --no-owner -h 127.0.0.1 -U postgres -d ditofeito /tmp/restore.dump
