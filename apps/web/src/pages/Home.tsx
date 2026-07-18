@@ -231,18 +231,14 @@ export function Home() {
     });
   }
 
-  return (
-    <main className="page">
-      {featured && (
-        home && home.sidebar.length > 0 ? (
-          <div className="home-topo">
-            <Destaque items={featured} />
-            <PatroSlots items={home.sidebar} />
-          </div>
-        ) : (
-          <Destaque items={featured} />
-        )
-      )}
+  // Conteúdo principal (slide + faixa + abas + grade) sempre no mesmo fluxo,
+  // independente da coluna de anúncios lateral — se ela crescer (mais
+  // patrocinadores), só a coluna dela estica, sem empurrar isso pra baixo
+  // (ver home-N.pdf: a lateral é uma pilha vertical à parte, não fixada à
+  // altura do slide).
+  const mainContent = (
+    <>
+      {featured && <Destaque items={featured} />}
       <PatroFaixa items={home?.banner ?? []} />
 
       {busca && (
@@ -323,6 +319,17 @@ export function Home() {
           ))}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <main className="page">
+      {home && home.sidebar.length > 0 ? (
+        <div className="home-layout">
+          <div className="home-main">{mainContent}</div>
+          <PatroSlots items={home.sidebar} />
+        </div>
+      ) : mainContent}
     </main>
   );
 }
