@@ -144,6 +144,26 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
   );
 }
 
+interface HomeLinkItem { id: string; title: string; url: string }
+
+// "Links úteis" — abaixo dos anúncios na coluna lateral, mesma curadoria
+// manual do .noticia (leitura relacionada do mercado): preenche o espaço que
+// sobra quando a lateral é mais curta que o conteúdo principal, sem competir
+// visualmente com os anúncios pagos (fica só depois deles, no fluxo normal).
+function HomeLinks({ items }: { items: HomeLinkItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="card">
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 10px" }}>Links úteis</h2>
+      {items.map((l) => (
+        <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer" className="noticia">
+          {l.title}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 // Faixa horizontal de anúncio, abaixo do destaque — segunda superfície de
 // publicidade (além da coluna lateral), formato compacto pra não competir
 // com o carrossel em altura.
@@ -214,6 +234,7 @@ export function Home() {
   );
   const { data: home } = trpc.sponsor.getActiveHome.useQuery();
   const { data: featured } = trpc.market.featured.useQuery();
+  const { data: homeLinks } = trpc.homeLinks.list.useQuery();
 
   // Anúncio nativo intercalado a cada 6 mercados reais — só se a lista for
   // grande o bastante pra não deixar o anúncio dominar (plano de mais
@@ -322,12 +343,18 @@ export function Home() {
     </>
   );
 
+  const hasSidebarAds = !!home && home.sidebar.length > 0;
+  const hasSideContent = hasSidebarAds || !!homeLinks?.length;
+
   return (
     <main className="page">
-      {home && home.sidebar.length > 0 ? (
+      {hasSideContent ? (
         <div className="home-layout">
           <div className="home-main">{mainContent}</div>
-          <PatroSlots items={home.sidebar} />
+          <div className="home-side">
+            {hasSidebarAds && <PatroSlots items={home.sidebar} />}
+            <HomeLinks items={homeLinks ?? []} />
+          </div>
         </div>
       ) : mainContent}
     </main>
