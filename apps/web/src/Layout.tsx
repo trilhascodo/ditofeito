@@ -71,6 +71,7 @@ export function Layout() {
           </div>
           <nav className="site-footer-nav">
             <Link to="/">Mercados</Link>
+            <Link to="/termos">Termos e Privacidade</Link>
           </nav>
         </div>
         <p className="site-footer-copy">© {new Date().getFullYear()} DitoFeito</p>

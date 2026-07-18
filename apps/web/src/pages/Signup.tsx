@@ -98,7 +98,10 @@ export function Signup() {
               className="input" id="cpf" inputMode="numeric" placeholder="000.000.000-00" required
               value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))}
             />
-            <p className="hint-text">Usado só pra garantir 1 conta por pessoa — não é público.</p>
+            <p className="hint-text">
+              Usado só pra garantir 1 conta por pessoa — não é público. Detalhes na{" "}
+              <Link to="/termos#privacidade">política de privacidade</Link>.
+            </p>
           </div>
           <div className="field">
             <Turnstile onToken={setCaptchaToken} />
@@ -107,6 +110,10 @@ export function Signup() {
           <button className="btn" type="submit" disabled={loading}>
             {loading ? "Cadastrando…" : "Cadastrar"}
           </button>
+          <p className="hint-text" style={{ marginTop: 10 }}>
+            Ao se cadastrar, você concorda com os{" "}
+            <Link to="/termos">termos de uso e a política de privacidade</Link>.
+          </p>
         </form>
         <p className="hint-text" style={{ marginTop: 16 }}>
           Já tem conta? <Link to="/entrar">Entrar</Link>

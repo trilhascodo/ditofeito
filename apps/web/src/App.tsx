@@ -5,6 +5,7 @@ import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { RequestPasswordReset } from "./pages/RequestPasswordReset";
 import { ResetPassword } from "./pages/ResetPassword";
+import { Termos } from "./pages/Termos";
 import { MarketPage } from "./pages/MarketPage";
 import { Profile } from "./pages/Profile";
 import { SponsorPanel } from "./pages/SponsorPanel";
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
       { path: "/cadastro", element: <Signup /> },
       { path: "/esqueci-senha", element: <RequestPasswordReset /> },
       { path: "/redefinir-senha", element: <ResetPassword /> },
+      { path: "/termos", element: <Termos /> },
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
       { path: "/patrocinador", element: <SponsorPanel /> },

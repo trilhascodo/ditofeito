@@ -80,6 +80,17 @@ a { color: var(--violeta); text-decoration: none; }
 .page { max-width: 1280px; margin: 0 auto; padding: 28px 20px 60px; }
 .page-narrow { max-width: 420px; margin: 60px auto; padding: 0 20px; }
 
+/* Termos/privacidade — texto longo, largura de leitura confortável. */
+.legal { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+.legal h1 { font-family: var(--serif); font-size: 26px; margin: 0 0 4px; }
+.legal h2 { font-family: var(--serif); font-size: 19px; margin: 32px 0 10px; }
+.legal h3 { font-size: 15px; margin: 20px 0 6px; }
+.legal p, .legal li { font-size: 14px; line-height: 1.7; color: var(--tinta); }
+.legal ul, .legal ol { padding-left: 20px; margin: 8px 0; }
+.legal li { margin-bottom: 4px; }
+.legal nav { display: flex; gap: 16px; margin: 16px 0 32px; padding-bottom: 16px; border-bottom: 1px solid var(--linha); }
+.legal .atualizado { color: var(--grafite); font-size: 13px; margin-bottom: 0; }
+
 .card { background: #fff; border: 1px solid var(--linha); border-radius: 10px; padding: 24px; }
 
 .field { margin-bottom: 14px; }
