@@ -37,16 +37,11 @@ done
 [ "$ready" = true ] || { echo "Postgres descartável não ficou pronto em 60s"; exit 1; }
 
 # Extensões que o schema depende (packages/db/migrations/001_schema.sql,
-# 002_tse.sql) -- criadas explicitamente antes do restore. O dump em teoria
-# já traz `CREATE EXTENSION IF NOT EXISTS`, mas isso sozinho não bastou na
-# prática (investigando por quê) -- então garante aqui também, sem --clean
-# pra nada derrubar depois.
+# 002_tse.sql) -- garantidas aqui como proteção extra, além do que o próprio
+# dump já recria via CREATE EXTENSION IF NOT EXISTS.
 docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
   psql -h 127.0.0.1 -U postgres -d ditofeito -c \
-  "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS unaccent; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
-echo "extensões antes do restore:"
-docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
-  psql -h 127.0.0.1 -U postgres -d ditofeito -c "\dx"
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS unaccent; CREATE EXTENSION IF NOT EXISTS pg_trgm;" >/dev/null
 
 docker cp "$TMP" "$CONTAINER":/tmp/restore.dump
 docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
