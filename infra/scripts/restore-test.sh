@@ -36,11 +36,18 @@ for i in $(seq 1 60); do
 done
 [ "$ready" = true ] || { echo "Postgres descartável não ficou pronto em 60s"; exit 1; }
 
-# SEM --clean: o banco já nasce vazio (container novo), não tem nada pra
-# limpar. --clean fazia o pg_restore soltar `DROP SCHEMA public CASCADE`
-# antes de restaurar, derrubando junto as extensões (pgcrypto/unaccent/
-# pg_trgm) que as colunas geradas do schema dependem -- o dump já tem os
-# `CREATE EXTENSION IF NOT EXISTS` certos, na ordem certa, sem --clean.
+# Extensões que o schema depende (packages/db/migrations/001_schema.sql,
+# 002_tse.sql) -- criadas explicitamente antes do restore. O dump em teoria
+# já traz `CREATE EXTENSION IF NOT EXISTS`, mas isso sozinho não bastou na
+# prática (investigando por quê) -- então garante aqui também, sem --clean
+# pra nada derrubar depois.
+docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
+  psql -h 127.0.0.1 -U postgres -d ditofeito -c \
+  "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS unaccent; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+echo "extensões antes do restore:"
+docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
+  psql -h 127.0.0.1 -U postgres -d ditofeito -c "\dx"
+
 docker cp "$TMP" "$CONTAINER":/tmp/restore.dump
 docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
   pg_restore --no-owner -h 127.0.0.1 -U postgres -d ditofeito /tmp/restore.dump
