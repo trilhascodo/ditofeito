@@ -149,10 +149,14 @@ a { color: var(--violeta); text-decoration: none; }
 /* Variante "arte pronta" — o patrocinador manda a peça já finalizada (fundo,
    headline, CTA embutidos); a gente só encaixa como moldura + rótulo de
    transparência sobreposto, sem competir com o design deles. */
-.patro-slot-creative { padding: 0; min-height: 0; background: #fff; }
+.patro-slot-creative { padding: 0; min-height: 0; background: #fff; align-items: stretch; }
 .patro-slot-creative::before { display: none; }
-.patro-slot-creative .patro-slot-main { display: block; }
-.patro-slot-creative-img { display: block; width: 100%; height: auto; }
+.patro-slot-creative .patro-slot-main { display: block; width: 100%; }
+/* precisa vencer .patro-slot img (max-height:44px, pro logo pequeno) em
+   especificidade — a arte pronta não é um logo, ocupa a largura toda. */
+.patro-slot-creative .patro-slot-creative-img {
+  display: block; width: 100%; height: auto; max-height: none; max-width: none; object-fit: initial;
+}
 .patro-slot-creative .patro-slot-label { position: absolute; top: 10px; left: 10px; z-index: 1; }
 .patro-slot-creative .social-links { padding: 10px 14px; margin-top: 0; }
 
