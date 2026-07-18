@@ -336,6 +336,31 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
   color: #fff; padding: 2px 7px; border-radius: 99px;
 }
 .var.up { background: var(--conferido); } .var.down { background: var(--carimbo); }
+
+/* ---------- ranking público (skill score) ---------- */
+.ranking-list { display: flex; flex-direction: column; }
+.ranking-row {
+  display: flex; align-items: center; gap: 14px; padding: 12px 4px; border-bottom: 1px solid var(--linha);
+}
+.ranking-row:last-child { border-bottom: 0; }
+.ranking-row-mine { background: var(--violeta-2); border-radius: 8px; padding-left: 10px; padding-right: 10px; }
+.ranking-pos {
+  flex: none; width: 28px; text-align: center; font: 700 13px var(--mono); color: var(--grafite);
+}
+.ranking-avatar {
+  flex: none; width: 36px; height: 36px; border-radius: 99px; background: var(--violeta-2);
+  color: var(--violeta); display: flex; align-items: center; justify-content: center;
+  font: 700 12px var(--sans); overflow: hidden;
+}
+.ranking-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ranking-nome { flex: 1; min-width: 0; font-weight: 500; }
+.ranking-stat {
+  flex: none; width: 74px; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: 11px;
+}
+.ranking-stat b { font-size: 14px; }
+@media (max-width: 560px) {
+  .ranking-stat:nth-child(5), .ranking-stat:nth-child(6) { display: none; }
+}
 .out button {
   font: 600 13px var(--sans); color: var(--violeta); background: var(--violeta-2);
   border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;

@@ -6,6 +6,7 @@ import { Signup } from "./pages/Signup";
 import { RequestPasswordReset } from "./pages/RequestPasswordReset";
 import { ResetPassword } from "./pages/ResetPassword";
 import { Termos } from "./pages/Termos";
+import { Leaderboard } from "./pages/Leaderboard";
 import { MarketPage } from "./pages/MarketPage";
 import { Profile } from "./pages/Profile";
 import { SponsorPanel } from "./pages/SponsorPanel";
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: "/esqueci-senha", element: <RequestPasswordReset /> },
       { path: "/redefinir-senha", element: <ResetPassword /> },
       { path: "/termos", element: <Termos /> },
+      { path: "/ranking", element: <Leaderboard /> },
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
       { path: "/patrocinador", element: <SponsorPanel /> },

@@ -6,7 +6,12 @@
 // ============================================================================
 import { z } from "zod";
 import { lmsrPrices } from "@ditofeito/core";
-import { router, protectedProcedure } from "../trpc/trpc.js";
+import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
+
+// Mínimo de previsões resolvidas pra entrar no ranking público — sem isso,
+// 1 acerto de sorte já colocaria alguém em 1º lugar (skill_score de amostra
+// pequena não é comparável ao de quem já resolveu dezenas).
+const LEADERBOARD_MIN_RESOLVED = 5;
 
 export const userRouter = router({
   me: protectedProcedure.query(async ({ ctx }) => {
@@ -81,5 +86,57 @@ export const userRouter = router({
         [ctx.user.id, input?.limit ?? 50],
       );
       return r.rows;
+    }),
+
+  // Ranking público por skill_score — handle/reputação já são públicos por
+  // natureza do produto (Termos.tsx §privacidade: "previsões, posições e
+  // comentários"), então não expõe nada que não estivesse já implícito.
+  // Filtra banidos e quem tem poucas previsões resolvidas (ver
+  // LEADERBOARD_MIN_RESOLVED). Se o visitante estiver logado, também devolve
+  // a própria posição no ranking (null se ainda não qualifica).
+  leaderboard: publicProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(100).default(50) }).optional())
+    .query(async ({ ctx, input }) => {
+      const limit = input?.limit ?? 50;
+      const top = await ctx.pool.query(
+        `SELECT u.handle, u.display_name, u.avatar_url,
+                r.resolved_count, r.brier_mean, r.skill_score, r.streak_current, r.streak_best,
+                RANK() OVER (ORDER BY r.skill_score DESC) AS rank
+           FROM user_reputation r
+           JOIN users u ON u.id = r.user_id
+          WHERE r.resolved_count >= $2 AND u.is_banned = false
+          ORDER BY r.skill_score DESC, r.resolved_count DESC
+          LIMIT $1`,
+        [limit, LEADERBOARD_MIN_RESOLVED],
+      );
+
+      let myRank: number | null = null;
+      if (ctx.user) {
+        const mine = await ctx.pool.query(
+          `SELECT rank FROM (
+             SELECT r.user_id, RANK() OVER (ORDER BY r.skill_score DESC) AS rank
+               FROM user_reputation r JOIN users u ON u.id = r.user_id
+              WHERE r.resolved_count >= $2 AND u.is_banned = false
+           ) t WHERE user_id = $1`,
+          [ctx.user.id, LEADERBOARD_MIN_RESOLVED],
+        );
+        myRank = mine.rowCount ? Number(mine.rows[0].rank) : null;
+      }
+
+      return {
+        minResolved: LEADERBOARD_MIN_RESOLVED,
+        myRank,
+        rows: top.rows.map((row) => ({
+          rank: Number(row.rank),
+          handle: row.handle as string,
+          displayName: row.display_name as string,
+          avatarUrl: row.avatar_url as string | null,
+          resolvedCount: row.resolved_count as number,
+          brierMean: row.brier_mean !== null ? Number(row.brier_mean) : null,
+          skillScore: Number(row.skill_score),
+          streakCurrent: row.streak_current as number,
+          streakBest: row.streak_best as number,
+        })),
+      };
     }),
 });
