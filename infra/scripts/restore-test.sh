@@ -26,13 +26,18 @@ docker run -d --name "$CONTAINER" \
   postgres:16 >/dev/null
 
 echo "aguardando Postgres descartável subir..."
-for i in $(seq 1 30); do
-  docker exec "$CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && break
+ready=false
+for i in $(seq 1 60); do
+  if docker exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+    ready=true
+    break
+  fi
   sleep 1
 done
+[ "$ready" = true ] || { echo "Postgres descartável não ficou pronto em 60s"; exit 1; }
 
 docker cp "$TMP" "$CONTAINER":/tmp/restore.dump
 docker exec -e PGPASSWORD=restoretest "$CONTAINER" \
-  pg_restore --clean --if-exists --no-owner -U postgres -d ditofeito /tmp/restore.dump
+  pg_restore --clean --if-exists --no-owner -h 127.0.0.1 -U postgres -d ditofeito /tmp/restore.dump
 
 echo "restore de ${LATEST} concluído com sucesso (container descartável removido)"
