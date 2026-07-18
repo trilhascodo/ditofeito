@@ -302,6 +302,40 @@ export const marketRouter = router({
       .slice(0, 5);
   }),
 
+  // "Mais votados" (coluna lateral da home) — participantes únicos por
+  // mercado, não total de previsões: como uma enquete, 1 pessoa = 1 voto,
+  // não importa quantas vezes ela mudou de posição.
+  mostVoted: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT m.slug, m.title, c.name AS category_name, count(DISTINCT t.user_id)::int AS voters
+         FROM markets m
+         JOIN categories c ON c.id = m.category_id
+         JOIN trades t ON t.market_id = m.id
+        WHERE m.status = 'OPEN'
+        GROUP BY m.id, c.name
+        ORDER BY voters DESC, m.created_at DESC
+        LIMIT 5`,
+    );
+    return r.rows.map((row) => ({
+      slug: row.slug as string, title: row.title as string,
+      categoryName: row.category_name as string, voters: row.voters as number,
+    }));
+  }),
+
+  // "Novos mercados" (coluna lateral da home) — os mais recentemente abertos.
+  newest: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT m.slug, m.title, c.name AS category_name
+         FROM markets m JOIN categories c ON c.id = m.category_id
+        WHERE m.status = 'OPEN'
+        ORDER BY m.created_at DESC
+        LIMIT 5`,
+    );
+    return r.rows.map((row) => ({
+      slug: row.slug as string, title: row.title as string, categoryName: row.category_name as string,
+    }));
+  }),
+
   publish: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
     const r = await ctx.pool.query(
       `UPDATE markets SET status = 'OPEN' WHERE id = $1 AND status = 'DRAFT' RETURNING id`,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { pct, relativeClose } from "../lib/format";
@@ -147,25 +147,36 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
 interface TrendingItem {
   slug: string; title: string; categoryName: string; label: string; price: number; delta: number;
 }
+interface MostVotedItem { slug: string; title: string; categoryName: string; voters: number }
+interface NewestItem { slug: string; title: string; categoryName: string }
 
-// Painel de tendências — maiores variações de probabilidade nas últimas 24h
-// (pra cima ou pra baixo), no topo da coluna lateral, acima dos links úteis.
-function TrendingPanel({ items }: { items: TrendingItem[] }) {
+// Painel genérico de ranking na coluna lateral (tendências, mais votados,
+// novos mercados) — mesma estrutura de card+lista, só muda o cabeçalho e o
+// que aparece do lado direito de cada linha.
+function SidePanelList<T extends { slug: string; title: string }>(
+  { heading, items, badge }: { heading: string; items: T[]; badge: (item: T) => ReactNode },
+) {
   if (items.length === 0) return null;
   return (
     <div className="card">
-      <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 10px" }}>Tendências</h2>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 10px" }}>{heading}</h2>
       <div className="trending-list">
         {items.map((it) => (
           <Link key={it.slug} to={`/m/${it.slug}`} className="trending-row">
             <span className="trending-titulo">{it.title}</span>
-            <span className={`var mono ${it.delta > 0 ? "up" : "down"}`}>
-              {it.delta > 0 ? "▲" : "▼"} {(Math.abs(it.delta) * 100).toFixed(1)}
-            </span>
+            {badge(it)}
           </Link>
         ))}
       </div>
     </div>
+  );
+}
+
+function DeltaBadge({ delta }: { delta: number }) {
+  return (
+    <span className={`var mono ${delta > 0 ? "up" : "down"}`}>
+      {delta > 0 ? "▲" : "▼"} {(Math.abs(delta) * 100).toFixed(1)}
+    </span>
   );
 }
 
@@ -260,6 +271,8 @@ export function Home() {
   const { data: home } = trpc.sponsor.getActiveHome.useQuery();
   const { data: featured } = trpc.market.featured.useQuery();
   const { data: trending } = trpc.market.trending.useQuery();
+  const { data: mostVoted } = trpc.market.mostVoted.useQuery();
+  const { data: newest } = trpc.market.newest.useQuery();
   const { data: homeLinks } = trpc.homeLinks.list.useQuery();
 
   // Anúncio nativo intercalado a cada 6 mercados reais — só se a lista for
@@ -370,7 +383,8 @@ export function Home() {
   );
 
   const hasSidebarAds = !!home && home.sidebar.length > 0;
-  const hasSideContent = hasSidebarAds || !!trending?.length || !!homeLinks?.length;
+  const hasSideContent = hasSidebarAds || !!trending?.length || !!mostVoted?.length
+    || !!newest?.length || !!homeLinks?.length;
 
   return (
     <main className="page">
@@ -379,7 +393,18 @@ export function Home() {
           <div className="home-main">{mainContent}</div>
           <div className="home-side">
             {hasSidebarAds && <PatroSlots items={home.sidebar} />}
-            <TrendingPanel items={trending ?? []} />
+            <SidePanelList<TrendingItem>
+              heading="Tendências" items={trending ?? []}
+              badge={(it) => <DeltaBadge delta={it.delta} />}
+            />
+            <SidePanelList<MostVotedItem>
+              heading="Mais votados" items={mostVoted ?? []}
+              badge={(it) => <span className="badge">{it.voters} voto{it.voters === 1 ? "" : "s"}</span>}
+            />
+            <SidePanelList<NewestItem>
+              heading="Novos mercados" items={newest ?? []}
+              badge={(it) => <span className="badge">{it.categoryName}</span>}
+            />
             <HomeLinks items={homeLinks ?? []} />
           </div>
         </div>
