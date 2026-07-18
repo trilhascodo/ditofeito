@@ -90,6 +90,7 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
 
 interface HomeSponsor {
   label: string; sponsorName: string; logoUrl: string | null; siteUrl: string | null;
+  creativeUrl: string | null;
   socialLinks: SocialLinkItem[];
 }
 
@@ -105,6 +106,23 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
   return (
     <aside className="patro-slots">
       {items.map((s, i) => {
+        // Anunciante mandou a peça pronta (fundo+headline+CTA embutidos) —
+        // exibe a arte cheia, com o rótulo sobreposto só por transparência
+        // (identidade §1: nunca esconder que é publicidade).
+        if (s.creativeUrl) {
+          const img = <img className="patro-slot-creative-img" src={s.creativeUrl} alt={s.sponsorName} />;
+          return (
+            <div key={i} className="patro-slot patro-slot-creative">
+              <span className="patro-slot-label">{s.label}</span>
+              {s.siteUrl ? (
+                <a className="patro-slot-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer" aria-label={s.sponsorName}>
+                  {img}
+                </a>
+              ) : img}
+              <SocialLinks items={s.socialLinks} />
+            </div>
+          );
+        }
         const conteudo = (
           <>
             <span className="patro-slot-label">{s.label}</span>

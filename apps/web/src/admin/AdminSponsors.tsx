@@ -39,6 +39,7 @@ export function AdminSponsors() {
   const [name, setName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
+  const [creativeUrl, setCreativeUrl] = useState("");
   const [plan, setPlan] = useState<Plan>("BASICO");
   const [sponsorErr, setSponsorErr] = useState<string | null>(null);
 
@@ -46,6 +47,7 @@ export function AdminSponsors() {
   const [editName, setEditName] = useState("");
   const [editLogoUrl, setEditLogoUrl] = useState("");
   const [editSiteUrl, setEditSiteUrl] = useState("");
+  const [editCreativeUrl, setEditCreativeUrl] = useState("");
   const [editPlan, setEditPlan] = useState<Plan>("BASICO");
   const [editErr, setEditErr] = useState<string | null>(null);
 
@@ -72,9 +74,10 @@ export function AdminSponsors() {
     setSponsorErr(null);
     try {
       await createSponsor.mutateAsync({
-        name: name.trim(), logoUrl: logoUrl.trim() || undefined, siteUrl: siteUrl.trim() || undefined, plan,
+        name: name.trim(), logoUrl: logoUrl.trim() || undefined, siteUrl: siteUrl.trim() || undefined,
+        creativeUrl: creativeUrl.trim() || undefined, plan,
       });
-      setName(""); setLogoUrl(""); setSiteUrl(""); setPlan("BASICO");
+      setName(""); setLogoUrl(""); setSiteUrl(""); setCreativeUrl(""); setPlan("BASICO");
       await refresh();
     } catch (err) {
       setSponsorErr(err instanceof Error ? err.message : "Erro ao criar patrocinador");
@@ -86,9 +89,9 @@ export function AdminSponsors() {
     await refresh();
   }
 
-  function onStartEdit(s: { id: string; name: string; logoUrl: string | null; siteUrl: string | null; plan: string }) {
+  function onStartEdit(s: { id: string; name: string; logoUrl: string | null; siteUrl: string | null; creativeUrl: string | null; plan: string }) {
     setEditingId(s.id); setEditName(s.name); setEditLogoUrl(s.logoUrl ?? ""); setEditSiteUrl(s.siteUrl ?? "");
-    setEditPlan(s.plan as Plan); setEditErr(null);
+    setEditCreativeUrl(s.creativeUrl ?? ""); setEditPlan(s.plan as Plan); setEditErr(null);
   }
 
   function onCancelEdit() {
@@ -103,6 +106,7 @@ export function AdminSponsors() {
       await updateSponsor.mutateAsync({
         id: editingId, name: editName.trim(),
         logoUrl: editLogoUrl.trim() || undefined, siteUrl: editSiteUrl.trim() || undefined,
+        creativeUrl: editCreativeUrl.trim() || undefined,
         plan: editPlan,
       });
       setEditingId(null);
@@ -179,6 +183,16 @@ export function AdminSponsors() {
                    value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} />
           </div>
           <div className="field">
+            <label className="label" htmlFor="sp-creative">URL da arte pronta (opcional)</label>
+            <input className="input" id="sp-creative" type="url" placeholder="https://…"
+                   value={creativeUrl} onChange={(e) => setCreativeUrl(e.target.value)} />
+            <p className="hint-text" style={{ marginTop: 4 }}>
+              Se o anunciante mandou a peça já finalizada (imagem com fundo,
+              texto e CTA embutidos), cole a URL aqui — ela substitui o card
+              logo+nome montado por nós na coluna lateral da home.
+            </p>
+          </div>
+          <div className="field">
             <label className="label" htmlFor="sp-plan">Plano</label>
             <select id="sp-plan" value={plan} onChange={(e) => setPlan(e.target.value as Plan)}>
               <option value="BASICO">Básico (até 1 rede social)</option>
@@ -209,6 +223,9 @@ export function AdminSponsors() {
                 </div>
                 <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
                   <input className="input" type="url" value={editSiteUrl} onChange={(e) => setEditSiteUrl(e.target.value)} placeholder="URL do site" />
+                </div>
+                <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+                  <input className="input" type="url" value={editCreativeUrl} onChange={(e) => setEditCreativeUrl(e.target.value)} placeholder="URL da arte pronta" />
                 </div>
                 <div className="field" style={{ flex: "1 1 160px", marginBottom: 0 }}>
                   <select value={editPlan} onChange={(e) => setEditPlan(e.target.value as Plan)}>

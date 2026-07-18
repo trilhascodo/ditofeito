@@ -146,6 +146,16 @@ a { color: var(--violeta); text-decoration: none; }
    ícones de rede social ficam como irmãos dele, fora do link principal). */
 .patro-slot-main { display: flex; flex-direction: column; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 
+/* Variante "arte pronta" — o patrocinador manda a peça já finalizada (fundo,
+   headline, CTA embutidos); a gente só encaixa como moldura + rótulo de
+   transparência sobreposto, sem competir com o design deles. */
+.patro-slot-creative { padding: 0; min-height: 0; background: #fff; }
+.patro-slot-creative::before { display: none; }
+.patro-slot-creative .patro-slot-main { display: block; }
+.patro-slot-creative-img { display: block; width: 100%; height: auto; }
+.patro-slot-creative .patro-slot-label { position: absolute; top: 10px; left: 10px; z-index: 1; }
+.patro-slot-creative .social-links { padding: 10px 14px; margin-top: 0; }
+
 /* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
    formato baixo (logo + nome numa linha), rola no mobile em vez de empilhar. */
 .patro-faixa { display: flex; gap: 12px; overflow-x: auto; margin-bottom: 28px; }

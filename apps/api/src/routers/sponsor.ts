@@ -57,10 +57,11 @@ export const sponsorRouter = router({
   // ---- ADMIN: cadastro de patrocinadores ----------------------------------
   list: adminProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
-      `SELECT id, name, logo_url, site_url, is_active, plan FROM sponsors ORDER BY name`);
+      `SELECT id, name, logo_url, site_url, creative_url, is_active, plan FROM sponsors ORDER BY name`);
     return r.rows.map((s) => ({
       id: s.id as string, name: s.name as string,
       logoUrl: s.logo_url as string | null, siteUrl: s.site_url as string | null,
+      creativeUrl: s.creative_url as string | null,
       isActive: s.is_active as boolean, plan: s.plan as string,
     }));
   }),
@@ -70,12 +71,15 @@ export const sponsorRouter = router({
       name: z.string().trim().min(1).max(120),
       logoUrl: z.string().trim().url().optional(),
       siteUrl: z.string().trim().url().optional(),
+      // Arte pronta do anunciante (fundo+headline+CTA embutidos) — quando
+      // presente, substitui o card composto logo+nome+CTA na coluna lateral.
+      creativeUrl: z.string().trim().url().optional(),
       plan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]).default("BASICO"),
     }))
     .mutation(async ({ ctx, input }) => {
       const r = await ctx.pool.query(
-        `INSERT INTO sponsors (name, logo_url, site_url, plan) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [input.name, input.logoUrl ?? null, input.siteUrl ?? null, input.plan]);
+        `INSERT INTO sponsors (name, logo_url, site_url, creative_url, plan) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        [input.name, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl ?? null, input.plan]);
       return { id: r.rows[0].id as string };
     }),
 
@@ -92,12 +96,13 @@ export const sponsorRouter = router({
       name: z.string().trim().min(1).max(120),
       logoUrl: z.string().trim().url().optional(),
       siteUrl: z.string().trim().url().optional(),
+      creativeUrl: z.string().trim().url().optional(),
       plan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.pool.query(
-        `UPDATE sponsors SET name = $2, logo_url = $3, site_url = $4, plan = $5 WHERE id = $1`,
-        [input.id, input.name, input.logoUrl ?? null, input.siteUrl ?? null, input.plan]);
+        `UPDATE sponsors SET name = $2, logo_url = $3, site_url = $4, creative_url = $5, plan = $6 WHERE id = $1`,
+        [input.id, input.name, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl ?? null, input.plan]);
       return { ok: true };
     }),
 
@@ -163,13 +168,14 @@ export const sponsorRouter = router({
   // ---- AUTOATENDIMENTO: painel do anunciante (só a própria conta) ---------
   getMine: sponsorProcedure.query(async ({ ctx }) => {
     const s = await ctx.pool.query(
-      `SELECT name, logo_url, site_url, plan FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
+      `SELECT name, logo_url, site_url, creative_url, plan FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
     if (!s.rowCount) throw new Error("Patrocinador não encontrado");
     const links = await socialLinksBySponsor(ctx.pool, [ctx.sponsorId]);
     const row = s.rows[0];
     return {
       name: row.name as string, logoUrl: row.logo_url as string | null,
-      siteUrl: row.site_url as string | null, plan: row.plan as string,
+      siteUrl: row.site_url as string | null, creativeUrl: row.creative_url as string | null,
+      plan: row.plan as string,
       socialLinksMax: PLAN_LIMITS[row.plan] ?? 1,
       socialLinks: links.get(ctx.sponsorId) ?? [],
     };
@@ -179,11 +185,12 @@ export const sponsorRouter = router({
     .input(z.object({
       logoUrl: z.string().trim().url().optional(),
       siteUrl: z.string().trim().url().optional(),
+      creativeUrl: z.string().trim().url().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await ctx.pool.query(
-        `UPDATE sponsors SET logo_url = $2, site_url = $3 WHERE id = $1`,
-        [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null]);
+        `UPDATE sponsors SET logo_url = $2, site_url = $3, creative_url = $4 WHERE id = $1`,
+        [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl ?? null]);
       return { ok: true };
     }),
 
@@ -242,7 +249,7 @@ export const sponsorRouter = router({
   // mercados. Uma query só, agrupada em JS — evita 3 round-trips da home.
   getActiveHome: publicProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
-      `SELECT sp.label, sp.home_placement, s.id AS sponsor_id, s.name, s.logo_url, s.site_url
+      `SELECT sp.label, sp.home_placement, s.id AS sponsor_id, s.name, s.logo_url, s.site_url, s.creative_url
          FROM sponsorships sp
          JOIN sponsors s ON s.id = sp.sponsor_id
         WHERE sp.is_home = true
@@ -253,6 +260,7 @@ export const sponsorRouter = router({
     const toItem = (row: (typeof r.rows)[number]) => ({
       label: row.label as string, sponsorName: row.name as string,
       logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
+      creativeUrl: row.creative_url as string | null,
       socialLinks: links.get(row.sponsor_id) ?? [],
     });
     const byPlacement = (p: string) => r.rows.filter((row) => row.home_placement === p).map(toItem);
