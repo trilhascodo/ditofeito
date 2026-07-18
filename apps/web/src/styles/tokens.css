@@ -123,18 +123,28 @@ a { color: var(--violeta); text-decoration: none; }
 .home-topo .destaque { margin-bottom: 0; }
 @media (max-width: 860px) { .home-topo { grid-template-columns: minmax(0, 1fr); } }
 
-.patro-slots { display: flex; flex-direction: column; gap: 14px; }
+.patro-slots { display: flex; flex-direction: column; gap: 16px; }
+/* Card grande e chamativo (referência: bloco "Kalshi Pro" na coluna lateral
+   do Kalshi) — continua suportando vários patrocinadores empilhados, só
+   cada um ocupa mais espaço/peso visual do que o card discreto de antes. */
 .patro-slot {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  background: var(--papel-2); border: 1px solid var(--linha); border-radius: 12px;
-  padding: 20px 16px; min-height: 100px; text-align: center; color: var(--grafite); font-size: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(180deg, var(--violeta-2), #fff 70%);
+  border: 1px solid var(--linha); border-radius: 14px; position: relative; overflow: hidden;
+  padding: 30px 20px; min-height: 168px; text-align: center; color: var(--grafite); font-size: 12px;
 }
-.patro-slot img { max-height: 32px; max-width: 100%; object-fit: contain; }
-.patro-slot b { color: var(--tinta); font-size: 13px; }
-.patro-slot:hover { border-color: var(--violeta); }
+.patro-slot::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--violeta); }
+.patro-slot-label {
+  font: 700 10px var(--mono); color: var(--violeta); text-transform: uppercase; letter-spacing: .06em;
+  background: #fff; border: 1px solid var(--linha); border-radius: 99px; padding: 4px 10px;
+}
+.patro-slot img { max-height: 44px; max-width: 100%; object-fit: contain; }
+.patro-slot b { color: var(--tinta); font: 600 17px/1.3 var(--serif); }
+.patro-slot-cta { font: 600 12px var(--sans); color: var(--violeta); }
+.patro-slot:hover { border-color: var(--violeta); box-shadow: 0 6px 20px rgba(79, 46, 153, .12); }
 /* Link interno (nunca o <div> externo — <a> não pode aninhar <a>, e os
    ícones de rede social ficam como irmãos dele, fora do link principal). */
-.patro-slot-main { display: flex; flex-direction: column; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+.patro-slot-main { display: flex; flex-direction: column; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
 
 /* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
    formato baixo (logo + nome numa linha), rola no mobile em vez de empilhar. */
@@ -153,40 +163,44 @@ a { color: var(--violeta); text-decoration: none; }
 /* Layout inspirado no carrossel do Polymarket — só a estrutura (1 card
    grande + navegação). Sem spread/combo/alavancagem, sem "$volume": número
    é ponto, rótulo é "chance de SIM", igual ao resto do produto. */
-.destaque { margin-bottom: 28px; }
-.destaque-card {
-  display: block; background: #fff; border: 1px solid var(--linha); border-radius: 12px;
-  padding: 28px 32px; color: var(--tinta);
+/* Card único (fundo/borda no wrapper .destaque, não mais no .destaque-card)
+   pra caber uma barra superior com categoria + navegação por dentro do
+   cartão, como no Kalshi — sem aninhar os botões de navegação dentro do
+   <Link> (inválido em HTML, <a> não pode conter elemento interativo). */
+.destaque { margin-bottom: 28px; background: #fff; border: 1px solid var(--linha); border-radius: 12px; }
+.destaque:hover { border-color: var(--violeta); box-shadow: 0 4px 16px rgba(79, 46, 153, .07); }
+.destaque-top { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 0; }
+.destaque-top .eyebrow { margin-bottom: 0; }
+.destaque-nav { display: flex; align-items: center; gap: 4px; }
+.destaque-nav button {
+  background: none; border: 0; cursor: pointer; color: var(--grafite); font-size: 18px;
+  line-height: 1; padding: 4px 8px; border-radius: 6px;
 }
-.destaque-card:hover { border-color: var(--violeta); box-shadow: 0 4px 16px rgba(79, 46, 153, .07); }
+.destaque-nav button:hover { color: var(--violeta); background: var(--violeta-2); }
+.destaque-contador { font: 600 11px var(--mono); color: var(--grafite); min-width: 44px; text-align: center; }
+.destaque-card { display: block; padding: 10px 32px 28px; color: var(--tinta); }
 .destaque-card:active { transform: translateY(1px); }
 .destaque-titulo {
   font: 600 26px/1.3 var(--serif); letter-spacing: -.01em; margin: 8px 0 20px; max-width: 640px;
   text-wrap: balance;
 }
-.destaque-corpo { display: flex; align-items: center; gap: 24px; margin-bottom: 12px; }
-.destaque-stat { flex: none; }
-.destaque-stat b { display: block; font-size: 44px; color: var(--violeta); line-height: 1; }
-.destaque-stat span { font-size: 13px; color: var(--grafite); }
-.destaque-spark { flex: 1; height: 70px; min-width: 0; }
-.destaque-ranking { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.destaque-ranking-pill {
-  font: 500 12px var(--sans); color: var(--grafite); background: var(--violeta-2);
-  border-radius: 99px; padding: 5px 12px;
+.destaque-corpo { display: flex; align-items: center; gap: 28px; margin-bottom: 12px; }
+.destaque-linhas { display: flex; flex-direction: column; gap: 12px; flex: none; width: 230px; justify-content: center; }
+.destaque-linha { display: flex; align-items: center; gap: 10px; }
+.destaque-linha-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--linha); flex: none; }
+.destaque-linha-label {
+  flex: 1; min-width: 0; font: 500 13px var(--sans); color: var(--tinta);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.destaque-ranking-pill b { font: 700 12px var(--mono); color: var(--violeta); margin-left: 5px; }
-.destaque-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
-.destaque-nav button {
-  background: none; border: 0; cursor: pointer; color: var(--grafite); font-size: 20px;
-  line-height: 1; padding: 4px 8px; border-radius: 6px;
-}
-.destaque-nav button:hover { color: var(--violeta); background: var(--violeta-2); }
-.destaque-dots { display: flex; gap: 6px; }
-.destaque-dots button {
-  width: 7px; height: 7px; padding: 0; border-radius: 99px; border: 0;
-  background: var(--linha); cursor: pointer;
-}
-.destaque-dots button.on { background: var(--violeta); }
+.destaque-linha-barra { flex: none; width: 56px; height: 5px; border-radius: 99px; background: var(--violeta-2); overflow: hidden; }
+.destaque-linha-barra span { display: block; height: 100%; background: var(--linha); border-radius: 99px; }
+.destaque-linha-pct { flex: none; width: 44px; text-align: right; font: 700 13px var(--mono); color: var(--grafite); }
+.destaque-linha-lead .destaque-linha-dot { background: var(--violeta); }
+.destaque-linha-lead .destaque-linha-barra span { background: var(--violeta); }
+.destaque-linha-lead .destaque-linha-label { font-weight: 600; }
+.destaque-linha-lead .destaque-linha-pct { color: var(--violeta); font-size: 15px; }
+.destaque-spark { flex: 1; height: 110px; min-width: 0; }
+@media (max-width: 560px) { .destaque-corpo { flex-direction: column; } .destaque-linhas { width: 100%; } }
 
 /* ---------- home: abas de categoria + grid de mercados ---------- */
 /* Densidade inspirada no Kalshi (cards ricos, filtro por categoria), mas

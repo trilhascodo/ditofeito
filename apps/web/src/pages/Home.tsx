@@ -38,55 +38,52 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
   if (items.length === 0) return null;
   const m = items[idx % items.length];
   const path = pathFromSeries(m.series, 640, 100, 4);
-  // Mini-ranking: os outcomes que não são o líder já mostrado no stat grande
-  // (até 3) — preenche o espaço vazio ao lado da sparkline com informação
-  // real em vez de decoração.
+  // Linhas de outcome: o líder (m.summary — SIM em BINARY, o mais provável em
+  // MULTI, mesma regra do resto do produto) sempre em primeiro e destacado,
+  // seguido de até 3 outros — substitui o antigo par "stat grande + pills
+  // soltas" por uma lista única, mais parecida com o carrossel do Kalshi.
   const outros = m.outcomes.filter((o) => o.label !== m.summary?.label).slice(0, 3);
+  const linhas = m.summary ? [{ ...m.summary, lead: true }, ...outros.map((o) => ({ ...o, lead: false }))] : [];
 
   return (
     <div className="destaque" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <Link to={`/m/${m.slug}`} className="destaque-card">
+      <div className="destaque-top">
         <span className="eyebrow">{m.categoryName}</span>
+        {items.length > 1 && (
+          <div className="destaque-nav">
+            <button type="button" aria-label="Destaque anterior"
+                    onClick={() => setIdx((i) => (i - 1 + items.length) % items.length)}>‹</button>
+            <span className="destaque-contador">{idx + 1} de {items.length}</span>
+            <button type="button" aria-label="Próximo destaque"
+                    onClick={() => setIdx((i) => (i + 1) % items.length)}>›</button>
+          </div>
+        )}
+      </div>
+      <Link to={`/m/${m.slug}`} className="destaque-card">
         <h2 className="destaque-titulo">{m.title}</h2>
         <div className="destaque-corpo">
-          {m.summary && (
-            <div className="destaque-stat">
-              <b className="mono">{pct(m.summary.price)}</b>
-              <span>{m.summary.label === "SIM" ? "chance de SIM" : m.summary.label}</span>
+          {linhas.length > 0 && (
+            <div className="destaque-linhas">
+              {linhas.map((o) => (
+                <div key={o.label} className={`destaque-linha${o.lead ? " destaque-linha-lead" : ""}`}>
+                  <span className="destaque-linha-dot" aria-hidden="true" />
+                  <span className="destaque-linha-label">{o.label === "SIM" ? "chance de SIM" : o.label}</span>
+                  <span className="destaque-linha-barra"><span style={{ width: pct(o.price) }} /></span>
+                  <b className="mono destaque-linha-pct">{pct(o.price)}</b>
+                </div>
+              ))}
             </div>
           )}
           <svg viewBox="0 0 640 100" className="destaque-spark" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" y1="20" x2="640" y2="20" stroke="var(--linha)" strokeDasharray="2 4" />
+            <line x1="0" y1="50" x2="640" y2="50" stroke="var(--linha)" strokeDasharray="2 4" />
+            <line x1="0" y1="80" x2="640" y2="80" stroke="var(--linha)" strokeDasharray="2 4" />
             {path && <path d={path} fill="none" stroke="var(--violeta)" strokeWidth={3}
                             strokeLinecap="round" strokeLinejoin="round" />}
           </svg>
         </div>
-        {outros.length > 0 && (
-          <div className="destaque-ranking">
-            {outros.map((o) => (
-              <span key={o.label} className="destaque-ranking-pill">
-                {o.label} <b>{pct(o.price)}</b>
-              </span>
-            ))}
-          </div>
-        )}
         <span className="hint-text">{relativeClose(m.closeAt)}</span>
       </Link>
-      {items.length > 1 && (
-        <div className="destaque-nav">
-          <button type="button" aria-label="Destaque anterior"
-                  onClick={() => setIdx((i) => (i - 1 + items.length) % items.length)}>‹</button>
-          <div className="destaque-dots">
-            {items.map((it, i) => (
-              <button
-                key={it.slug} type="button" aria-label={`Ir pro destaque ${i + 1}`}
-                className={i === idx ? "on" : ""} onClick={() => setIdx(i)}
-              />
-            ))}
-          </div>
-          <button type="button" aria-label="Próximo destaque"
-                  onClick={() => setIdx((i) => (i + 1) % items.length)}>›</button>
-        </div>
-      )}
     </div>
   );
 }
@@ -110,9 +107,10 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
       {items.map((s, i) => {
         const conteudo = (
           <>
-            {s.logoUrl && <img src={s.logoUrl} alt="" />}
             <span className="patro-slot-label">{s.label}</span>
+            {s.logoUrl && <img src={s.logoUrl} alt="" />}
             <b>{s.sponsorName}</b>
+            {s.siteUrl && <span className="patro-slot-cta">Visitar site ↗</span>}
           </>
         );
         return (
