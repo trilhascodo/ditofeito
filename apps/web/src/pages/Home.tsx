@@ -144,6 +144,31 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
   );
 }
 
+interface TrendingItem {
+  slug: string; title: string; categoryName: string; label: string; price: number; delta: number;
+}
+
+// Painel de tendências — maiores variações de probabilidade nas últimas 24h
+// (pra cima ou pra baixo), no topo da coluna lateral, acima dos links úteis.
+function TrendingPanel({ items }: { items: TrendingItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="card">
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 10px" }}>Tendências</h2>
+      <div className="trending-list">
+        {items.map((it) => (
+          <Link key={it.slug} to={`/m/${it.slug}`} className="trending-row">
+            <span className="trending-titulo">{it.title}</span>
+            <span className={`var mono ${it.delta > 0 ? "up" : "down"}`}>
+              {it.delta > 0 ? "▲" : "▼"} {(Math.abs(it.delta) * 100).toFixed(1)}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface HomeLinkItem { id: string; title: string; url: string }
 
 // "Links úteis" — abaixo dos anúncios na coluna lateral, mesma curadoria
@@ -234,6 +259,7 @@ export function Home() {
   );
   const { data: home } = trpc.sponsor.getActiveHome.useQuery();
   const { data: featured } = trpc.market.featured.useQuery();
+  const { data: trending } = trpc.market.trending.useQuery();
   const { data: homeLinks } = trpc.homeLinks.list.useQuery();
 
   // Anúncio nativo intercalado a cada 6 mercados reais — só se a lista for
@@ -344,7 +370,7 @@ export function Home() {
   );
 
   const hasSidebarAds = !!home && home.sidebar.length > 0;
-  const hasSideContent = hasSidebarAds || !!homeLinks?.length;
+  const hasSideContent = hasSidebarAds || !!trending?.length || !!homeLinks?.length;
 
   return (
     <main className="page">
@@ -353,6 +379,7 @@ export function Home() {
           <div className="home-main">{mainContent}</div>
           <div className="home-side">
             {hasSidebarAds && <PatroSlots items={home.sidebar} />}
+            <TrendingPanel items={trending ?? []} />
             <HomeLinks items={homeLinks ?? []} />
           </div>
         </div>

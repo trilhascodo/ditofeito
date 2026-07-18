@@ -235,6 +235,73 @@ export const marketRouter = router({
     }));
   }),
 
+  // "Tendências" (coluna lateral da home) — maiores variações de
+  // probabilidade nas últimas 24h, pra cima ou pra baixo. Reaproveita
+  // price_snapshots (mesma fonte da sparkline do slide de destaque) em vez
+  // de introduzir métrica nova (page views, trade count) — sem infra extra.
+  trending: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT m.id, m.slug, m.title, m.type, m.liquidity_b, c.name AS category_name
+         FROM markets m JOIN categories c ON c.id = m.category_id
+        WHERE m.status = 'OPEN'`,
+    );
+    if (!r.rowCount) return [];
+    const marketIds = r.rows.map((row) => row.id as string);
+
+    const out = await ctx.pool.query(
+      `SELECT market_id, id, label, q, is_catchall FROM market_outcomes
+        WHERE market_id = ANY($1) ORDER BY market_id, display_order, id`,
+      [marketIds],
+    );
+    const outcomesByMarket = new Map<string, { id: string; label: string; q: number; isCatchall: boolean }[]>();
+    for (const o of out.rows) {
+      const arr = outcomesByMarket.get(o.market_id) ?? [];
+      arr.push({ id: o.id, label: o.label, q: Number(o.q), isCatchall: o.is_catchall });
+      outcomesByMarket.set(o.market_id, arr);
+    }
+
+    // Outcome "manchete" por mercado — mesma regra do resto do produto (SIM
+    // em BINARY, líder excluindo OUTROS em MULTI).
+    const leaderByMarket = new Map<string, { outcomeId: string; label: string; price: number }>();
+    for (const row of r.rows) {
+      const outcomes = outcomesByMarket.get(row.id as string) ?? [];
+      const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
+      let idx = row.type === "BINARY" ? outcomes.findIndex((o) => o.label === "SIM") : -1;
+      if (idx < 0) {
+        let best = -1;
+        outcomes.forEach((o, i) => { if (!o.isCatchall && (best < 0 || prices[i] > prices[best])) best = i; });
+        idx = best;
+      }
+      if (idx >= 0) leaderByMarket.set(row.id as string, { outcomeId: outcomes[idx].id, label: outcomes[idx].label, price: prices[idx] });
+    }
+
+    const leaderIds = [...leaderByMarket.values()].map((l) => l.outcomeId);
+    const snaps = leaderIds.length ? await ctx.pool.query(
+      `SELECT DISTINCT ON (outcome_id) outcome_id, price
+         FROM price_snapshots
+        WHERE outcome_id = ANY($1) AND ts <= now() - interval '24 hours'
+        ORDER BY outcome_id, ts DESC`,
+      [leaderIds],
+    ) : { rows: [] as { outcome_id: string; price: string }[] };
+    const price24hByOutcome = new Map<string, number>();
+    for (const s of snaps.rows) price24hByOutcome.set(s.outcome_id, Number(s.price));
+
+    return r.rows
+      .map((row) => {
+        const leader = leaderByMarket.get(row.id as string);
+        const before = leader ? price24hByOutcome.get(leader.outcomeId) : undefined;
+        if (!leader || before === undefined) return null;
+        return {
+          slug: row.slug as string, title: row.title as string,
+          categoryName: row.category_name as string,
+          label: leader.label, price: leader.price, delta: leader.price - before,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+      .slice(0, 5);
+  }),
+
   publish: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
     const r = await ctx.pool.query(
       `UPDATE markets SET status = 'OPEN' WHERE id = $1 AND status = 'DRAFT' RETURNING id`,
