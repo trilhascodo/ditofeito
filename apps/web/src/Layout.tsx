@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-do
 import { logout } from "./lib/auth";
 import { useAuth } from "./lib/useAuth";
 import { trpc } from "./lib/trpc";
+import { NotificationBell } from "./components/NotificationBell";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
 
@@ -70,6 +71,7 @@ export function Layout() {
           <div className="site-header-auth">
             {isLoading ? null : user ? (
               <>
+                <NotificationBell />
                 <Link to="/perfil" className="saldo">{user.displayName}</Link>
                 <button className="link-btn" onClick={onLogout}>Sair</button>
               </>

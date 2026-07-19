@@ -20,6 +20,7 @@ import {
   lmsrPrices, tradeCost, sharesForPoints,
   brierScore, userImpliedProbs, skillDelta,
 } from "@ditofeito/core";
+import { notify } from "./notify.js";
 
 // ------------------------------- Config -------------------------------------
 export const TRADE_CONFIG = {
@@ -230,14 +231,14 @@ export async function resolveMarket(
   try {
     await c.query("BEGIN");
     const mkt = await c.query(
-      `SELECT id, status FROM markets WHERE id = $1 FOR UPDATE`, [p.marketId]);
+      `SELECT id, status, title FROM markets WHERE id = $1 FOR UPDATE`, [p.marketId]);
     if (!mkt.rowCount) throw new TradeError("MERCADO_INEXISTENTE", "não encontrado");
     if (!["OPEN", "CLOSED"].includes(mkt.rows[0].status))
       throw new TradeError("STATUS_INVALIDO", `Mercado ${mkt.rows[0].status}`);
 
     // Preços finais (baseline p/ skill) e vencedor
     const out = await c.query(
-      `SELECT id, q FROM market_outcomes WHERE market_id=$1 ORDER BY display_order, id`,
+      `SELECT id, q, label FROM market_outcomes WHERE market_id=$1 ORDER BY display_order, id`,
       [p.marketId]);
     const b = Number((await c.query(
       `SELECT liquidity_b FROM markets WHERE id=$1`, [p.marketId])).rows[0].liquidity_b);
@@ -296,6 +297,22 @@ export async function resolveMarket(
         [h.user_id, userBrier.toFixed(6), delta.toFixed(4)]);
     }
 
+    // Notifica quem tinha posição aberta — ganhador ou não, todo mundo que
+    // arriscou pontos merece saber que o mercado resolveu (é o gatilho que
+    // traz de volta sem precisar lembrar sozinho).
+    const winnerIds = new Set(winners.rows.map((w) => w.user_id as string));
+    const winLabel = out.rows[winIdx].label as string;
+    const title = mkt.rows[0].title as string;
+    const activeHolders = await c.query(
+      `SELECT DISTINCT user_id FROM positions WHERE market_id=$1 AND shares > 0`, [p.marketId]);
+    for (const row of activeHolders.rows) {
+      const uid = row.user_id as string;
+      const body = winnerIds.has(uid)
+        ? `"${title}" resolveu: ${winLabel}. Você ganhou pontos — confira.`
+        : `"${title}" resolveu: ${winLabel}. Não foi dessa vez.`;
+      await notify(c, uid, "MARKET_RESOLVED", body, { marketId: p.marketId });
+    }
+
     await c.query("COMMIT");
     return { payouts: winners.rowCount ?? 0, totalPaid };
   } catch (e) { await c.query("ROLLBACK"); throw e; } finally { c.release(); }
@@ -310,7 +327,7 @@ export async function voidMarket(
   try {
     await c.query("BEGIN");
     const mkt = await c.query(
-      `SELECT status FROM markets WHERE id=$1 FOR UPDATE`, [p.marketId]);
+      `SELECT status, title FROM markets WHERE id=$1 FOR UPDATE`, [p.marketId]);
     if (!mkt.rowCount || !["OPEN", "CLOSED"].includes(mkt.rows[0].status))
       throw new TradeError("STATUS_INVALIDO", "mercado não anulável");
     await c.query(
@@ -322,9 +339,12 @@ export async function voidMarket(
       `SELECT user_id, sum(cost_basis) AS basis FROM positions
         WHERE market_id=$1 GROUP BY user_id HAVING sum(cost_basis) > 0
         ORDER BY user_id`, [p.marketId]);
+    const title = mkt.rows[0].title as string;
     for (const r of pos.rows) {
       await c.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`, [r.user_id]);
       await appendLedger(c, r.user_id, Number(r.basis), "MARKET_VOIDED", "market", p.marketId);
+      await notify(c, r.user_id, "MARKET_VOIDED",
+        `"${title}" foi anulado — seus pontos comprometidos foram devolvidos.`, { marketId: p.marketId });
     }
     await c.query("COMMIT");
     return { refunds: pos.rowCount ?? 0 };

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { lmsrPrices } from "@ditofeito/core";
 import { router, publicProcedure, protectedProcedure } from "../trpc/trpc.js";
+import { notify } from "../domain/notify.js";
 
 // ----------------------------------------------------------------------------
 // Comentários por mercado — versão mais simples: sem thread (parent_id existe
@@ -76,6 +77,22 @@ export const commentsRouter = router({
          VALUES ($1,$2,$3,$4,$5) RETURNING id`,
         [input.marketId, ctx.user.id, input.body, JSON.stringify(positionSnapshot), authorRepSnapshot],
       );
+
+      // Notifica quem tem posição aberta nesse mercado (menos o próprio
+      // autor) — é o "desafio" ficando visível em vez de silencioso.
+      const others = await ctx.pool.query(
+        `SELECT DISTINCT user_id FROM positions
+          WHERE market_id = $1 AND shares > 0 AND user_id != $2`,
+        [input.marketId, ctx.user.id],
+      );
+      for (const row of others.rows) {
+        await notify(
+          ctx.pool, row.user_id as string, "NEW_COMMENT",
+          `${ctx.user.displayName} comentou num mercado que você previu.`,
+          { marketId: input.marketId, commentId: r.rows[0].id as string },
+        );
+      }
+
       return { id: r.rows[0].id as string };
     }),
 });

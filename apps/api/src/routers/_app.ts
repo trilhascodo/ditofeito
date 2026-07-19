@@ -12,6 +12,7 @@ import { homeLinksRouter } from "./homeLinks.js";
 import { leadsRouter } from "./leads.js";
 import { commentsRouter } from "./comments.js";
 import { pageViewsRouter } from "./pageViews.js";
+import { notificationsRouter } from "./notifications.js";
 
 export const appRouter = router({
   market: marketRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   leads: leadsRouter,
   comments: commentsRouter,
   pageViews: pageViewsRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;
