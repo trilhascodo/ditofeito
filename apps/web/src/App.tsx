@@ -25,6 +25,7 @@ import { Indice } from "./pages/Indice";
 import { Indices } from "./pages/Indices";
 import { AdminIndices } from "./admin/AdminIndices";
 import { AdminMarketRequests } from "./admin/AdminMarketRequests";
+import { AdminComments } from "./admin/AdminComments";
 import { SolicitarMercado } from "./pages/SolicitarMercado";
 import { AdminEmailSettings } from "./admin/AdminEmailSettings";
 import { AdminSuspicious } from "./admin/AdminSuspicious";
@@ -63,6 +64,7 @@ const router = createBrowserRouter([
           { path: "audiencia", element: <AdminAudience /> },
           { path: "indices", element: <AdminIndices /> },
           { path: "solicitacoes-mercado", element: <AdminMarketRequests /> },
+          { path: "comentarios", element: <AdminComments /> },
           { path: "email", element: <AdminEmailSettings /> },
           { path: "suspeitas", element: <AdminSuspicious /> },
         ],

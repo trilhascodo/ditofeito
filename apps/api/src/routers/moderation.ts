@@ -91,4 +91,46 @@ export const moderationRouter = router({
         [input.userId]);
       return { ok: true };
     }),
+
+  // ---- Moderação de comentário ---------------------------------------------
+  // Fila de denúncia — nunca oculta sozinho por volume de denúncia (evita
+  // brigada silenciando alguém), sempre decisão humana de MODERATOR+.
+  listReportedComments: resolverProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT c.id, c.body, c.is_hidden, c.created_at,
+              u.handle AS author_handle, u.display_name AS author_display_name,
+              m.slug AS market_slug, m.title AS market_title,
+              count(cr.id)::int AS report_count,
+              array_agg(cr.reason) FILTER (WHERE cr.reason IS NOT NULL) AS reasons
+         FROM comments c
+         JOIN users u ON u.id = c.user_id
+         JOIN markets m ON m.id = c.market_id
+         JOIN comment_reports cr ON cr.comment_id = c.id
+        WHERE c.is_hidden = false
+        GROUP BY c.id, u.handle, u.display_name, m.slug, m.title
+        ORDER BY report_count DESC, c.created_at DESC`,
+    );
+    return r.rows.map((row) => ({
+      id: row.id as string, body: row.body as string, createdAt: row.created_at as string,
+      authorHandle: row.author_handle as string, authorDisplayName: row.author_display_name as string,
+      marketSlug: row.market_slug as string, marketTitle: row.market_title as string,
+      reportCount: row.report_count as number, reasons: (row.reasons as (string | null)[] | null) ?? [],
+    }));
+  }),
+
+  hideComment: resolverProcedure
+    .input(z.object({ commentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(`UPDATE comments SET is_hidden = true WHERE id = $1`, [input.commentId]);
+      return { ok: true };
+    }),
+
+  // Denúncia era falso-positivo (ou já resolvida) — limpa as denúncias pra
+  // sumir da fila sem precisar ocultar o comentário.
+  dismissCommentReports: resolverProcedure
+    .input(z.object({ commentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(`DELETE FROM comment_reports WHERE comment_id = $1`, [input.commentId]);
+      return { ok: true };
+    }),
 });

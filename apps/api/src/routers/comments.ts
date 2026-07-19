@@ -18,12 +18,13 @@ export const commentsRouter = router({
     .query(async ({ ctx, input }) => {
       const r = await ctx.pool.query(
         `SELECT c.id, c.body, c.position_snapshot, c.author_rep_snapshot, c.created_at,
-                u.handle, u.display_name, u.avatar_url
+                u.handle, u.display_name, u.avatar_url,
+                EXISTS(SELECT 1 FROM comment_reports cr WHERE cr.comment_id = c.id AND cr.user_id = $2) AS reported_by_me
            FROM comments c JOIN users u ON u.id = c.user_id
           WHERE c.market_id = $1 AND c.is_hidden = false
           ORDER BY c.created_at DESC
           LIMIT 200`,
-        [input.marketId],
+        [input.marketId, ctx.user?.id ?? null],
       );
       return r.rows.map((row) => ({
         id: row.id as string, body: row.body as string,
@@ -31,11 +32,23 @@ export const commentsRouter = router({
           { outcomeLabel: string; shares: number; priceAtPost: number }[],
         authorRepSnapshot: row.author_rep_snapshot !== null ? Number(row.author_rep_snapshot) : null,
         createdAt: row.created_at as string,
+        reportedByMe: row.reported_by_me as boolean,
         author: {
           handle: row.handle as string, displayName: row.display_name as string,
           avatarUrl: row.avatar_url as string | null,
         },
       }));
+    }),
+
+  report: protectedProcedure
+    .input(z.object({ commentId: z.string().uuid(), reason: z.string().trim().max(500).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(
+        `INSERT INTO comment_reports (comment_id, user_id, reason) VALUES ($1,$2,$3)
+         ON CONFLICT (comment_id, user_id) DO NOTHING`,
+        [input.commentId, ctx.user.id, input.reason ?? null],
+      );
+      return { ok: true };
     }),
 
   create: protectedProcedure

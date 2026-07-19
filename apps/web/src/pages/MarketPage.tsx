@@ -30,6 +30,7 @@ const commentTimeFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month:
 interface CommentItem {
   id: string; body: string; createdAt: string; authorRepSnapshot: number | null;
   positionSnapshot: { outcomeLabel: string; shares: number; priceAtPost: number }[];
+  reportedByMe: boolean;
   author: { handle: string; displayName: string; avatarUrl: string | null };
 }
 
@@ -38,7 +39,12 @@ interface CommentItem {
 // (quantas posições e em que preço) e o histórico de acerto (Brier, menor =
 // melhor) — "put your money where your mouth is" sustenta grupo A desafiando
 // grupo B, em vez de opinião solta.
-function Comment({ c }: { c: CommentItem }) {
+function Comment({ c, canReport, onReport }: {
+  c: CommentItem; canReport: boolean; onReport: (commentId: string, reason: string) => void;
+}) {
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState("");
+
   return (
     <div className="comment">
       <span className="ranking-avatar">
@@ -63,6 +69,27 @@ function Comment({ c }: { c: CommentItem }) {
           </div>
         )}
         <p className="comment-body">{c.body}</p>
+        {canReport && (
+          c.reportedByMe ? (
+            <span className="hint-text" style={{ fontSize: 12 }}>Denunciado — em análise</span>
+          ) : reporting ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+              <input
+                className="input" placeholder="Motivo (opcional)" value={reason}
+                onChange={(e) => setReason(e.target.value)} style={{ flex: "1 1 200px" }}
+              />
+              <button
+                type="button" className="btn-outline" style={{ padding: "6px 12px", fontSize: 12, width: "auto" }}
+                onClick={() => { onReport(c.id, reason); setReporting(false); }}
+              >
+                Enviar denúncia
+              </button>
+              <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setReporting(false)}>Cancelar</button>
+            </div>
+          ) : (
+            <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setReporting(true)}>Denunciar</button>
+          )
+        )}
       </div>
     </div>
   );
@@ -128,6 +155,7 @@ export function MarketPage() {
   const trackImpression = trpc.adEvents.trackImpression.useMutation();
   const tradeMutation = trpc.trade.execute.useMutation();
   const commentMutation = trpc.comments.create.useMutation();
+  const reportCommentMutation = trpc.comments.report.useMutation();
 
   const [selected, setSelected] = useState<string | null>(null);
   const [points, setPoints] = useState(50);
@@ -198,6 +226,11 @@ export function MarketPage() {
     } catch (err) {
       setCommentError(err instanceof Error ? err.message : "Não foi possível publicar o comentário");
     }
+  }
+
+  async function onReportComment(commentId: string, reason: string) {
+    await reportCommentMutation.mutateAsync({ commentId, reason: reason.trim() || undefined });
+    await utils.comments.list.invalidate({ marketId: market!.id });
   }
 
   async function onCopyVindicationLink() {
@@ -457,7 +490,9 @@ export function MarketPage() {
                   <span className="comment-column-count">{col.items.length}</span>
                 </div>
                 <div className="comment-list">
-                  {col.items.map((c) => <Comment key={c.id} c={c} />)}
+                  {col.items.map((c) => (
+                    <Comment key={c.id} c={c} canReport={!!user} onReport={onReportComment} />
+                  ))}
                 </div>
               </div>
             ))}
