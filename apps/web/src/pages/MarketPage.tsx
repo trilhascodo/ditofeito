@@ -67,6 +67,42 @@ function Comment({ c }: { c: CommentItem }) {
   );
 }
 
+// Lado que o autor defende: outcome com mais posições no snapshot (quem tem
+// posição em mais de um outcome só "mora" na coluna do que mais pesou pra
+// ele). Sem posição nenhuma = null, cai na coluna neutra no fim.
+function primarySide(c: CommentItem): string | null {
+  if (c.positionSnapshot.length === 0) return null;
+  return c.positionSnapshot.reduce((best, p) => (p.shares > best.shares ? p : best)).outcomeLabel;
+}
+
+interface CommentColumn { label: string; color: string | null; items: CommentItem[] }
+
+// Agrupa por lado em vez de lista cronológica única — o confronto ("grupo
+// que aposta no SIM" x "grupo que aposta no NÃO") fica visual, sem precisar
+// de thread pra "desafiar" o outro grupo. Ordem das colunas segue a ordem
+// dos outcomes do mercado (mesma dos gráficos); quem não tem posição vira
+// uma coluna neutra no fim, não desaparece.
+function groupCommentsBySide(
+  comments: CommentItem[], outcomes: { label: string }[], cores: string[],
+): CommentColumn[] {
+  const byLabel = new Map<string, CommentItem[]>();
+  const semPosicao: CommentItem[] = [];
+  for (const c of comments) {
+    const lado = primarySide(c);
+    if (lado === null) { semPosicao.push(c); continue; }
+    const arr = byLabel.get(lado) ?? [];
+    arr.push(c);
+    byLabel.set(lado, arr);
+  }
+  const cols: CommentColumn[] = [];
+  outcomes.forEach((o, i) => {
+    const items = byLabel.get(o.label);
+    if (items && items.length > 0) cols.push({ label: o.label, color: cores[i % cores.length], items });
+  });
+  if (semPosicao.length > 0) cols.push({ label: "Sem posição declarada", color: null, items: semPosicao });
+  return cols;
+}
+
 export function MarketPage() {
   const { slug = "" } = useParams();
   const { user } = useAuth();
@@ -332,7 +368,7 @@ export function MarketPage() {
         </aside>
       </div>
 
-      <div className="card" style={{ marginTop: 28, maxWidth: 720 }}>
+      <div className="card" style={{ marginTop: 28 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 14px" }}>
           Comentários{comments && comments.length > 0 ? ` (${comments.length})` : ""}
         </h2>
@@ -358,8 +394,19 @@ export function MarketPage() {
         {!comments || comments.length === 0 ? (
           <p className="hint-text">Nenhum comentário ainda. Seja o primeiro a dizer o que pensa.</p>
         ) : (
-          <div className="comment-list">
-            {comments.map((c) => <Comment key={c.id} c={c} />)}
+          <div className="comment-columns">
+            {groupCommentsBySide(comments, market.outcomes, CORES).map((col) => (
+              <div key={col.label} className="comment-column">
+                <div className="comment-column-head">
+                  {col.color && <span className="comment-column-dot" style={{ background: col.color }} />}
+                  <span>{col.label}</span>
+                  <span className="comment-column-count">{col.items.length}</span>
+                </div>
+                <div className="comment-list">
+                  {col.items.map((c) => <Comment key={c.id} c={c} />)}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -444,7 +444,18 @@ input[type=number]:focus { outline: 2px solid var(--violeta); border-color: tran
 /* ---------- comentários (página de mercado) ----------
    O diferencial vs. rede social genérica: .comment-position mostra a posição
    do autor (shares + preço) congelada no momento do post — "put your money
-   where your mouth is" sustenta grupo A desafiando grupo B. */
+   where your mouth is" sustenta grupo A desafiando grupo B. Agrupado por
+   lado (.comment-columns) em vez de lista cronológica única: o confronto
+   fica visual, sem precisar de thread pra "desafiar" o outro grupo. */
+.comment-columns {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; align-items: start;
+}
+.comment-column-head {
+  display: flex; align-items: center; gap: 8px; font: 600 13px var(--sans); color: var(--tinta);
+  padding-bottom: 8px; margin-bottom: 4px; border-bottom: 2px solid var(--linha);
+}
+.comment-column-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.comment-column-count { margin-left: auto; font: 600 12px var(--mono); color: var(--grafite); }
 .comment-list { display: flex; flex-direction: column; }
 .comment { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--linha); }
 .comment:last-child { border-bottom: 0; }
