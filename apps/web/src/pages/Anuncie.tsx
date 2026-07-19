@@ -6,10 +6,11 @@ type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
 
 const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
-// Cada plano mapeia 1-pra-1 num formato de anúncio que já existe no portal
-// (tokens.css: .patro-faixa / .market-tile-ad / .patro-slot) — nada de
-// formato novo prometido aqui que a gente não construiu ainda. Preço é
-// referência (mídia kit interno), negociável no contato.
+// Cada plano libera um CONJUNTO cumulativo de formatos que já existem no
+// portal (tokens.css: .patro-faixa / .market-tile-ad / .patro-slot) — plano
+// maior sempre inclui os formatos dos menores, nunca troca um pelo outro.
+// Nada de formato novo prometido aqui que a gente não construiu ainda.
+// Preço é referência (mídia kit interno), negociável no contato.
 const PLANOS: {
   id: Plan; nome: string; local: string; desc: string;
   specs: string; extras: string[]; preco: string; destaque?: boolean;
@@ -26,20 +27,20 @@ const PLANOS: {
   {
     id: "PROFISSIONAL",
     nome: "Profissional",
-    local: "Nativo na grade",
-    desc: "Card intercalado na grade de mercados, a cada 6 mercados reais.",
+    local: "Faixa + nativo na grade",
+    desc: "Tudo do Básico, mais um card intercalado na grade de mercados, a cada 6 mercados reais.",
     specs: "Logo até 32px de altura (envie em 2x: ~400×64px, PNG fundo transparente)",
-    extras: ["3 redes sociais"],
+    extras: ["3 redes sociais", "Inclui a faixa horizontal do plano Básico"],
     preco: "R$ 650/mês",
     destaque: true,
   },
   {
     id: "PREMIUM",
     nome: "Premium",
-    local: "Coluna lateral",
-    desc: "Card grande ao lado do slide de destaque — a posição mais visível do portal.",
+    local: "Faixa + grade + coluna lateral",
+    desc: "Tudo do Profissional, mais o card grande ao lado do slide de destaque — a posição mais visível do portal.",
     specs: "Logo simples (até 44px) ou arte própria preenchendo o card inteiro (~600×700px, JPG/PNG)",
-    extras: ["5 redes sociais", "Aceita arte pronta própria (não só logo+nome)"],
+    extras: ["5 redes sociais", "Aceita arte pronta própria (não só logo+nome)", "Inclui faixa + grade dos planos anteriores"],
     preco: "R$ 1.200/mês",
   },
 ];

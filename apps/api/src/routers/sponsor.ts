@@ -6,6 +6,8 @@ import { router, publicProcedure, adminProcedure, sponsorProcedure } from "../tr
 // pop-up). Schema já existia desde o F0 (sponsors/sponsorships) sem nenhum
 // código em cima; este router é a primeira peça em uso.
 // ----------------------------------------------------------------------------
+const HOME_PLACEMENTS = ["SIDEBAR", "BANNER", "GRID"] as const;
+
 const sponsorshipInput = z
   .object({
     sponsorId: z.string().uuid(),
@@ -13,6 +15,10 @@ const sponsorshipInput = z
     // mesma regra do CHECK no banco (migrations/004_sponsor_home_news.sql).
     marketId: z.string().uuid().optional(),
     isHome: z.boolean().default(false),
+    // Só importa quando isHome — validado contra PLAN_ALLOWED_PLACEMENTS do
+    // sponsor no mutation abaixo (não dá pra confiar só no zod aqui, precisa
+    // do plano que está no banco).
+    homePlacement: z.enum(HOME_PLACEMENTS).optional(),
     label: z.string().trim().min(1).max(60).default("Apresentado por"),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
@@ -24,6 +30,10 @@ const sponsorshipInput = z
   .refine((d) => d.marketId || d.isHome, {
     message: "escolha um mercado ou marque como faixa da home",
     path: ["marketId"],
+  })
+  .refine((d) => !d.isHome || d.homePlacement, {
+    message: "escolha a posição na home",
+    path: ["homePlacement"],
   });
 
 const SOCIAL_PLATFORMS = ["INSTAGRAM", "X", "TIKTOK", "YOUTUBE", "FACEBOOK", "WHATSAPP"] as const;
@@ -32,13 +42,16 @@ type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 // Limite de redes sociais no autoatendimento, por plano (migrations/009_sponsor_plans.sql).
 const PLAN_LIMITS: Record<string, number> = { BASICO: 1, PROFISSIONAL: 3, PREMIUM: 5 };
 
-// Posição da home travada pelo plano contratado (mesmo mapeamento divulgado
-// em /anuncie) — antes o admin escolhia livremente, o que deixava a página
-// de vendas mentirosa (prometia "Premium = lateral", mas nada garantia isso
-// na prática). Sem esse mapa pro plano do sponsor, não dá pra criar espaço
-// de home nenhum — evita o gap de novo.
-const PLAN_PLACEMENT: Record<string, "SIDEBAR" | "BANNER" | "GRID"> = {
-  BASICO: "BANNER", PROFISSIONAL: "GRID", PREMIUM: "SIDEBAR",
+// Posições que cada plano libera na home — CUMULATIVO (plano maior inclui os
+// menores, como qualquer tabela de planos em camadas: Premium não faz
+// sentido valer menos posições que Profissional). Mesmo mapeamento
+// divulgado em /anuncie. O admin escolhe entre as opções liberadas — sem
+// isso, um sponsor Premium não tinha como aparecer no nativo da grade
+// (bug relatado: "não é possível adicionar nada ao grid").
+const PLAN_ALLOWED_PLACEMENTS: Record<string, readonly (typeof HOME_PLACEMENTS)[number][]> = {
+  BASICO: ["BANNER"],
+  PROFISSIONAL: ["BANNER", "GRID"],
+  PREMIUM: ["BANNER", "GRID", "SIDEBAR"],
 };
 
 async function socialLinksBySponsor(pool: import("pg").Pool, sponsorIds: string[]) {
@@ -159,7 +172,10 @@ export const sponsorRouter = router({
     if (input.isHome) {
       const s = await ctx.pool.query(`SELECT plan FROM sponsors WHERE id = $1`, [input.sponsorId]);
       if (!s.rowCount) throw new Error("Patrocinador não encontrado");
-      homePlacement = PLAN_PLACEMENT[s.rows[0].plan as string] ?? "BANNER";
+      const allowed = PLAN_ALLOWED_PLACEMENTS[s.rows[0].plan as string] ?? PLAN_ALLOWED_PLACEMENTS.BASICO;
+      if (!input.homePlacement || !allowed.includes(input.homePlacement))
+        throw new Error(`Plano ${s.rows[0].plan} não inclui essa posição (libera: ${allowed.join(", ")})`);
+      homePlacement = input.homePlacement;
     }
     const r = await ctx.pool.query(
       `INSERT INTO sponsorships (sponsor_id, market_id, is_home, home_placement, label, starts_at, ends_at)

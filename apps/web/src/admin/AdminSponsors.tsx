@@ -22,12 +22,15 @@ const PLAN_LABEL: Record<string, string> = {
 };
 type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
 
-// Mesmo mapeamento do backend (sponsor.ts PLAN_PLACEMENT) — só pra mostrar
-// aqui qual posição o plano escolhido garante, já que não dá mais pra
-// escolher na mão (trava pelo plano, evita a página /anuncie prometer algo
-// que o admin não confirma na hora de criar o espaço).
-const PLAN_PLACEMENT: Record<string, string> = {
-  BASICO: "BANNER", PROFISSIONAL: "GRID", PREMIUM: "SIDEBAR",
+// Mesmo mapeamento do backend (sponsor.ts PLAN_ALLOWED_PLACEMENTS) —
+// cumulativo: plano maior inclui os menores (Premium libera as 3 posições,
+// não só a lateral). O <select> abaixo só oferece as posições que o plano
+// do sponsor selecionado realmente libera; o backend valida de novo.
+const PLACEMENT_ORDER = ["BANNER", "GRID", "SIDEBAR"] as const;
+const PLAN_ALLOWED_PLACEMENTS: Record<string, readonly string[]> = {
+  BASICO: ["BANNER"],
+  PROFISSIONAL: ["BANNER", "GRID"],
+  PREMIUM: ["BANNER", "GRID", "SIDEBAR"],
 };
 
 const SOCIAL_LABEL: Record<string, string> = {
@@ -70,6 +73,7 @@ export function AdminSponsors() {
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
   const [isHome, setIsHome] = useState(false);
+  const [homePlacement, setHomePlacement] = useState("");
   const [label, setLabel] = useState("Apresentado por");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
@@ -129,17 +133,18 @@ export function AdminSponsors() {
   async function onCreateSponsorship(e: FormEvent) {
     e.preventDefault();
     setSpErr(null);
-    if (!sponsorId || (!marketId && !isHome) || !endsAt) {
-      setSpErr("Preencha patrocinador, data de fim, e um mercado ou um espaço de publicidade da home.");
+    if (!sponsorId || (!marketId && !isHome) || (isHome && !homePlacement) || !endsAt) {
+      setSpErr("Preencha patrocinador, data de fim, e um mercado ou uma posição da home.");
       return;
     }
     try {
       await createSponsorship.mutateAsync({
         sponsorId, marketId: isHome ? undefined : marketId, isHome,
+        homePlacement: isHome ? (homePlacement as "SIDEBAR" | "BANNER" | "GRID") : undefined,
         label: label.trim() || "Apresentado por",
         startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
       });
-      setMarketId(""); setIsHome(false); setEndsAt("");
+      setMarketId(""); setIsHome(false); setHomePlacement(""); setEndsAt("");
       await refresh();
     } catch (err) {
       setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
@@ -262,7 +267,7 @@ export function AdminSponsors() {
                   <div className="meta">
                     {s.siteUrl ? <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">{s.siteUrl}</a> : "sem site cadastrado"}
                     {" · "}{PLAN_LABEL[s.plan] ?? s.plan}
-                    {" · posição: "}{PLACEMENT_LABEL[PLAN_PLACEMENT[s.plan]] ?? "?"}
+                    {" · libera: "}{(PLAN_ALLOWED_PLACEMENTS[s.plan] ?? []).map((p) => PLACEMENT_LABEL[p]).join(", ")}
                     {s.creativeUrl && " · tem arte pronta"}
                   </div>
                   {s.socialLinks.length > 0 && (
@@ -328,9 +333,10 @@ export function AdminSponsors() {
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Vincula um patrocinador a um mercado (card "Apresentado por" na página do
-          mercado e tag no card da home) ou a um espaço de publicidade da home — a
-          posição é travada pelo plano contratado (Básico = faixa, Profissional =
-          nativo na grade, Premium = coluna lateral), mesmo mapeamento da página /anuncie.
+          mercado e tag no card da home) ou a uma posição da home — o plano contratado
+          libera um conjunto de posições, cumulativo (Básico = faixa; Profissional =
+          faixa + grade; Premium = faixa + grade + lateral), mesmo mapeamento da
+          página /anuncie.
         </p>
         <form onSubmit={onCreateSponsorship}>
           <div className="field">
@@ -341,19 +347,27 @@ export function AdminSponsors() {
             </select>
           </div>
           <label className="checkbox-row">
-            <input type="checkbox" checked={isHome} onChange={(e) => { setIsHome(e.target.checked); setMarketId(""); }} />
+            <input type="checkbox" checked={isHome} onChange={(e) => { setIsHome(e.target.checked); setMarketId(""); setHomePlacement(""); }} />
             Espaço de publicidade da home (não vincula a um mercado específico)
           </label>
-          {isHome && (
-            sponsorId && sponsors ? (
-              <p className="hint-text" style={{ marginBottom: 14 }}>
-                Posição: <b>{PLACEMENT_LABEL[PLAN_PLACEMENT[sponsors.find((s) => s.id === sponsorId)?.plan ?? ""]]}</b>{" "}
-                (plano {PLAN_LABEL[sponsors.find((s) => s.id === sponsorId)?.plan ?? ""] ?? "?"} deste patrocinador)
-              </p>
-            ) : (
-              <p className="hint-text" style={{ marginBottom: 14 }}>Selecione o patrocinador pra ver a posição.</p>
-            )
-          )}
+          {isHome && (() => {
+            const plan = sponsors?.find((s) => s.id === sponsorId)?.plan;
+            const allowed = plan ? (PLAN_ALLOWED_PLACEMENTS[plan] ?? []) : [];
+            if (!sponsorId) return <p className="hint-text" style={{ marginBottom: 14 }}>Selecione o patrocinador pra ver as posições liberadas.</p>;
+            return (
+              <div className="field">
+                <label className="label" htmlFor="sp-placement">
+                  Posição — plano {PLAN_LABEL[plan ?? ""] ?? "?"} libera: {allowed.map((p) => PLACEMENT_LABEL[p]).join(", ")}
+                </label>
+                <select id="sp-placement" value={homePlacement} onChange={(e) => setHomePlacement(e.target.value)} required>
+                  <option value="">selecione</option>
+                  {PLACEMENT_ORDER.filter((p) => allowed.includes(p)).map((p) => (
+                    <option key={p} value={p}>{PLACEMENT_LABEL[p]}</option>
+                  ))}
+                </select>
+              </div>
+            );
+          })()}
           {!isHome && (
             <div className="field">
               <label className="label" htmlFor="sp-market">Mercado</label>
