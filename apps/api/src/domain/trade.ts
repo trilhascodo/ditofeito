@@ -288,6 +288,11 @@ export async function resolveMarket(
         [w.user_id, p.marketId]);
     }
 
+    // Mesma definição de "acertou" usada no payout e no card de vindicação —
+    // shares>0 no outcome vencedor. Sequência usa isso, não Brier: é sobre
+    // acertar a direção, não sobre calibração fina do preço de entrada.
+    const winnerIds = new Set(winners.rows.map((w) => w.user_id as string));
+
     // Reputação: Brier do usuário (preço médio de entrada) vs Brier do mercado
     const holders = await c.query(
       `SELECT user_id,
@@ -304,27 +309,34 @@ export async function resolveMarket(
       });
       const probs = userImpliedProbs(avgByOutcome, finalPrices);
       const { userBrier, marketBrier, delta } = skillDelta(probs, finalPrices, winIdx);
+      const won = winnerIds.has(h.user_id as string);
       await c.query(
         `INSERT INTO reputation_events (user_id, market_id, brier, market_brier, skill_delta)
          VALUES ($1,$2,$3,$4,$5) ON CONFLICT (user_id, market_id) DO NOTHING`,
         [h.user_id, p.marketId, userBrier.toFixed(6), marketBrier.toFixed(6), delta.toFixed(4)]);
+      // Sequência de acerto — coluna existia desde o F0, nunca foi escrita
+      // (todo mundo mostrava "0" pra sempre no perfil/ranking). Acertou:
+      // +1; errou: zera. streak_best só sobe, nunca desce.
       await c.query(
-        `INSERT INTO user_reputation AS ur (user_id, resolved_count, brier_sum, brier_mean, skill_score, updated_at)
-         VALUES ($1, 1, $2, $2, $3, now())
+        `INSERT INTO user_reputation AS ur
+           (user_id, resolved_count, brier_sum, brier_mean, skill_score, streak_current, streak_best, updated_at)
+         VALUES ($1, 1, $2, $2, $3, CASE WHEN $4 THEN 1 ELSE 0 END, CASE WHEN $4 THEN 1 ELSE 0 END, now())
          ON CONFLICT (user_id) DO UPDATE SET
            resolved_count = ur.resolved_count + 1,
            brier_sum  = ur.brier_sum + $2,
            brier_mean = (ur.brier_sum + $2) / (ur.resolved_count + 1),
            skill_score = ur.skill_score + $3,
+           streak_current = CASE WHEN $4 THEN ur.streak_current + 1 ELSE 0 END,
+           streak_best = GREATEST(ur.streak_best, CASE WHEN $4 THEN ur.streak_current + 1 ELSE 0 END),
            updated_at = now()`,
-        [h.user_id, userBrier.toFixed(6), delta.toFixed(4)]);
+        [h.user_id, userBrier.toFixed(6), delta.toFixed(4), won],
+      );
     }
 
     // Notifica quem tinha posição aberta — ganhador ou não, todo mundo que
     // arriscou pontos merece saber que o mercado resolveu (é o gatilho que
     // traz de volta sem precisar lembrar sozinho). E-mail além do sino: quem
     // não visita o site não vê o sino nunca.
-    const winnerIds = new Set(winners.rows.map((w) => w.user_id as string));
     const winLabel = out.rows[winIdx].label as string;
     const title = mkt.rows[0].title as string;
     const slug = mkt.rows[0].slug as string;

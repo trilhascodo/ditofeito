@@ -25,12 +25,13 @@ export interface VindicationData {
   entryPrice: number;      // probabilidade média que a pessoa pagou (cost_basis/shares)
   pointsWon: number;       // 1 ponto por share vencedora
   skillDelta: number | null; // quanto bateu o mercado (reputation_events.skill_delta)
+  streakCurrent: number;    // sequência de acerto após essa resolução (user_reputation)
 }
 
 export async function getVindicationData(pool: Pool, token: string): Promise<VindicationData | null> {
   const r = await pool.query(
     `SELECT u.display_name, u.handle, m.title AS market_title, m.slug AS market_slug,
-            mo.label AS winning_label, p.shares, p.cost_basis, re.skill_delta
+            mo.label AS winning_label, p.shares, p.cost_basis, re.skill_delta, ur.streak_current
        FROM vindication_cards vc
        JOIN users u ON u.id = vc.user_id
        JOIN markets m ON m.id = vc.market_id
@@ -39,6 +40,7 @@ export async function getVindicationData(pool: Pool, token: string): Promise<Vin
        JOIN positions p ON p.user_id = vc.user_id AND p.market_id = vc.market_id
                         AND p.outcome_id = mo.id
        LEFT JOIN reputation_events re ON re.user_id = vc.user_id AND re.market_id = vc.market_id
+       LEFT JOIN user_reputation ur ON ur.user_id = vc.user_id
       WHERE vc.share_token = $1`,
     [token],
   );
@@ -52,6 +54,7 @@ export async function getVindicationData(pool: Pool, token: string): Promise<Vin
     entryPrice: shares > 0 ? Number(row.cost_basis) / shares : 0,
     pointsWon: shares,
     skillDelta: row.skill_delta !== null ? Number(row.skill_delta) : null,
+    streakCurrent: row.streak_current !== null ? Number(row.streak_current) : 0,
   };
 }
 
@@ -64,7 +67,7 @@ export function renderVindicationSvg(d: VindicationData): string {
   <rect width="1200" height="630" fill="${TOKENS.papel}"/>
   <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
   <text x="80" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="600"
-        letter-spacing="1.4" fill="${TOKENS.violeta}">VOCÊ ACERTOU</text>
+        letter-spacing="1.4" fill="${TOKENS.violeta}">VOCÊ ACERTOU${d.streakCurrent >= 2 ? ` · ${d.streakCurrent} SEGUIDAS` : ""}</text>
   <text x="1120" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="700"
         letter-spacing="1.4" fill="${TOKENS.violeta}" text-anchor="end">FEITO ✓</text>
   <text x="80" y="112" font-family="IBM Plex Sans" font-size="24" font-weight="600" fill="${TOKENS.grafite}">
@@ -98,7 +101,8 @@ export function renderVindicationHtml(d: VindicationData, token: string): string
   const marketUrl = `${EMBED_CONFIG.baseUrl}/m/${d.marketSlug}`;
   const shareUrl = `${EMBED_CONFIG.baseUrl}/vindicacao/${token}`;
   const cardUrl = `${EMBED_CONFIG.baseUrl}/card/vindicacao/${token}.png`;
-  const desc = `${d.displayName} disse ${cardPct(d.entryPrice)} em "${d.winningLabel}" — e foi isso que aconteceu.`;
+  const desc = `${d.displayName} disse ${cardPct(d.entryPrice)} em "${d.winningLabel}" — e foi isso que aconteceu.`
+    + (d.streakCurrent >= 2 ? ` ${d.streakCurrent} acertos seguidos.` : "");
 
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8">
