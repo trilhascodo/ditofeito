@@ -275,6 +275,13 @@ export const sponsorRouter = router({
   // carrossel, faixa horizontal abaixo dele, e cards nativos na grade de
   // mercados. Uma query só, agrupada em JS — evita 3 round-trips da home.
   getActiveHome: publicProcedure.query(async ({ ctx }) => {
+    // ORDER BY random() em vez de starts_at ASC: cada posição tem um teto de
+    // exibição (5/4/2), então mais patrocinadores ativos que isso na mesma
+    // posição SEMPRE existirá — a questão é só quem aparece. Ordenar por
+    // data antiga excluía pra sempre quem entrou depois (silencioso, sem
+    // rodízio nenhum — bug relatado). Aleatório a cada carregamento dá
+    // exposição justa pra todo mundo ativo, sem precisar de infra de rodízio
+    // com estado (cron, contador de impressão etc.).
     const r = await ctx.pool.query(
       `SELECT sp.label, sp.home_placement, s.id AS sponsor_id, s.name, s.logo_url, s.site_url, s.creative_url
          FROM sponsorships sp
@@ -282,7 +289,7 @@ export const sponsorRouter = router({
         WHERE sp.is_home = true
           AND s.is_active = true
           AND now() BETWEEN sp.starts_at AND sp.ends_at
-        ORDER BY sp.starts_at ASC`);
+        ORDER BY random()`);
     const links = await socialLinksBySponsor(ctx.pool, [...new Set(r.rows.map((row) => row.sponsor_id))]);
     const toItem = (row: (typeof r.rows)[number]) => ({
       label: row.label as string, sponsorName: row.name as string,
