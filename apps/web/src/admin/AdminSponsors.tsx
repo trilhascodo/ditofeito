@@ -55,6 +55,7 @@ export function AdminSponsors() {
   const setActive = trpc.sponsor.setActive.useMutation();
   const updateSponsor = trpc.sponsor.update.useMutation();
   const createSponsorship = trpc.sponsor.createSponsorship.useMutation();
+  const updateSponsorship = trpc.sponsor.updateSponsorship.useMutation();
   const removeSponsorship = trpc.sponsor.removeSponsorship.useMutation();
   const linkUser = trpc.sponsor.linkUser.useMutation();
 
@@ -78,6 +79,7 @@ export function AdminSponsors() {
   const [linkErr, setLinkErr] = useState<string | null>(null);
   const [linkOk, setLinkOk] = useState(false);
 
+  const [editingSpId, setEditingSpId] = useState<string | null>(null);
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
   const [isHome, setIsHome] = useState(false);
@@ -85,7 +87,7 @@ export function AdminSponsors() {
   const [regionScope, setRegionScope] = useState<RegionScope>("NACIONAL");
   const [regionUf, setRegionUf] = useState("");
   const [regionCity, setRegionCity] = useState("");
-  const [label, setLabel] = useState("Apresentado por");
+  const [label, setLabel] = useState("");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
   const [spErr, setSpErr] = useState<string | null>(null);
@@ -156,27 +158,56 @@ export function AdminSponsors() {
       setSpErr("Escolha a cidade pro escopo municipal.");
       return;
     }
+    const payload = {
+      sponsorId, marketId: isHome ? undefined : marketId, isHome,
+      homePlacement: isHome ? (homePlacement as "SIDEBAR" | "BANNER" | "GRID") : undefined,
+      regionScope: isHome ? regionScope : undefined,
+      regionUf: isHome && regionScope !== "NACIONAL" ? regionUf : undefined,
+      regionCity: isHome && regionScope === "MUNICIPAL" ? regionCity.trim() : undefined,
+      label: label.trim() || undefined,
+      startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
+    };
     try {
-      await createSponsorship.mutateAsync({
-        sponsorId, marketId: isHome ? undefined : marketId, isHome,
-        homePlacement: isHome ? (homePlacement as "SIDEBAR" | "BANNER" | "GRID") : undefined,
-        regionScope: isHome ? regionScope : undefined,
-        regionUf: isHome && regionScope !== "NACIONAL" ? regionUf : undefined,
-        regionCity: isHome && regionScope === "MUNICIPAL" ? regionCity.trim() : undefined,
-        label: label.trim() || "Apresentado por",
-        startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
-      });
-      setMarketId(""); setIsHome(false); setHomePlacement("");
-      setRegionScope("NACIONAL"); setRegionUf(""); setRegionCity(""); setEndsAt("");
+      if (editingSpId) {
+        await updateSponsorship.mutateAsync({ id: editingSpId, ...payload });
+      } else {
+        await createSponsorship.mutateAsync(payload);
+      }
+      onCancelEditSponsorship();
       await refresh();
     } catch (err) {
-      setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
+      setSpErr(err instanceof Error ? err.message : "Erro ao salvar patrocínio");
     }
+  }
+
+  function onStartEditSponsorship(sp: NonNullable<typeof sponsorships>[number]) {
+    setEditingSpId(sp.id);
+    setSponsorId(sp.sponsor.id);
+    setMarketId(sp.marketId ?? "");
+    setIsHome(sp.isHome);
+    setHomePlacement(sp.isHome ? sp.homePlacement : "");
+    setRegionScope(sp.regionScope);
+    setRegionUf(sp.regionUf ?? "");
+    setRegionCity(sp.regionCity ?? "");
+    setLabel(sp.label);
+    setStartsAt(dtLocal(sp.startsAt));
+    setEndsAt(dtLocal(sp.endsAt));
+    setSpErr(null);
+    document.getElementById("sp-sponsor")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function onCancelEditSponsorship() {
+    setEditingSpId(null);
+    setSponsorId(""); setMarketId(""); setIsHome(false); setHomePlacement("");
+    setRegionScope("NACIONAL"); setRegionUf(""); setRegionCity("");
+    setLabel(""); setStartsAt(dtLocal(new Date())); setEndsAt("");
+    setSpErr(null);
   }
 
   async function onRemoveSponsorship(id: string) {
     if (!confirm("Remover esse patrocínio?")) return;
     await removeSponsorship.mutateAsync({ id });
+    if (editingSpId === id) onCancelEditSponsorship();
     await refresh();
   }
 
@@ -353,7 +384,9 @@ export function AdminSponsors() {
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>
-        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>
+          {editingSpId ? "Editar patrocínio" : "Novo patrocínio"}
+        </h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Vincula um patrocinador a um mercado (card "Apresentado por" na página do
           mercado e tag no card da home) ou a uma posição da home — o plano contratado
@@ -431,8 +464,10 @@ export function AdminSponsors() {
             </div>
           )}
           <div className="field">
-            <label className="label" htmlFor="sp-label">Rótulo</label>
-            <input className="input" id="sp-label" value={label} onChange={(e) => setLabel(e.target.value)} required />
+            <label className="label" htmlFor="sp-label">Rótulo (opcional)</label>
+            <input className="input" id="sp-label" placeholder="Apresentado por"
+                   value={label} onChange={(e) => setLabel(e.target.value)} />
+            <p className="hint-text" style={{ marginTop: 4 }}>Em branco usa o padrão "Apresentado por".</p>
           </div>
           <div className="field">
             <label className="label" htmlFor="sp-starts">Começa em</label>
@@ -445,9 +480,16 @@ export function AdminSponsors() {
                    onChange={(e) => setEndsAt(e.target.value)} required />
           </div>
           {spErr && <p className="error-text">{spErr}</p>}
-          <button className="btn" style={{ width: "auto" }} disabled={createSponsorship.isPending}>
-            {createSponsorship.isPending ? "Criando…" : "Criar patrocínio"}
+          <button className="btn" style={{ width: "auto" }} disabled={createSponsorship.isPending || updateSponsorship.isPending}>
+            {editingSpId
+              ? (updateSponsorship.isPending ? "Salvando…" : "Salvar edição")
+              : (createSponsorship.isPending ? "Criando…" : "Criar patrocínio")}
           </button>
+          {editingSpId && (
+            <button type="button" className="link-btn" onClick={onCancelEditSponsorship} style={{ marginLeft: 12 }}>
+              Cancelar edição
+            </button>
+          )}
         </form>
       </div>
 
@@ -456,8 +498,18 @@ export function AdminSponsors() {
         {!sponsorships || sponsorships.length === 0 ? (
           <p className="hint-text">Nenhum patrocínio cadastrado.</p>
         ) : (
-          sponsorships.map((sp) => {
-            const active = now >= new Date(sp.startsAt).getTime() && now < new Date(sp.endsAt).getTime();
+          // Vigente e agendado primeiro (o que ainda importa pra operação),
+          // expirado por último — sem isso a lista vira uma pilha cronológica
+          // que mistura o que tá rodando com histórico morto.
+          [...sponsorships]
+            .sort((a, b) => {
+              const rank = (sp: (typeof sponsorships)[number]) => (now < new Date(sp.endsAt).getTime() ? 0 : 1);
+              return rank(a) - rank(b) || new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime();
+            })
+            .map((sp) => {
+            const starts = new Date(sp.startsAt).getTime();
+            const ends = new Date(sp.endsAt).getTime();
+            const status = now < starts ? "AGENDADO" : now < ends ? "VIGENTE" : "EXPIRADO";
             return (
               <div key={sp.id} className="admin-row">
                 <span className="titulo">
@@ -474,7 +526,13 @@ export function AdminSponsors() {
                     )}
                   </div>
                 </span>
-                <span className={`badge ${active ? "" : "badge-draft"}`}>{active ? "VIGENTE" : "FORA DO PERÍODO"}</span>
+                <span className={`badge ${status === "VIGENTE" ? "" : "badge-draft"}`}>{status}</span>
+                <button
+                  className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }}
+                  onClick={() => onStartEditSponsorship(sp)}
+                >
+                  Editar
+                </button>
                 <button
                   className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
                   onClick={() => onRemoveSponsorship(sp.id)} disabled={removeSponsorship.isPending}

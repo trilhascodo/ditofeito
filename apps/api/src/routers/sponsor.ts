@@ -10,26 +10,57 @@ const HOME_PLACEMENTS = ["SIDEBAR", "BANNER", "GRID"] as const;
 
 const REGION_SCOPES = ["NACIONAL", "ESTADUAL", "MUNICIPAL"] as const;
 
-const sponsorshipInput = z
-  .object({
-    sponsorId: z.string().uuid(),
-    // Ou marketId (card na página do mercado), ou isHome (espaço da home) —
-    // mesma regra do CHECK no banco (migrations/004_sponsor_home_news.sql).
-    marketId: z.string().uuid().optional(),
-    isHome: z.boolean().default(false),
-    // Só importa quando isHome — validado contra PLAN_ALLOWED_PLACEMENTS do
-    // sponsor no mutation abaixo (não dá pra confiar só no zod aqui, precisa
-    // do plano que está no banco).
-    homePlacement: z.enum(HOME_PLACEMENTS).optional(),
-    // Escopo regional do espaço de home (migrations/019_region_segmentation.sql)
-    // — nacional é o padrão/comportamento de sempre. Só relevante quando isHome.
-    regionScope: z.enum(REGION_SCOPES).default("NACIONAL"),
-    regionUf: z.string().length(2).optional(),
-    regionCity: z.string().trim().max(120).optional(),
-    label: z.string().trim().min(1).max(60).default("Apresentado por"),
-    startsAt: z.string().datetime(),
-    endsAt: z.string().datetime(),
+const sponsorshipBase = z.object({
+  sponsorId: z.string().uuid(),
+  // Ou marketId (card na página do mercado), ou isHome (espaço da home) —
+  // mesma regra do CHECK no banco (migrations/004_sponsor_home_news.sql).
+  marketId: z.string().uuid().optional(),
+  isHome: z.boolean().default(false),
+  // Só importa quando isHome — validado contra PLAN_ALLOWED_PLACEMENTS do
+  // sponsor no mutation abaixo (não dá pra confiar só no zod aqui, precisa
+  // do plano que está no banco).
+  homePlacement: z.enum(HOME_PLACEMENTS).optional(),
+  // Escopo regional do espaço de home (migrations/019_region_segmentation.sql)
+  // — nacional é o padrão/comportamento de sempre. Só relevante quando isHome.
+  regionScope: z.enum(REGION_SCOPES).default("NACIONAL"),
+  regionUf: z.string().length(2).optional(),
+  regionCity: z.string().trim().max(120).optional(),
+  // Opcional de propósito — quando em branco, cai no texto padrão de
+  // transparência ("Apresentado por"). Nunca fica sem rótulo nenhum: a
+  // identidade do produto exige deixar claro que é publicidade.
+  label: z.string().trim().max(60).optional()
+    .transform((v) => (v && v.length > 0 ? v : "Apresentado por")),
+  startsAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+});
+
+const sponsorshipInput = sponsorshipBase
+  .refine((d) => new Date(d.endsAt) > new Date(d.startsAt), {
+    message: "endsAt deve ser depois de startsAt",
+    path: ["endsAt"],
   })
+  .refine((d) => d.marketId || d.isHome, {
+    message: "escolha um mercado ou marque como faixa da home",
+    path: ["marketId"],
+  })
+  .refine((d) => !d.isHome || d.homePlacement, {
+    message: "escolha a posição na home",
+    path: ["homePlacement"],
+  })
+  .refine((d) => d.regionScope === "NACIONAL" || !!d.regionUf, {
+    message: "escolha o estado pro escopo regional",
+    path: ["regionUf"],
+  })
+  .refine((d) => d.regionScope !== "MUNICIPAL" || !!d.regionCity, {
+    message: "escolha a cidade pro escopo municipal",
+    path: ["regionCity"],
+  });
+
+// Mesmas regras de sponsorshipInput, só com o id do registro sendo editado
+// — duplicado de propósito (encadear .refine() genérico sobre os dois
+// schemas trava o TS em inferência de overload do zod).
+const sponsorshipUpdateInput = sponsorshipBase
+  .extend({ id: z.string().uuid() })
   .refine((d) => new Date(d.endsAt) > new Date(d.startsAt), {
     message: "endsAt deve ser depois de startsAt",
     path: ["endsAt"],
@@ -68,6 +99,49 @@ const PLAN_ALLOWED_PLACEMENTS: Record<string, readonly (typeof HOME_PLACEMENTS)[
   PROFISSIONAL: ["BANNER", "GRID"],
   PREMIUM: ["BANNER", "GRID", "SIDEBAR"],
 };
+
+// Valida a posição da home contra o plano do sponsor (cumulativo, ver
+// PLAN_ALLOWED_PLACEMENTS acima). Usada tanto na criação quanto na edição —
+// se o admin trocar o patrocinador de uma sponsorship existente, ou o
+// próprio plano mudar depois, a posição atual pode não ser mais válida.
+async function resolveHomePlacement(
+  pool: import("pg").Pool,
+  input: { sponsorId: string; isHome: boolean; homePlacement?: string },
+): Promise<"SIDEBAR" | "BANNER" | "GRID"> {
+  if (!input.isHome) return "SIDEBAR";
+  const s = await pool.query(`SELECT plan FROM sponsors WHERE id = $1`, [input.sponsorId]);
+  if (!s.rowCount) throw new Error("Patrocinador não encontrado");
+  const allowed = PLAN_ALLOWED_PLACEMENTS[s.rows[0].plan as string] ?? PLAN_ALLOWED_PLACEMENTS.BASICO;
+  if (!input.homePlacement || !allowed.includes(input.homePlacement as (typeof HOME_PLACEMENTS)[number]))
+    throw new Error(`Plano ${s.rows[0].plan} não inclui essa posição (libera: ${allowed.join(", ")})`);
+  return input.homePlacement as "SIDEBAR" | "BANNER" | "GRID";
+}
+
+// Espaço de home é cumulativo por natureza (várias sponsorships dividem a
+// mesma posição por rodízio, getActiveHome ORDER BY random()) — overlap ali
+// é esperado. Card de mercado é diferente: getActiveForMarket só mostra UM
+// patrocínio por vez (o mais recente), então vender o mesmo mercado/período
+// pra dois patrocinadores desperdiça um deles em silêncio sem essa checagem.
+async function assertNoMarketOverlap(
+  pool: import("pg").Pool,
+  input: { marketId?: string; isHome: boolean; startsAt: string; endsAt: string },
+  excludeId?: string,
+): Promise<void> {
+  if (input.isHome || !input.marketId) return;
+  const r = await pool.query(
+    `SELECT sp.id, s.name FROM sponsorships sp
+       JOIN sponsors s ON s.id = sp.sponsor_id
+      WHERE sp.market_id = $1 AND sp.id != $2
+        AND sp.starts_at < $3 AND sp.ends_at > $4`,
+    [input.marketId, excludeId ?? "00000000-0000-0000-0000-000000000000", input.endsAt, input.startsAt],
+  );
+  if (r.rowCount) {
+    throw new Error(
+      `Esse mercado já tem patrocínio de "${r.rows[0].name}" nesse período — só um aparece por vez `
+      + `no card do mercado. Ajuste as datas ou remova o outro patrocínio antes.`,
+    );
+  }
+}
 
 async function socialLinksBySponsor(pool: import("pg").Pool, sponsorIds: string[]) {
   const map = new Map<string, { id: string; platform: SocialPlatform; url: string }[]>();
@@ -186,15 +260,8 @@ export const sponsorRouter = router({
     }),
 
   createSponsorship: adminProcedure.input(sponsorshipInput).mutation(async ({ ctx, input }) => {
-    let homePlacement: "SIDEBAR" | "BANNER" | "GRID" = "SIDEBAR";
-    if (input.isHome) {
-      const s = await ctx.pool.query(`SELECT plan FROM sponsors WHERE id = $1`, [input.sponsorId]);
-      if (!s.rowCount) throw new Error("Patrocinador não encontrado");
-      const allowed = PLAN_ALLOWED_PLACEMENTS[s.rows[0].plan as string] ?? PLAN_ALLOWED_PLACEMENTS.BASICO;
-      if (!input.homePlacement || !allowed.includes(input.homePlacement))
-        throw new Error(`Plano ${s.rows[0].plan} não inclui essa posição (libera: ${allowed.join(", ")})`);
-      homePlacement = input.homePlacement;
-    }
+    const homePlacement = await resolveHomePlacement(ctx.pool, input);
+    await assertNoMarketOverlap(ctx.pool, input);
     const r = await ctx.pool.query(
       `INSERT INTO sponsorships
          (sponsor_id, market_id, is_home, home_placement, region_scope, region_uf, region_city,
@@ -204,6 +271,22 @@ export const sponsorRouter = router({
         input.regionScope, input.regionUf ?? null, input.regionCity?.trim() || null,
         input.label, input.startsAt, input.endsAt]);
     return { id: r.rows[0].id as string };
+  }),
+
+  updateSponsorship: adminProcedure.input(sponsorshipUpdateInput).mutation(async ({ ctx, input }) => {
+    const homePlacement = await resolveHomePlacement(ctx.pool, input);
+    await assertNoMarketOverlap(ctx.pool, input, input.id);
+    const r = await ctx.pool.query(
+      `UPDATE sponsorships
+          SET sponsor_id = $2, market_id = $3, is_home = $4, home_placement = $5,
+              region_scope = $6, region_uf = $7, region_city = $8,
+              label = $9, starts_at = $10, ends_at = $11
+        WHERE id = $1 RETURNING id`,
+      [input.id, input.sponsorId, input.marketId ?? null, input.isHome, homePlacement,
+        input.regionScope, input.regionUf ?? null, input.regionCity?.trim() || null,
+        input.label, input.startsAt, input.endsAt]);
+    if (!r.rowCount) throw new Error("Patrocínio não encontrado");
+    return { ok: true };
   }),
 
   removeSponsorship: adminProcedure
