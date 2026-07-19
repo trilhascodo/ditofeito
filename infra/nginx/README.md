@@ -90,8 +90,8 @@ com fallback de SPA (`try_files ... /index.html`) pras rotas do
 react-router (`/entrar`, `/m/:slug` etc.).
 
 Só os prefixos que realmente são da API (`/trpc/`, `/auth/`, `/embed/`,
-`/api/pub/`, `/card/`, `/health`) são desviados pro container via um
-snippet compartilhado (`infra/nginx/proxy-snippet.conf` → copiar pra
+`/api/pub/`, `/card/`, `/vindicacao/`, `/health`) são desviados pro container
+via um snippet compartilhado (`infra/nginx/proxy-snippet.conf` → copiar pra
 `/etc/nginx/ditofeito-proxy.conf` na VPS, referenciado com `include` nas
 location{} — evita repetir o mesmo bloco de proxy_set_header 6 vezes).
 
@@ -132,3 +132,13 @@ curl -sI -A "facebookexternalhit/1.1" https://ditofeito.com/m/<slug-real> | head
 # esperado: redireciona internamente pro /share/<slug> -> 200 text/html
 curl -s -A "facebookexternalhit/1.1" https://ditofeito.com/m/<slug-real> | grep 'og:image'
 ```
+
+## Card de vindicação — /vindicacao/:token
+
+Diferente do `/m/:slug` acima, essa página é destino direto (humano clica,
+não só bot) — não precisa do `map $df_is_social_bot`, só do prefixo
+`/vindicacao/` desviado pro container (mesmo padrão de `/card/`, `/embed/`
+etc.). Esquecer de adicionar esse prefixo faz a rota cair no fallback de SPA
+(`location /`) e servir o `index.html` genérico em vez do HTML com
+`og:image` de verdade — foi exatamente isso que aconteceu no primeiro deploy
+dessa feature (19/jul/2026), até esse prefixo ser adicionado aqui.
