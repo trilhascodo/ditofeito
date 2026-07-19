@@ -63,6 +63,14 @@ export function Anuncie() {
     document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
   }
 
+  // Patrocínio de mercado específico não é um dos 3 planos (preço varia por
+  // mercado/prazo, sob consulta) — só pré-preenche a mensagem, sem mexer no
+  // select de plano, e sem sobrescrever o que a pessoa já tiver digitado.
+  function onQuererPatrocinioMercado() {
+    setMessage((m) => m || "Quero patrocinar um mercado específico (card \"Apresentado por\" na página do mercado): ");
+    document.getElementById("contato")?.scrollIntoView({ behavior: "smooth" });
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setErr(null);
@@ -94,24 +102,11 @@ export function Anuncie() {
       </section>
 
       <section style={{ marginBottom: 48 }}>
-        <span className="eyebrow">Onde seu anúncio aparece</span>
-        <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "8px 0 20px" }}>3 formatos, direto no portal</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-          {PLANOS.map((p) => (
-            <div key={p.id} className="card">
-              <span className="badge">{p.local}</span>
-              <p style={{ fontSize: 14, color: "var(--tinta)", margin: "12px 0 0" }}>{p.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section style={{ marginBottom: 48 }}>
         <span className="eyebrow">Planos mensais</span>
-        <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "8px 0 4px" }}>Escolha e contrate</h2>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "8px 0 4px" }}>3 formatos, direto no portal</h2>
         <p className="hint-text" style={{ marginBottom: 20 }}>
-          Preços de referência, negociáveis no contato. Cada plano libera um dos formatos
-          e um limite de redes sociais no seu painel de autoatendimento.
+          Preços de referência, negociáveis no contato. Os planos são cumulativos —
+          cada um inclui os formatos do plano anterior, nunca troca um pelo outro.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
           {PLANOS.map((p) => (
@@ -119,8 +114,9 @@ export function Anuncie() {
               key={p.id} className="card"
               style={p.destaque ? { borderColor: "var(--violeta)", boxShadow: "0 4px 16px rgba(79,46,153,.1)" } : undefined}
             >
-              <h3 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 2px" }}>{p.nome}</h3>
-              <p className="hint-text" style={{ marginBottom: 16 }}>{p.local}</p>
+              <span className="badge">{p.local}</span>
+              <h3 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "10px 0 2px" }}>{p.nome}</h3>
+              <p style={{ fontSize: 14, color: "var(--tinta)", margin: "0 0 16px" }}>{p.desc}</p>
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 20px", fontSize: 13.5, color: "var(--tinta)" }}>
                 <li style={{ padding: "8px 0", borderBottom: "1px dashed var(--linha)" }}>{p.specs}</li>
                 {p.extras.map((ex) => (
@@ -133,6 +129,53 @@ export function Anuncie() {
               </button>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section style={{ marginBottom: 48 }}>
+        <span className="eyebrow">Em qualquer plano</span>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "8px 0 20px" }}>O que vem junto</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          <div className="card">
+            <h3 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 6px" }}>Painel de autoatendimento</h3>
+            <p style={{ fontSize: 13.5, color: "var(--tinta)", margin: 0 }}>
+              Depois de fechar, você mesmo atualiza logo, site e redes sociais quando quiser,
+              sem precisar esperar retorno da nossa equipe.
+            </p>
+          </div>
+          <div className="card">
+            <h3 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 6px" }}>Relatório de desempenho</h3>
+            <p style={{ fontSize: 13.5, color: "var(--tinta)", margin: 0 }}>
+              Impressões e cliques do seu anúncio, medidos direto no portal — base real
+              pra avaliar o espaço, sem depender só da nossa palavra.
+            </p>
+          </div>
+          <div className="card">
+            <h3 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 6px" }}>Alcance regional, se preferir</h3>
+            <p style={{ fontSize: 13.5, color: "var(--tinta)", margin: 0 }}>
+              Se sua marca atua só num estado ou cidade, o anúncio pode ser configurado
+              pra aparecer só pra quem declarou essa região no perfil — sem pagar por
+              alcance nacional que você não vai usar.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ marginBottom: 48 }}>
+        <div className="card">
+          <span className="badge">Sob consulta</span>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "10px 0 8px" }}>
+            Patrocine um mercado específico
+          </h2>
+          <p style={{ fontSize: 14, color: "var(--tinta)", maxWidth: "68ch", marginBottom: 16 }}>
+            Além dos 3 formatos da home, dá pra associar sua marca a um mercado só —
+            o card "Apresentado por" aparece na página daquele mercado específico,
+            pro público que já está acompanhando aquele assunto de perto. Preço varia
+            por mercado e prazo; combinamos no contato.
+          </p>
+          <button type="button" className="btn-outline" onClick={onQuererPatrocinioMercado}>
+            Quero saber mais
+          </button>
         </div>
       </section>
 
