@@ -1,17 +1,26 @@
 import { z } from "zod";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { visitorHash } from "../lib/visitorHash.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
 
 // ----------------------------------------------------------------------------
 // Medição de audiência dos anúncios — impressão (card renderizado) aqui via
 // tRPC; clique é medido em http/adClick.ts (rota de redirect /ir/:id, mais
 // confiável que capturar onClick antes da navegação sair da página).
+//
+// Essa métrica sustenta negociação de preço com patrocinador — precisa ser
+// difícil de forjar. Sem login (endpoint público, dispara em toda visita),
+// então o limite é por hash de visitante, não por usuário. É "dispara e
+// esquece" do lado do front (sem tratamento de erro), então estourar o
+// limite só pula o INSERT em silêncio — nunca lança erro pro cliente.
 // ----------------------------------------------------------------------------
 export const adEventsRouter = router({
   trackImpression: publicProcedure
     .input(z.object({ sponsorshipIds: z.array(z.string().uuid()).min(1).max(20) }))
     .mutation(async ({ ctx, input }) => {
       const hash = visitorHash(ctx.ip, ctx.userAgent);
+      // Generoso pra recarregamento pesado de página real; barra script.
+      if (!checkRateLimit(`impression:${hash}`, 10, 60_000)) return { ok: true };
       await ctx.pool.query(
         `INSERT INTO ad_events (sponsorship_id, kind, visitor_hash)
          SELECT unnest($1::uuid[]), 'IMPRESSION', $2`,

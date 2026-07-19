@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { visitorHash } from "../lib/visitorHash.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
 
 // ----------------------------------------------------------------------------
 // Analytics próprio (migrations/006_page_views.sql) — sem cookie, sem
 // terceiro. O front dispara track() a cada mudança de rota da SPA; stats()
 // alimenta o painel de audiência do admin (base pra mostrar alcance real
-// pro anunciante e pra imprensa citar).
+// pro anunciante e pra imprensa citar) — precisa ser difícil de forjar.
 // ----------------------------------------------------------------------------
 export const pageViewsRouter = router({
   track: publicProcedure
@@ -16,6 +17,8 @@ export const pageViewsRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const hash = visitorHash(ctx.ip, ctx.userAgent);
+      // Generoso pra navegação real (uma troca de rota por vez); barra script.
+      if (!checkRateLimit(`pageview:${hash}`, 30, 60_000)) return { ok: true };
       await ctx.pool.query(
         `INSERT INTO page_views (path, referrer_host, visitor_hash) VALUES ($1,$2,$3)`,
         [input.path, input.referrerHost ?? null, hash],
