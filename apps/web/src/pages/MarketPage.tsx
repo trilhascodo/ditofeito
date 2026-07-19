@@ -441,12 +441,12 @@ export function MarketPage() {
               {sponsorship.siteUrl ? (
                 <a className="patrocinio-main" href={`/ir/${sponsorship.sponsorshipId}`} target="_blank" rel="noopener noreferrer">
                   {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-                  <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+                  <span>{sponsorship.label && `${sponsorship.label} `}<b>{sponsorship.sponsorName}</b></span>
                 </a>
               ) : (
                 <>
                   {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-                  <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
+                  <span>{sponsorship.label && `${sponsorship.label} `}<b>{sponsorship.sponsorName}</b></span>
                 </>
               )}
               <SocialLinks items={sponsorship.socialLinks} sponsorshipId={sponsorship.sponsorshipId} />

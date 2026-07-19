@@ -465,9 +465,9 @@ export function AdminSponsors() {
           )}
           <div className="field">
             <label className="label" htmlFor="sp-label">Rótulo (opcional)</label>
-            <input className="input" id="sp-label" placeholder="Apresentado por"
+            <input className="input" id="sp-label" placeholder="ex.: Apresentado por"
                    value={label} onChange={(e) => setLabel(e.target.value)} />
-            <p className="hint-text" style={{ marginTop: 4 }}>Em branco usa o padrão "Apresentado por".</p>
+            <p className="hint-text" style={{ marginTop: 4 }}>Em branco não mostra rótulo nenhum.</p>
           </div>
           <div className="field">
             <label className="label" htmlFor="sp-starts">Começa em</label>
@@ -517,7 +517,7 @@ export function AdminSponsors() {
                     ? `Espaço da home (${PLACEMENT_LABEL[sp.homePlacement] ?? sp.homePlacement})`
                     : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
-                    "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
+                    {sp.label ? `"${sp.label}" · ` : ""}{fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
                     {sp.isHome && (
                       <>
                         {" · "}{REGION_SCOPE_LABEL[sp.regionScope] ?? sp.regionScope}
@@ -564,7 +564,7 @@ export function AdminSponsors() {
                     {row.isHome
                       ? `Espaço da home (${PLACEMENT_LABEL[row.homePlacement ?? ""] ?? row.homePlacement})`
                       : row.marketTitle ?? "mercado removido"}
-                    {" · \""}{row.label}{"\""}
+                    {row.label && <>{" · \""}{row.label}{"\""}</>}
                   </div>
                 </span>
                 <span className="mono hint-text">{fmtInt(row.impressions)} impr.</span>

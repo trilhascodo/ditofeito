@@ -116,7 +116,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
           const img = <img className="patro-slot-creative-img" src={s.creativeUrl} alt={s.sponsorName} />;
           return (
             <div key={i} className="patro-slot patro-slot-creative">
-              <span className="patro-slot-label">{s.label}</span>
+              {s.label && <span className="patro-slot-label">{s.label}</span>}
               {s.siteUrl ? (
                 <a className="patro-slot-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer" aria-label={s.sponsorName}>
                   {img}
@@ -128,7 +128,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
         }
         const conteudo = (
           <>
-            <span className="patro-slot-label">{s.label}</span>
+            {s.label && <span className="patro-slot-label">{s.label}</span>}
             {s.logoUrl && <img src={s.logoUrl} alt="" />}
             <b>{s.sponsorName}</b>
             {s.siteUrl && <span className="patro-slot-cta">Visitar site ↗</span>}
@@ -214,7 +214,7 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
         const conteudo = (
           <>
             {s.logoUrl && <img src={s.logoUrl} alt="" />}
-            <span>{s.label} <b>{s.sponsorName}</b></span>
+            <span>{s.label && `${s.label} `}<b>{s.sponsorName}</b></span>
           </>
         );
         return (
@@ -279,19 +279,40 @@ export function Home() {
 
   // Anúncio nativo intercalado a cada 6 mercados reais — só se a lista for
   // grande o bastante pra não deixar o anúncio dominar (plano de mais
-  // espaços de propaganda, sem virar a maioria do conteúdo).
+  // espaços de propaganda, sem virar a maioria do conteúdo). Contador
+  // corrido (não reseta por seção) pra manter a mesma cadência de anúncio
+  // por mercado visto, sectionado ou não.
   const gridAds = home?.grid ?? [];
-  const gridItems: ({ kind: "market"; m: NonNullable<typeof markets>[number] } | { kind: "ad"; ad: HomeSponsor; key: string })[] = [];
-  if (markets) {
-    let adCount = 0;
-    markets.forEach((m, i) => {
-      gridItems.push({ kind: "market", m });
-      if (gridAds.length > 0 && markets.length >= 6 && (i + 1) % 6 === 0) {
-        gridItems.push({ kind: "ad", ad: gridAds[adCount % gridAds.length], key: `ad-${i}` });
-        adCount++;
+  type GridItem = { kind: "market"; m: NonNullable<typeof markets>[number] } | { kind: "ad"; ad: HomeSponsor; key: string };
+  function buildGridItems(list: NonNullable<typeof markets>, counters: { seen: number; adCount: number }): GridItem[] {
+    const items: GridItem[] = [];
+    for (const m of list) {
+      items.push({ kind: "market", m });
+      counters.seen++;
+      if (gridAds.length > 0 && (markets?.length ?? 0) >= 6 && counters.seen % 6 === 0) {
+        items.push({ kind: "ad", ad: gridAds[counters.adCount % gridAds.length], key: `ad-${counters.seen}` });
+        counters.adCount++;
       }
-    });
+    }
+    return items;
   }
+
+  // "Todos" sem busca: seccionar por categoria (uma grade por categoria, na
+  // mesma ordem alfabética das abas) em vez de misturar tudo numa grade só —
+  // filtro de categoria específica ou busca continuam em grade única, porque
+  // ali o agrupamento por categoria já é redundante com o contexto.
+  const isDefaultView = !categorySlug && !busca;
+  const sections: { categorySlug: string; categoryName: string; items: GridItem[] }[] = [];
+  if (markets && isDefaultView && categories) {
+    const byCat = new Map<string, NonNullable<typeof markets>>();
+    for (const m of markets) byCat.set(m.categorySlug, [...(byCat.get(m.categorySlug) ?? []), m]);
+    const counters = { seen: 0, adCount: 0 };
+    for (const c of categories) {
+      const ms = byCat.get(c.slug);
+      if (ms && ms.length > 0) sections.push({ categorySlug: c.slug, categoryName: c.name, items: buildGridItems(ms, counters) });
+    }
+  }
+  const gridItems = markets && !(isDefaultView && sections.length > 0) ? buildGridItems(markets, { seen: 0, adCount: 0 }) : [];
 
   // Conteúdo principal (slide + faixa + abas + grade) sempre no mesmo fluxo,
   // independente da coluna de anúncios lateral — se ela crescer (mais
@@ -347,13 +368,28 @@ export function Home() {
       )}
 
       {markets && markets.length > 0 && (
-        <div className="market-grid">
-          {gridItems.map((item) => item.kind === "ad" ? (
-            <MarketTileAd key={item.key} ad={item.ad} />
-          ) : (
-            <MarketTile key={item.m.slug} m={item.m} />
-          ))}
-        </div>
+        isDefaultView && sections.length > 0 ? (
+          sections.map((sec) => (
+            <section key={sec.categorySlug} style={{ marginBottom: 28 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 19, margin: "0 0 12px" }}>{sec.categoryName}</h2>
+              <div className="market-grid">
+                {sec.items.map((item) => item.kind === "ad" ? (
+                  <MarketTileAd key={item.key} ad={item.ad} />
+                ) : (
+                  <MarketTile key={item.m.slug} m={item.m} />
+                ))}
+              </div>
+            </section>
+          ))
+        ) : (
+          <div className="market-grid">
+            {gridItems.map((item) => item.kind === "ad" ? (
+              <MarketTileAd key={item.key} ad={item.ad} />
+            ) : (
+              <MarketTile key={item.m.slug} m={item.m} />
+            ))}
+          </div>
+        )
       )}
     </>
   );

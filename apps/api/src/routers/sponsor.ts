@@ -25,11 +25,9 @@ const sponsorshipBase = z.object({
   regionScope: z.enum(REGION_SCOPES).default("NACIONAL"),
   regionUf: z.string().length(2).optional(),
   regionCity: z.string().trim().max(120).optional(),
-  // Opcional de propósito — quando em branco, cai no texto padrão de
-  // transparência ("Apresentado por"). Nunca fica sem rótulo nenhum: a
-  // identidade do produto exige deixar claro que é publicidade.
-  label: z.string().trim().max(60).optional()
-    .transform((v) => (v && v.length > 0 ? v : "Apresentado por")),
+  // Opcional de verdade — em branco não exibe rótulo nenhum (front trata
+  // string vazia como "sem rótulo"), não cai num texto padrão escondido.
+  label: z.string().trim().max(60).optional().transform((v) => v ?? ""),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
 });
