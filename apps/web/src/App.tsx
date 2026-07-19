@@ -21,6 +21,9 @@ import { AdminLeads } from "./admin/AdminLeads";
 import { AdminUsers } from "./admin/AdminUsers";
 import { AdminAudience } from "./admin/AdminAudience";
 import { Anuncie } from "./pages/Anuncie";
+import { Indice } from "./pages/Indice";
+import { Indices } from "./pages/Indices";
+import { AdminIndices } from "./admin/AdminIndices";
 import { AdminEmailSettings } from "./admin/AdminEmailSettings";
 import { AdminSuspicious } from "./admin/AdminSuspicious";
 
@@ -39,6 +42,8 @@ const router = createBrowserRouter([
       { path: "/perfil", element: <Profile /> },
       { path: "/patrocinador", element: <SponsorPanel /> },
       { path: "/anuncie", element: <Anuncie /> },
+      { path: "/indices", element: <Indices /> },
+      { path: "/indice/:slug", element: <Indice /> },
       {
         path: "/admin",
         element: <AdminLayout />,
@@ -53,6 +58,7 @@ const router = createBrowserRouter([
           { path: "leads", element: <AdminLeads /> },
           { path: "usuarios", element: <AdminUsers /> },
           { path: "audiencia", element: <AdminAudience /> },
+          { path: "indices", element: <AdminIndices /> },
           { path: "email", element: <AdminEmailSettings /> },
           { path: "suspeitas", element: <AdminSuspicious /> },
         ],

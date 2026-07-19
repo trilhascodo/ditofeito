@@ -96,6 +96,7 @@ export function Layout() {
           </div>
           <nav className="site-footer-nav">
             <Link to="/">Mercados</Link>
+            <Link to="/indices">Índices</Link>
             <Link to="/anuncie">Anuncie</Link>
             <Link to="/termos">Termos e Privacidade</Link>
           </nav>
