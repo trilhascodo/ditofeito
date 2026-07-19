@@ -441,6 +441,23 @@ input[type=number]:focus { outline: 2px solid var(--violeta); border-color: tran
 
 .disc { margin-top: 24px; border-top: 1px solid var(--linha); padding-top: 14px; font-size: 12px; color: var(--grafite); max-width: 640px; }
 
+/* ---------- comentários (página de mercado) ----------
+   O diferencial vs. rede social genérica: .comment-position mostra a posição
+   do autor (shares + preço) congelada no momento do post — "put your money
+   where your mouth is" sustenta grupo A desafiando grupo B. */
+.comment-list { display: flex; flex-direction: column; }
+.comment { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--linha); }
+.comment:last-child { border-bottom: 0; }
+.comment-body-wrap { flex: 1; min-width: 0; }
+.comment-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.comment-author { font-weight: 600; font-size: 13.5px; color: var(--tinta); }
+.comment-time { font-size: 12px; color: var(--grafite); margin-left: auto; }
+.comment-position {
+  font: 600 11px var(--mono); color: var(--violeta); background: var(--violeta-2);
+  border-radius: 99px; padding: 2px 9px;
+}
+.comment-body { font-size: 14px; color: var(--tinta); white-space: pre-wrap; margin: 0; }
+
 /* patrocínio nativo (identidade §1: card, nunca pop-up) — faixa discreta,
    mesma tipografia do resto do produto, sem cor de "banner" chamativa. */
 .patrocinio {

@@ -24,6 +24,49 @@ function VarBadge({ d }: { d: number }) {
   );
 }
 
+const commentTimeFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+
+interface CommentItem {
+  id: string; body: string; createdAt: string; authorRepSnapshot: number | null;
+  positionSnapshot: { outcomeLabel: string; shares: number; priceAtPost: number }[];
+  author: { handle: string; displayName: string; avatarUrl: string | null };
+}
+
+// Comentários — versão sem thread. O que diferencia de rede social genérica:
+// cada comentário carrega, congelada no momento do post, a posição do autor
+// (quantas posições e em que preço) e o histórico de acerto (Brier, menor =
+// melhor) — "put your money where your mouth is" sustenta grupo A desafiando
+// grupo B, em vez de opinião solta.
+function Comment({ c }: { c: CommentItem }) {
+  return (
+    <div className="comment">
+      <span className="ranking-avatar">
+        {c.author.avatarUrl ? <img src={c.author.avatarUrl} alt="" /> : c.author.displayName[0]?.toUpperCase()}
+      </span>
+      <div className="comment-body-wrap">
+        <div className="comment-head">
+          <span className="comment-author">{c.author.displayName}</span>
+          <span className="hint-text">@{c.author.handle}</span>
+          {c.authorRepSnapshot !== null && (
+            <span className="hint-text mono">brier {c.authorRepSnapshot.toFixed(2)}</span>
+          )}
+          <span className="comment-time">{commentTimeFmt.format(new Date(c.createdAt))}</span>
+        </div>
+        {c.positionSnapshot.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+            {c.positionSnapshot.map((p, i) => (
+              <span key={i} className="comment-position">
+                {fmtPoints(p.shares)} em {p.outcomeLabel} ({pct(p.priceAtPost)})
+              </span>
+            ))}
+          </div>
+        )}
+        <p className="comment-body">{c.body}</p>
+      </div>
+    </div>
+  );
+}
+
 export function MarketPage() {
   const { slug = "" } = useParams();
   const { user } = useAuth();
@@ -36,12 +79,18 @@ export function MarketPage() {
   const { data: news } = trpc.news.list.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!market },
   );
+  const { data: comments } = trpc.comments.list.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!market },
+  );
   const tradeMutation = trpc.trade.execute.useMutation();
+  const commentMutation = trpc.comments.create.useMutation();
 
   const [selected, setSelected] = useState<string | null>(null);
   const [points, setPoints] = useState(50);
   const [showStamp, setShowStamp] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!market) return;
@@ -84,6 +133,19 @@ export function MarketPage() {
       setTimeout(() => setShowStamp(false), 1400);
     } catch (err) {
       setTradeError(err instanceof Error ? err.message : "Não foi possível registrar a previsão");
+    }
+  }
+
+  async function onPostComment() {
+    const body = commentBody.trim();
+    if (!body) return;
+    setCommentError(null);
+    try {
+      await commentMutation.mutateAsync({ marketId: market!.id, body });
+      setCommentBody("");
+      await utils.comments.list.invalidate({ marketId: market!.id });
+    } catch (err) {
+      setCommentError(err instanceof Error ? err.message : "Não foi possível publicar o comentário");
     }
   }
 
@@ -268,6 +330,38 @@ export function MarketPage() {
             </div>
           )}
         </aside>
+      </div>
+
+      <div className="card" style={{ marginTop: 28, maxWidth: 720 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 14px" }}>
+          Comentários{comments && comments.length > 0 ? ` (${comments.length})` : ""}
+        </h2>
+        {user ? (
+          <div style={{ marginBottom: 20 }}>
+            <textarea
+              value={commentBody} onChange={(e) => setCommentBody(e.target.value)}
+              placeholder="O que você acha desse mercado?" rows={3} maxLength={5000}
+            />
+            {commentError && <p className="error-text">{commentError}</p>}
+            <button
+              className="btn-outline" style={{ marginTop: 8, width: "auto" }}
+              onClick={onPostComment} disabled={!commentBody.trim() || commentMutation.isPending}
+            >
+              {commentMutation.isPending ? "Publicando…" : "Comentar"}
+            </button>
+          </div>
+        ) : (
+          <p className="hint-text" style={{ marginBottom: 20 }}>
+            <Link to="/entrar">Entre</Link> pra comentar.
+          </p>
+        )}
+        {!comments || comments.length === 0 ? (
+          <p className="hint-text">Nenhum comentário ainda. Seja o primeiro a dizer o que pensa.</p>
+        ) : (
+          <div className="comment-list">
+            {comments.map((c) => <Comment key={c.id} c={c} />)}
+          </div>
+        )}
       </div>
 
       <div className={`carimbo ${showStamp ? "show" : ""}`} role="status">
