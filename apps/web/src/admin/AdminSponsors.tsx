@@ -16,12 +16,23 @@ function fmtPeriod(iso: string | Date): string {
 const PLACEMENT_LABEL: Record<string, string> = {
   SIDEBAR: "coluna lateral", BANNER: "faixa horizontal", GRID: "nativo na grade",
 };
-type HomePlacement = "SIDEBAR" | "BANNER" | "GRID";
 
 const PLAN_LABEL: Record<string, string> = {
   BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium",
 };
 type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
+
+// Mesmo mapeamento do backend (sponsor.ts PLAN_PLACEMENT) — só pra mostrar
+// aqui qual posição o plano escolhido garante, já que não dá mais pra
+// escolher na mão (trava pelo plano, evita a página /anuncie prometer algo
+// que o admin não confirma na hora de criar o espaço).
+const PLAN_PLACEMENT: Record<string, string> = {
+  BASICO: "BANNER", PROFISSIONAL: "GRID", PREMIUM: "SIDEBAR",
+};
+
+const SOCIAL_LABEL: Record<string, string> = {
+  INSTAGRAM: "Instagram", X: "X", TIKTOK: "TikTok", YOUTUBE: "YouTube", FACEBOOK: "Facebook", WHATSAPP: "WhatsApp",
+};
 
 export function AdminSponsors() {
   const utils = trpc.useUtils();
@@ -59,7 +70,6 @@ export function AdminSponsors() {
   const [sponsorId, setSponsorId] = useState("");
   const [marketId, setMarketId] = useState("");
   const [isHome, setIsHome] = useState(false);
-  const [homePlacement, setHomePlacement] = useState<HomePlacement>("SIDEBAR");
   const [label, setLabel] = useState("Apresentado por");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
@@ -125,11 +135,11 @@ export function AdminSponsors() {
     }
     try {
       await createSponsorship.mutateAsync({
-        sponsorId, marketId: isHome ? undefined : marketId, isHome, homePlacement,
+        sponsorId, marketId: isHome ? undefined : marketId, isHome,
         label: label.trim() || "Apresentado por",
         startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
       });
-      setMarketId(""); setIsHome(false); setHomePlacement("SIDEBAR"); setEndsAt("");
+      setMarketId(""); setIsHome(false); setEndsAt("");
       await refresh();
     } catch (err) {
       setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
@@ -241,14 +251,33 @@ export function AdminSponsors() {
                 <button type="button" className="link-btn" onClick={onCancelEdit}>Cancelar</button>
               </form>
             ) : (
-              <div key={s.id} className="admin-row">
+              <div key={s.id} className="admin-row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                {s.logoUrl ? (
+                  <img src={s.logoUrl} alt="" style={{ height: 32, width: "auto", maxWidth: 60, objectFit: "contain", flex: "none" }} />
+                ) : (
+                  <span className="hint-text" style={{ flex: "none", width: 60, fontSize: 11 }}>sem logo</span>
+                )}
                 <span className="titulo">
                   {s.name}
                   <div className="meta">
                     {s.siteUrl ? <a href={s.siteUrl} target="_blank" rel="noopener noreferrer">{s.siteUrl}</a> : "sem site cadastrado"}
                     {" · "}{PLAN_LABEL[s.plan] ?? s.plan}
+                    {" · posição: "}{PLACEMENT_LABEL[PLAN_PLACEMENT[s.plan]] ?? "?"}
+                    {s.creativeUrl && " · tem arte pronta"}
                   </div>
+                  {s.socialLinks.length > 0 && (
+                    <div className="meta">
+                      {s.socialLinks.map((l) => (
+                        <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer" style={{ marginRight: 8 }}>
+                          {SOCIAL_LABEL[l.platform] ?? l.platform}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </span>
+                {s.creativeUrl && (
+                  <img src={s.creativeUrl} alt="arte pronta" style={{ height: 48, width: "auto", maxWidth: 60, objectFit: "cover", borderRadius: 6, flex: "none" }} />
+                )}
                 <span className={`badge ${s.isActive ? "" : "badge-draft"}`}>{s.isActive ? "ATIVO" : "INATIVO"}</span>
                 <button
                   className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
@@ -299,15 +328,16 @@ export function AdminSponsors() {
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocínio</h2>
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Vincula um patrocinador a um mercado (card "Apresentado por" na página do
-          mercado e tag no card da home) ou a um espaço de publicidade da home
-          (coluna lateral, faixa horizontal ou nativo na grade) por um período.
+          mercado e tag no card da home) ou a um espaço de publicidade da home — a
+          posição é travada pelo plano contratado (Básico = faixa, Profissional =
+          nativo na grade, Premium = coluna lateral), mesmo mapeamento da página /anuncie.
         </p>
         <form onSubmit={onCreateSponsorship}>
           <div className="field">
             <label className="label" htmlFor="sp-sponsor">Patrocinador</label>
             <select id="sp-sponsor" value={sponsorId} onChange={(e) => setSponsorId(e.target.value)} required>
               <option value="">selecione</option>
-              {sponsors?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {sponsors?.map((s) => <option key={s.id} value={s.id}>{s.name} ({PLAN_LABEL[s.plan] ?? s.plan})</option>)}
             </select>
           </div>
           <label className="checkbox-row">
@@ -315,15 +345,14 @@ export function AdminSponsors() {
             Espaço de publicidade da home (não vincula a um mercado específico)
           </label>
           {isHome && (
-            <div className="field">
-              <label className="label" htmlFor="sp-placement">Onde?</label>
-              <select id="sp-placement" value={homePlacement}
-                      onChange={(e) => setHomePlacement(e.target.value as HomePlacement)}>
-                <option value="SIDEBAR">Coluna lateral (até 5)</option>
-                <option value="BANNER">Faixa horizontal abaixo do destaque (até 4)</option>
-                <option value="GRID">Nativo, intercalado na grade de mercados (até 2)</option>
-              </select>
-            </div>
+            sponsorId && sponsors ? (
+              <p className="hint-text" style={{ marginBottom: 14 }}>
+                Posição: <b>{PLACEMENT_LABEL[PLAN_PLACEMENT[sponsors.find((s) => s.id === sponsorId)?.plan ?? ""]]}</b>{" "}
+                (plano {PLAN_LABEL[sponsors.find((s) => s.id === sponsorId)?.plan ?? ""] ?? "?"} deste patrocinador)
+              </p>
+            ) : (
+              <p className="hint-text" style={{ marginBottom: 14 }}>Selecione o patrocinador pra ver a posição.</p>
+            )
           )}
           {!isHome && (
             <div className="field">

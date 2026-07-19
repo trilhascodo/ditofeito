@@ -9,13 +9,10 @@ import { router, publicProcedure, adminProcedure, sponsorProcedure } from "../tr
 const sponsorshipInput = z
   .object({
     sponsorId: z.string().uuid(),
-    // Ou marketId (card na página do mercado), ou isHome (faixa da home) —
+    // Ou marketId (card na página do mercado), ou isHome (espaço da home) —
     // mesma regra do CHECK no banco (migrations/004_sponsor_home_news.sql).
     marketId: z.string().uuid().optional(),
     isHome: z.boolean().default(false),
-    // Só importa quando isHome; SIDEBAR é o comportamento de sempre
-    // (migrations/008_home_ad_placement.sql).
-    homePlacement: z.enum(["SIDEBAR", "BANNER", "GRID"]).default("SIDEBAR"),
     label: z.string().trim().min(1).max(60).default("Apresentado por"),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
@@ -33,10 +30,16 @@ const SOCIAL_PLATFORMS = ["INSTAGRAM", "X", "TIKTOK", "YOUTUBE", "FACEBOOK", "WH
 type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 
 // Limite de redes sociais no autoatendimento, por plano (migrations/009_sponsor_plans.sql).
-// Não trava posição de anúncio nenhuma — o admin continua livre pra negociar
-// qualquer coluna/faixa/grade pra qualquer sponsor, isso aqui só limita o
-// que o próprio anunciante pode adicionar sozinho.
 const PLAN_LIMITS: Record<string, number> = { BASICO: 1, PROFISSIONAL: 3, PREMIUM: 5 };
+
+// Posição da home travada pelo plano contratado (mesmo mapeamento divulgado
+// em /anuncie) — antes o admin escolhia livremente, o que deixava a página
+// de vendas mentirosa (prometia "Premium = lateral", mas nada garantia isso
+// na prática). Sem esse mapa pro plano do sponsor, não dá pra criar espaço
+// de home nenhum — evita o gap de novo.
+const PLAN_PLACEMENT: Record<string, "SIDEBAR" | "BANNER" | "GRID"> = {
+  BASICO: "BANNER", PROFISSIONAL: "GRID", PREMIUM: "SIDEBAR",
+};
 
 async function socialLinksBySponsor(pool: import("pg").Pool, sponsorIds: string[]) {
   const map = new Map<string, { id: string; platform: SocialPlatform; url: string }[]>();
@@ -58,11 +61,13 @@ export const sponsorRouter = router({
   list: adminProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
       `SELECT id, name, logo_url, site_url, creative_url, is_active, plan FROM sponsors ORDER BY name`);
+    const links = await socialLinksBySponsor(ctx.pool, r.rows.map((s) => s.id as string));
     return r.rows.map((s) => ({
       id: s.id as string, name: s.name as string,
       logoUrl: s.logo_url as string | null, siteUrl: s.site_url as string | null,
       creativeUrl: s.creative_url as string | null,
       isActive: s.is_active as boolean, plan: s.plan as string,
+      socialLinks: links.get(s.id as string) ?? [],
     }));
   }),
 
@@ -150,10 +155,16 @@ export const sponsorRouter = router({
     }),
 
   createSponsorship: adminProcedure.input(sponsorshipInput).mutation(async ({ ctx, input }) => {
+    let homePlacement: "SIDEBAR" | "BANNER" | "GRID" = "SIDEBAR";
+    if (input.isHome) {
+      const s = await ctx.pool.query(`SELECT plan FROM sponsors WHERE id = $1`, [input.sponsorId]);
+      if (!s.rowCount) throw new Error("Patrocinador não encontrado");
+      homePlacement = PLAN_PLACEMENT[s.rows[0].plan as string] ?? "BANNER";
+    }
     const r = await ctx.pool.query(
       `INSERT INTO sponsorships (sponsor_id, market_id, is_home, home_placement, label, starts_at, ends_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [input.sponsorId, input.marketId ?? null, input.isHome, input.homePlacement,
+      [input.sponsorId, input.marketId ?? null, input.isHome, homePlacement,
         input.label, input.startsAt, input.endsAt]);
     return { id: r.rows[0].id as string };
   }),
