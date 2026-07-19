@@ -120,7 +120,7 @@ export async function getMarketPublicData(
 // ---------------------------------------------------------------------------
 // 2. WIDGET HTML (autocontido; sem JS externo; ~4 KB)
 // ---------------------------------------------------------------------------
-const esc = (s: string) =>
+export const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
    .replace(/"/g, "&quot;");
 const pct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
@@ -213,7 +213,7 @@ export function renderEmbedHtml(d: PublicMarketData): string {
 //    renderCardPng converte pra PNG com as fontes embutidas (WhatsApp exige
 //    raster — não pré-visualiza SVG).
 // ---------------------------------------------------------------------------
-const TOKENS = {
+export const TOKENS = {
   papel: "#FAF8F3", tinta: "#1E2733", grafite: "#5C6672",
   violeta: "#4F2E99", linha: "#E3DDD0",
 } as const;
@@ -225,7 +225,7 @@ const TOKENS = {
 // curto (e a maioria dos enunciados de mercado não é).
 const AVG_CHAR_WIDTH_EM = 0.58; // IBM Plex Sans 600, medido contra render real
 
-function wrapText(text: string, maxWidthPx: number, fontSizePx: number, maxLines: number): string[] {
+export function wrapText(text: string, maxWidthPx: number, fontSizePx: number, maxLines: number): string[] {
   const maxChars = Math.max(4, Math.floor(maxWidthPx / (fontSizePx * AVG_CHAR_WIDTH_EM)));
   const words = text.split(/\s+/).filter(Boolean);
   const allLines: string[] = [];
@@ -339,7 +339,7 @@ const CARD_FONT_FILES = [
   path.join(FONTS_DIR, "IBMPlexSerif-Bold.ttf"),
 ];
 
-function svgToPng(svg: string): Buffer {
+export function svgToPng(svg: string): Buffer {
   const resvg = new Resvg(svg, {
     font: {
       fontFiles: CARD_FONT_FILES,

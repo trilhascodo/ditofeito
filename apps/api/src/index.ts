@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { getPool } from "@ditofeito/db";
 import { mountEmbed } from "./http/embed.js";
+import { mountVindication } from "./http/vindication.js";
 import { mountAuth } from "./http/auth.js";
 import { startJobs } from "./jobs/schedule.js";
 import { APP_CONFIG } from "./config.js";
@@ -23,6 +24,7 @@ const pool = getPool();
 // Rotas públicas do embed primeiro: HTML/SVG/JSON cacheáveis na CDN, sem
 // CORS restrito (frame-ancestors * é o requisito ali, não Access-Control).
 mountEmbed(app, pool);
+mountVindication(app, pool);
 
 app.use(express.json());
 app.use(cookieParser());

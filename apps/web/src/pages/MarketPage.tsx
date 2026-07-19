@@ -118,6 +118,9 @@ export function MarketPage() {
   const { data: comments } = trpc.comments.list.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!market },
   );
+  const { data: vindication } = trpc.user.myVindicationCard.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!user && market?.status === "RESOLVED" },
+  );
   const tradeMutation = trpc.trade.execute.useMutation();
   const commentMutation = trpc.comments.create.useMutation();
 
@@ -127,6 +130,7 @@ export function MarketPage() {
   const [tradeError, setTradeError] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [vindCopied, setVindCopied] = useState(false);
 
   useEffect(() => {
     if (!market) return;
@@ -185,6 +189,13 @@ export function MarketPage() {
     }
   }
 
+  async function onCopyVindicationLink() {
+    if (!vindication) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/vindicacao/${vindication.shareToken}`);
+    setVindCopied(true);
+    setTimeout(() => setVindCopied(false), 1500);
+  }
+
   const W = 640, H = 220, P = 8;
   const simIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "SIM") : -1;
   const naoIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "NÃO") : -1;
@@ -200,6 +211,38 @@ export function MarketPage() {
         <span>Resolve por <span className="mono">{market.resolutionSource}</span></span>
       </div>
       <p className="regras">{market.resolutionCriteria}</p>
+
+      {vindication && (
+        <div className="card vindication-card">
+          <div className="vindication-card-body">
+            <img
+              src={`${window.location.origin}/card/vindicacao/${vindication.shareToken}.png`}
+              alt="Seu card de vindicação"
+            />
+            <div>
+              <span className="eyebrow">Você acertou</span>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "6px 0 10px" }}>
+                Compartilhe sua previsão
+              </h2>
+              <p className="hint-text" style={{ marginBottom: 14 }}>
+                Prova pública de que você tinha razão — antes de todo mundo saber.
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <a
+                  className="btn-outline" style={{ width: "auto" }}
+                  href={`https://wa.me/?text=${encodeURIComponent(`Eu disse! ${window.location.origin}/vindicacao/${vindication.shareToken}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                >
+                  Compartilhar no WhatsApp
+                </a>
+                <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyVindicationLink}>
+                  {vindCopied ? "Copiado!" : "Copiar link"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid">
         <div>

@@ -375,6 +375,17 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
 .meta .mono { font-weight: 500; }
 .regras { margin-top: 6px; font-size: 13px; color: var(--grafite); }
 
+/* card de vindicação — pico emocional (prova pública de acerto), por isso
+   destacado com borda violeta em vez do .card neutro padrão. */
+.vindication-card {
+  margin-top: 20px; border-color: var(--violeta);
+  background: linear-gradient(180deg, var(--violeta-2), #fff 55%);
+}
+.vindication-card-body { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.vindication-card-body img {
+  width: 220px; max-width: 100%; border-radius: 8px; border: 1px solid var(--linha); flex: none;
+}
+
 .legenda { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
 .legenda span { display: flex; align-items: center; gap: 6px; color: var(--grafite); }
 .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

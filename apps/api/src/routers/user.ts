@@ -14,6 +14,20 @@ import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
 const LEADERBOARD_MIN_RESOLVED = 5;
 
 export const userRouter = router({
+  // Card de vindicação do próprio usuário pra um mercado (null se não ganhou
+  // esse mercado, ou se ainda não resolveu) — token gerado em
+  // trade.ts::resolveMarket, só existe pra quem acertou.
+  myVindicationCard: protectedProcedure
+    .input(z.object({ marketId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `SELECT share_token FROM vindication_cards WHERE user_id = $1 AND market_id = $2`,
+        [ctx.user.id, input.marketId],
+      );
+      return r.rowCount ? { shareToken: r.rows[0].share_token as string } : null;
+    }),
+
+
   me: protectedProcedure.query(async ({ ctx }) => {
     const bal = await ctx.pool.query(
       `SELECT balance_after FROM point_ledger WHERE user_id = $1 ORDER BY id DESC LIMIT 1`,

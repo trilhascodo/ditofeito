@@ -263,6 +263,13 @@ export async function resolveMarket(
       const payout = Number(w.shares);
       await appendLedger(c, w.user_id, payout, "RESOLUTION_PAYOUT", "market", p.marketId);
       totalPaid += payout;
+      // Card de vindicação — só pra quem acertou (é a prova pública de "eu
+      // disse", não faz sentido pra quem perdeu). Idempotente: se resolveMarket
+      // for chamado de novo pro mesmo mercado (não deveria, mas por garantia).
+      await c.query(
+        `INSERT INTO vindication_cards (user_id, market_id) VALUES ($1,$2)
+         ON CONFLICT (user_id, market_id) DO NOTHING`,
+        [w.user_id, p.marketId]);
     }
 
     // Reputação: Brier do usuário (preço médio de entrada) vs Brier do mercado
