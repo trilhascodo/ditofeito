@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
+import { UFS } from "../lib/ufs";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const pct = (p: number) => `${(p * 100).toFixed(p >= 0.1 ? 0 : 1)}%`;
@@ -33,17 +34,34 @@ export function Profile() {
   const { data: positions, isLoading: positionsLoading } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
   const { data: ledger, isLoading: ledgerLoading } = trpc.user.myLedger.useQuery(undefined, { enabled: !!user });
   const setEmailNotifications = trpc.user.setEmailNotifications.useMutation();
+  const setRegion = trpc.user.setRegion.useMutation();
   const [emailNotif, setEmailNotif] = useState(true);
+  const [regionUf, setRegionUf] = useState("");
+  const [regionCity, setRegionCity] = useState("");
+  const [regionSaved, setRegionSaved] = useState(false);
 
   useEffect(() => {
     if (me) setEmailNotif(me.emailNotifications);
   }, [me?.emailNotifications]);
+
+  useEffect(() => {
+    if (me) { setRegionUf(me.regionUf ?? ""); setRegionCity(me.regionCity ?? ""); }
+  }, [me?.regionUf, me?.regionCity]);
 
   async function onToggleEmailNotif() {
     const next = !emailNotif;
     setEmailNotif(next);
     await setEmailNotifications.mutateAsync({ enabled: next });
     await utils.user.me.invalidate();
+  }
+
+  async function onSaveRegion(e: FormEvent) {
+    e.preventDefault();
+    setRegionSaved(false);
+    await setRegion.mutateAsync({ regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined });
+    await utils.user.me.invalidate();
+    setRegionSaved(true);
+    setTimeout(() => setRegionSaved(false), 1500);
   }
 
   if (authLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
@@ -109,6 +127,29 @@ export function Profile() {
           <input type="checkbox" checked={emailNotif} onChange={onToggleEmailNotif} disabled={setEmailNotifications.isPending} />
           Avisar por e-mail quando um mercado que eu previ resolver ou for anulado
         </label>
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Região</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Opcional, nunca é público — usado só pra mostrar patrocinadores e conteúdo relevante pra você.
+        </p>
+        <form onSubmit={onSaveRegion} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+            <label className="label" htmlFor="profile-uf">Estado</label>
+            <select id="profile-uf" value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
+              <option value="">prefiro não dizer</option>
+              {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+            </select>
+          </div>
+          <div className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+            <label className="label" htmlFor="profile-city">Cidade</label>
+            <input className="input" id="profile-city" placeholder="Codó" value={regionCity} onChange={(e) => setRegionCity(e.target.value)} />
+          </div>
+          <button className="btn-outline" style={{ width: "auto", padding: "10px 18px" }} disabled={setRegion.isPending}>
+            {setRegion.isPending ? "Salvando…" : regionSaved ? "Salvo!" : "Salvar"}
+          </button>
+        </form>
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>

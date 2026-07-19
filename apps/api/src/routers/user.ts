@@ -39,11 +39,13 @@ export const userRouter = router({
       [ctx.user.id],
     );
     const pref = await ctx.pool.query(
-      `SELECT email_notifications FROM users WHERE id = $1`, [ctx.user.id],
+      `SELECT email_notifications, region_uf, region_city FROM users WHERE id = $1`, [ctx.user.id],
     );
     return {
       ...ctx.user,
       emailNotifications: pref.rows[0]?.email_notifications ?? true,
+      regionUf: pref.rows[0]?.region_uf ?? null,
+      regionCity: pref.rows[0]?.region_city ?? null,
       balance: bal.rowCount ? Number(bal.rows[0].balance_after) : 0,
       reputation: rep.rowCount
         ? {
@@ -66,6 +68,22 @@ export const userRouter = router({
       await ctx.pool.query(
         `UPDATE users SET email_notifications = $2, updated_at = now() WHERE id = $1`,
         [ctx.user.id, input.enabled],
+      );
+      return { ok: true };
+    }),
+
+  // Região autodeclarada (opcional, sem geo-IP) — base pra segmentar
+  // patrocínio regional (sponsor.ts) e, depois, priorizar a grade de
+  // mercados por região.
+  setRegion: protectedProcedure
+    .input(z.object({
+      regionUf: z.string().length(2).optional(),
+      regionCity: z.string().trim().max(120).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(
+        `UPDATE users SET region_uf = $2, region_city = $3, updated_at = now() WHERE id = $1`,
+        [ctx.user.id, input.regionUf ?? null, input.regionCity?.trim() || null],
       );
       return { ok: true };
     }),

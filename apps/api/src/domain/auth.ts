@@ -63,10 +63,12 @@ export async function signup(
     }
 
     const u = await client.query(
-      `INSERT INTO users (handle, display_name, email, password_hash, cpf, signup_ip, signup_user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      `INSERT INTO users (handle, display_name, email, password_hash, cpf, signup_ip, signup_user_agent,
+                          region_uf, region_city)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
       [input.handle, input.displayName, input.email, passwordHash, input.cpf,
-        meta.ip ?? null, meta.userAgent ?? null]);
+        meta.ip ?? null, meta.userAgent ?? null,
+        input.regionUf ?? null, input.regionCity?.trim() || null]);
     userId = u.rows[0].id;
 
     await appendLedger(client, userId, AUTH_CONFIG.signupBonusPoints, "SIGNUP_BONUS", null, null);

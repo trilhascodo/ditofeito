@@ -9,6 +9,11 @@ export const signupSchema = z.object({
   password: z.string().min(8).max(200),
   cpf: z.string().refine(isValidCpf, "CPF inválido").transform(onlyDigits),
   captchaToken: z.string().min(1, "Captcha obrigatório"),
+  // Autodeclarado, opcional — sem geo-IP (mesma filosofia de zero terceiro
+  // do resto do produto). Base pra segmentar patrocínio regional e, depois,
+  // priorizar a própria grade de mercados por região.
+  regionUf: z.string().length(2).optional(),
+  regionCity: z.string().trim().max(120).optional(),
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { UFS } from "../lib/ufs";
 
 function dtLocal(iso: string | Date): string {
   const d = new Date(iso);
@@ -36,6 +37,11 @@ const PLAN_ALLOWED_PLACEMENTS: Record<string, readonly string[]> = {
 const SOCIAL_LABEL: Record<string, string> = {
   INSTAGRAM: "Instagram", X: "X", TIKTOK: "TikTok", YOUTUBE: "YouTube", FACEBOOK: "Facebook", WHATSAPP: "WhatsApp",
 };
+
+const REGION_SCOPE_LABEL: Record<string, string> = {
+  NACIONAL: "nacional", ESTADUAL: "estadual", MUNICIPAL: "municipal",
+};
+type RegionScope = "NACIONAL" | "ESTADUAL" | "MUNICIPAL";
 
 export function AdminSponsors() {
   const utils = trpc.useUtils();
@@ -74,6 +80,9 @@ export function AdminSponsors() {
   const [marketId, setMarketId] = useState("");
   const [isHome, setIsHome] = useState(false);
   const [homePlacement, setHomePlacement] = useState("");
+  const [regionScope, setRegionScope] = useState<RegionScope>("NACIONAL");
+  const [regionUf, setRegionUf] = useState("");
+  const [regionCity, setRegionCity] = useState("");
   const [label, setLabel] = useState("Apresentado por");
   const [startsAt, setStartsAt] = useState(dtLocal(new Date()));
   const [endsAt, setEndsAt] = useState("");
@@ -137,14 +146,26 @@ export function AdminSponsors() {
       setSpErr("Preencha patrocinador, data de fim, e um mercado ou uma posição da home.");
       return;
     }
+    if (isHome && regionScope !== "NACIONAL" && !regionUf) {
+      setSpErr("Escolha o estado pro escopo regional.");
+      return;
+    }
+    if (isHome && regionScope === "MUNICIPAL" && !regionCity.trim()) {
+      setSpErr("Escolha a cidade pro escopo municipal.");
+      return;
+    }
     try {
       await createSponsorship.mutateAsync({
         sponsorId, marketId: isHome ? undefined : marketId, isHome,
         homePlacement: isHome ? (homePlacement as "SIDEBAR" | "BANNER" | "GRID") : undefined,
+        regionScope: isHome ? regionScope : undefined,
+        regionUf: isHome && regionScope !== "NACIONAL" ? regionUf : undefined,
+        regionCity: isHome && regionScope === "MUNICIPAL" ? regionCity.trim() : undefined,
         label: label.trim() || "Apresentado por",
         startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(),
       });
-      setMarketId(""); setIsHome(false); setHomePlacement(""); setEndsAt("");
+      setMarketId(""); setIsHome(false); setHomePlacement("");
+      setRegionScope("NACIONAL"); setRegionUf(""); setRegionCity(""); setEndsAt("");
       await refresh();
     } catch (err) {
       setSpErr(err instanceof Error ? err.message : "Erro ao criar patrocínio");
@@ -368,6 +389,36 @@ export function AdminSponsors() {
               </div>
             );
           })()}
+          {isHome && (
+            <div className="field">
+              <label className="label" htmlFor="sp-region-scope">Alcance</label>
+              <select
+                id="sp-region-scope" value={regionScope}
+                onChange={(e) => { setRegionScope(e.target.value as RegionScope); setRegionUf(""); setRegionCity(""); }}
+              >
+                <option value="NACIONAL">Nacional (todo mundo vê)</option>
+                <option value="ESTADUAL">Estadual (só quem declarou o estado no perfil)</option>
+                <option value="MUNICIPAL">Municipal (só quem declarou estado + cidade no perfil)</option>
+              </select>
+              {regionScope !== "NACIONAL" && (
+                <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <select value={regionUf} onChange={(e) => setRegionUf(e.target.value)} style={{ flex: "1 1 200px" }} required>
+                    <option value="">selecione o estado</option>
+                    {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+                  </select>
+                  {regionScope === "MUNICIPAL" && (
+                    <input
+                      className="input" placeholder="Codó" style={{ flex: "1 1 200px" }}
+                      value={regionCity} onChange={(e) => setRegionCity(e.target.value)} required
+                    />
+                  )}
+                </div>
+              )}
+              <p className="hint-text" style={{ marginTop: 6 }}>
+                Quem não declarou região no perfil só vê patrocínio nacional — evita mostrar pro público errado.
+              </p>
+            </div>
+          )}
           {!isHome && (
             <div className="field">
               <label className="label" htmlFor="sp-market">Mercado</label>
@@ -413,6 +464,12 @@ export function AdminSponsors() {
                     : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
                   <div className="meta">
                     "{sp.label}" · {fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
+                    {sp.isHome && (
+                      <>
+                        {" · "}{REGION_SCOPE_LABEL[sp.regionScope] ?? sp.regionScope}
+                        {sp.regionUf && ` (${sp.regionCity ? `${sp.regionCity}/` : ""}${sp.regionUf})`}
+                      </>
+                    )}
                   </div>
                 </span>
                 <span className={`badge ${active ? "" : "badge-draft"}`}>{active ? "VIGENTE" : "FORA DO PERÍODO"}</span>

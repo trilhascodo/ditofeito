@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
 import { signup } from "../lib/auth";
 import { Turnstile } from "../components/Turnstile";
+import { UFS } from "../lib/ufs";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 // Sem chave configurada (dev/local): backend também aceita qualquer token
@@ -15,6 +16,8 @@ export function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [cpf, setCpf] = useState("");
+  const [regionUf, setRegionUf] = useState("");
+  const [regionCity, setRegionCity] = useState("");
   const [captchaToken, setCaptchaToken] = useState(CAPTCHA_REQUIRED ? "" : "dev");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,7 +40,10 @@ export function Signup() {
     }
     setLoading(true);
     try {
-      await signup({ handle, displayName, email, password, cpf: onlyDigits(cpf), captchaToken });
+      await signup({
+        handle, displayName, email, password, cpf: onlyDigits(cpf), captchaToken,
+        regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined,
+      });
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar");
@@ -103,6 +109,25 @@ export function Signup() {
               <Link to="/termos#privacidade">política de privacidade</Link>.
             </p>
           </div>
+          <div className="field">
+            <label className="label" htmlFor="regionUf">Estado (opcional)</label>
+            <select id="regionUf" value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
+              <option value="">prefiro não dizer</option>
+              {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+            </select>
+            <p className="hint-text">
+              Usado só pra mostrar patrocinadores e conteúdo relevante pra sua região — nunca é público.
+            </p>
+          </div>
+          {regionUf && (
+            <div className="field">
+              <label className="label" htmlFor="regionCity">Cidade (opcional)</label>
+              <input
+                className="input" id="regionCity" placeholder="Codó"
+                value={regionCity} onChange={(e) => setRegionCity(e.target.value)}
+              />
+            </div>
+          )}
           <div className="field">
             <Turnstile onToken={setCaptchaToken} />
           </div>

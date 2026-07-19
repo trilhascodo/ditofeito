@@ -8,6 +8,8 @@ import { router, publicProcedure, adminProcedure, sponsorProcedure } from "../tr
 // ----------------------------------------------------------------------------
 const HOME_PLACEMENTS = ["SIDEBAR", "BANNER", "GRID"] as const;
 
+const REGION_SCOPES = ["NACIONAL", "ESTADUAL", "MUNICIPAL"] as const;
+
 const sponsorshipInput = z
   .object({
     sponsorId: z.string().uuid(),
@@ -19,6 +21,11 @@ const sponsorshipInput = z
     // sponsor no mutation abaixo (não dá pra confiar só no zod aqui, precisa
     // do plano que está no banco).
     homePlacement: z.enum(HOME_PLACEMENTS).optional(),
+    // Escopo regional do espaço de home (migrations/019_region_segmentation.sql)
+    // — nacional é o padrão/comportamento de sempre. Só relevante quando isHome.
+    regionScope: z.enum(REGION_SCOPES).default("NACIONAL"),
+    regionUf: z.string().length(2).optional(),
+    regionCity: z.string().trim().max(120).optional(),
     label: z.string().trim().min(1).max(60).default("Apresentado por"),
     startsAt: z.string().datetime(),
     endsAt: z.string().datetime(),
@@ -34,6 +41,14 @@ const sponsorshipInput = z
   .refine((d) => !d.isHome || d.homePlacement, {
     message: "escolha a posição na home",
     path: ["homePlacement"],
+  })
+  .refine((d) => d.regionScope === "NACIONAL" || !!d.regionUf, {
+    message: "escolha o estado pro escopo regional",
+    path: ["regionUf"],
+  })
+  .refine((d) => d.regionScope !== "MUNICIPAL" || !!d.regionCity, {
+    message: "escolha a cidade pro escopo municipal",
+    path: ["regionCity"],
   });
 
 const SOCIAL_PLATFORMS = ["INSTAGRAM", "X", "TIKTOK", "YOUTUBE", "FACEBOOK", "WHATSAPP"] as const;
@@ -147,6 +162,7 @@ export const sponsorRouter = router({
       if (input?.marketId) { params.push(input.marketId); where = "WHERE sp.market_id = $1"; }
       const r = await ctx.pool.query(
         `SELECT sp.id, sp.label, sp.starts_at, sp.ends_at, sp.market_id, sp.is_home, sp.home_placement,
+                sp.region_scope, sp.region_uf, sp.region_city,
                 s.id AS sponsor_id, s.name AS sponsor_name, s.logo_url, s.site_url,
                 m.title AS market_title, m.slug AS market_slug
            FROM sponsorships sp
@@ -159,6 +175,8 @@ export const sponsorRouter = router({
         startsAt: row.starts_at as string, endsAt: row.ends_at as string,
         marketId: row.market_id as string | null, isHome: row.is_home as boolean,
         homePlacement: row.home_placement as "SIDEBAR" | "BANNER" | "GRID",
+        regionScope: row.region_scope as "NACIONAL" | "ESTADUAL" | "MUNICIPAL",
+        regionUf: row.region_uf as string | null, regionCity: row.region_city as string | null,
         marketTitle: row.market_title as string | null, marketSlug: row.market_slug as string | null,
         sponsor: {
           id: row.sponsor_id as string, name: row.sponsor_name as string,
@@ -178,9 +196,12 @@ export const sponsorRouter = router({
       homePlacement = input.homePlacement;
     }
     const r = await ctx.pool.query(
-      `INSERT INTO sponsorships (sponsor_id, market_id, is_home, home_placement, label, starts_at, ends_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      `INSERT INTO sponsorships
+         (sponsor_id, market_id, is_home, home_placement, region_scope, region_uf, region_city,
+          label, starts_at, ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [input.sponsorId, input.marketId ?? null, input.isHome, homePlacement,
+        input.regionScope, input.regionUf ?? null, input.regionCity?.trim() || null,
         input.label, input.startsAt, input.endsAt]);
     return { id: r.rows[0].id as string };
   }),
@@ -283,21 +304,41 @@ export const sponsorRouter = router({
     // exposição justa pra todo mundo ativo, sem precisar de infra de rodízio
     // com estado (cron, contador de impressão etc.).
     const r = await ctx.pool.query(
-      `SELECT sp.label, sp.home_placement, s.id AS sponsor_id, s.name, s.logo_url, s.site_url, s.creative_url
+      `SELECT sp.label, sp.home_placement, sp.region_scope, sp.region_uf, sp.region_city,
+              s.id AS sponsor_id, s.name, s.logo_url, s.site_url, s.creative_url
          FROM sponsorships sp
          JOIN sponsors s ON s.id = sp.sponsor_id
         WHERE sp.is_home = true
           AND s.is_active = true
           AND now() BETWEEN sp.starts_at AND sp.ends_at
         ORDER BY random()`);
-    const links = await socialLinksBySponsor(ctx.pool, [...new Set(r.rows.map((row) => row.sponsor_id))]);
-    const toItem = (row: (typeof r.rows)[number]) => ({
+
+    // Região do visitante (autodeclarada, opcional — sem geo-IP). Sponsorship
+    // regional só aparece pra quem bate; sem declaração, só vê os nacionais
+    // (não dá pra confirmar match, então não arrisca mostrar pro público errado).
+    let visitorUf: string | null = null;
+    let visitorCity: string | null = null;
+    if (ctx.user) {
+      const v = await ctx.pool.query(`SELECT region_uf, region_city FROM users WHERE id = $1`, [ctx.user.id]);
+      visitorUf = v.rows[0]?.region_uf ?? null;
+      visitorCity = v.rows[0]?.region_city ?? null;
+    }
+    const matchesVisitor = (row: (typeof r.rows)[number]) => {
+      if (row.region_scope === "NACIONAL") return true;
+      if (!visitorUf || visitorUf !== row.region_uf) return false;
+      if (row.region_scope === "ESTADUAL") return true;
+      return !!visitorCity && visitorCity.trim().toLowerCase() === (row.region_city as string).trim().toLowerCase();
+    };
+    const rows = r.rows.filter(matchesVisitor);
+
+    const links = await socialLinksBySponsor(ctx.pool, [...new Set(rows.map((row) => row.sponsor_id))]);
+    const toItem = (row: (typeof rows)[number]) => ({
       label: row.label as string, sponsorName: row.name as string,
       logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
       creativeUrl: row.creative_url as string | null,
       socialLinks: links.get(row.sponsor_id) ?? [],
     });
-    const byPlacement = (p: string) => r.rows.filter((row) => row.home_placement === p).map(toItem);
+    const byPlacement = (p: string) => rows.filter((row) => row.home_placement === p).map(toItem);
     return {
       sidebar: byPlacement("SIDEBAR").slice(0, 5),
       banner: byPlacement("BANNER").slice(0, 4),

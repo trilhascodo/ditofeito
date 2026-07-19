@@ -21,7 +21,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function signup(input: {
   handle: string; displayName: string; email: string; password: string;
-  cpf: string; captchaToken: string;
+  cpf: string; captchaToken: string; regionUf?: string; regionCity?: string;
 }) {
   return call<{ userId: string }>("/auth/signup", { method: "POST", body: JSON.stringify(input) });
 }
