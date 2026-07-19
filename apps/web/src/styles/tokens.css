@@ -151,6 +151,16 @@ a { color: var(--violeta); text-decoration: none; }
 .home-side { display: flex; flex-direction: column; gap: 20px; }
 @media (max-width: 860px) { .home-layout { grid-template-columns: minmax(0, 1fr); } }
 
+/* Anúncio lateral (Premium) duplicado — uma cópia por breakpoint, nunca as
+   duas ao mesmo tempo. No mobile a cópia da coluna lateral iria parar depois
+   da grade inteira de mercados; a cópia .patro-slots-mobile aparece logo após
+   a faixa, mantendo a posição visível que o plano paga por ela. */
+.patro-slots-mobile { display: none; }
+@media (max-width: 860px) {
+  .patro-slots-desktop { display: none; }
+  .patro-slots-mobile { display: block; margin-bottom: 28px; }
+}
+
 /* Painel de tendências (topo da lateral, acima dos links úteis) — maiores
    variações de probabilidade em 24h. .var.up/.down já existem (badge da
    página de mercado), só reaproveita. */

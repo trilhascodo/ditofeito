@@ -34,3 +34,11 @@ createRoot(document.getElementById("root")!).render(
     <Root />
   </StrictMode>,
 );
+
+// Sem estratégia de cache (sw.js é passthrough) — só existe pra satisfazer
+// o critério de instalabilidade do Chrome/Android (PWA → TWA no Play).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

@@ -324,6 +324,19 @@ export function Home() {
       {featured && <Destaque items={featured} />}
       <PatroFaixa items={home?.banner ?? []} />
 
+      {/* Cópia só-mobile do anúncio lateral (Premium) — no desktop ele mora na
+          coluna lateral, mas .home-layout colapsa pra 1 coluna abaixo de 860px
+          e empurra a lateral pro fim da página, atrás da grade inteira de
+          mercados. Isso contradiz a venda ("posição mais visível do portal")
+          pra quem paga mais. CSS alterna qual cópia aparece por breakpoint —
+          sem duplicar chamada de rede, a medição de impressão já dispara pelos
+          dados de `home`, não pela quantidade de vezes que renderiza. */}
+      {home && home.sidebar.length > 0 && (
+        <div className="patro-slots-mobile">
+          <PatroSlots items={home.sidebar} />
+        </div>
+      )}
+
       {busca && (
         <p className="hint-text" style={{ marginBottom: 12 }}>
           Resultado pra "{busca}"{markets ? ` — ${markets.length} mercado${markets.length === 1 ? "" : "s"}` : ""}
@@ -404,7 +417,11 @@ export function Home() {
         <div className="home-layout">
           <div className="home-main">{mainContent}</div>
           <div className="home-side">
-            {hasSidebarAds && <PatroSlots items={home.sidebar} />}
+            {hasSidebarAds && (
+              <div className="patro-slots-desktop">
+                <PatroSlots items={home.sidebar} />
+              </div>
+            )}
             <SidePanelList<TrendingItem>
               heading="Tendências" items={trending ?? []}
               badge={(it) => <DeltaBadge delta={it.delta} />}

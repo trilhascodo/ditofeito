@@ -48,7 +48,7 @@ export function MarketTile({ m }: { m: MarketTileData }) {
       {m.sponsor && (
         <div className="market-tile-sponsor">
           {m.sponsor.logoUrl && <img src={m.sponsor.logoUrl} alt="" height={14} style={{ width: "auto", maxWidth: 48 }} />}
-          {m.sponsor.label} <b>{m.sponsor.name}</b>
+          {m.sponsor.label && `${m.sponsor.label} `}<b>{m.sponsor.name}</b>
         </div>
       )}
     </Link>
