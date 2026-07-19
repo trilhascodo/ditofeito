@@ -3,6 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { lmsrPrices } from "@ditofeito/core";
 import { router, publicProcedure, protectedProcedure } from "../trpc/trpc.js";
 import { notify } from "../domain/notify.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
+
+// Liberado o bastante pra debate ativo, apertado o bastante pra travar
+// flood de script — mercado político é o cenário de maior risco aqui.
+const COMMENT_RATE_LIMIT = { max: 5, windowMs: 60_000 };
 
 // ----------------------------------------------------------------------------
 // Comentários por mercado — versão mais simples: sem thread (parent_id existe
@@ -54,6 +59,9 @@ export const commentsRouter = router({
   create: protectedProcedure
     .input(z.object({ marketId: z.string().uuid(), body: z.string().trim().min(1).max(5000) }))
     .mutation(async ({ ctx, input }) => {
+      if (!checkRateLimit(`comment:${ctx.user.id}`, COMMENT_RATE_LIMIT.max, COMMENT_RATE_LIMIT.windowMs))
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Devagar — espera um minuto antes de comentar de novo." });
+
       const m = await ctx.pool.query(`SELECT liquidity_b FROM markets WHERE id = $1`, [input.marketId]);
       if (!m.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
 
