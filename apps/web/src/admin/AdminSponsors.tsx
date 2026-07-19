@@ -13,6 +13,7 @@ const dtDisplay = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "sho
 function fmtPeriod(iso: string | Date): string {
   return dtDisplay.format(new Date(iso));
 }
+const fmtInt = (n: number) => n.toLocaleString("pt-BR");
 
 const PLACEMENT_LABEL: Record<string, string> = {
   SIDEBAR: "coluna lateral", BANNER: "faixa horizontal", GRID: "nativo na grade",
@@ -48,6 +49,7 @@ export function AdminSponsors() {
   const { data: sponsors } = trpc.sponsor.list.useQuery();
   const { data: sponsorships } = trpc.sponsor.listSponsorships.useQuery(undefined);
   const { data: markets } = trpc.admin.listMarkets.useQuery();
+  const { data: adStats } = trpc.adEvents.stats.useQuery({ days: 30 });
 
   const createSponsor = trpc.sponsor.create.useMutation();
   const setActive = trpc.sponsor.setActive.useMutation();
@@ -479,6 +481,38 @@ export function AdminSponsors() {
                 >
                   Remover
                 </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Desempenho dos anúncios</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Impressões (card renderizado) e cliques nos últimos 30 dias, por patrocínio vigente —
+          base pra negociar espaço e justificar preço.
+        </p>
+        {!adStats || adStats.length === 0 ? (
+          <p className="hint-text">Sem dados ainda.</p>
+        ) : (
+          adStats.map((row) => {
+            const ctr = row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0;
+            return (
+              <div key={row.sponsorshipId} className="admin-row">
+                <span className="titulo">
+                  {row.sponsorName}
+                  <div className="meta">
+                    {row.isHome
+                      ? `Espaço da home (${PLACEMENT_LABEL[row.homePlacement ?? ""] ?? row.homePlacement})`
+                      : row.marketTitle ?? "mercado removido"}
+                    {" · \""}{row.label}{"\""}
+                  </div>
+                </span>
+                <span className="mono hint-text">{fmtInt(row.impressions)} impr.</span>
+                <span className="mono hint-text">{fmtInt(row.uniqueImpressions)} únicas</span>
+                <span className="mono hint-text">{fmtInt(row.clicks)} cliques</span>
+                <span className="badge">CTR {ctr.toFixed(1)}%</span>
               </div>
             );
           })

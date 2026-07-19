@@ -90,10 +90,11 @@ com fallback de SPA (`try_files ... /index.html`) pras rotas do
 react-router (`/entrar`, `/m/:slug` etc.).
 
 Só os prefixos que realmente são da API (`/trpc/`, `/auth/`, `/embed/`,
-`/api/pub/`, `/card/`, `/vindicacao/`, `/health`) são desviados pro container
-via um snippet compartilhado (`infra/nginx/proxy-snippet.conf` → copiar pra
-`/etc/nginx/ditofeito-proxy.conf` na VPS, referenciado com `include` nas
-location{} — evita repetir o mesmo bloco de proxy_set_header 6 vezes).
+`/api/pub/`, `/card/`, `/vindicacao/`, `/ir/`, `/health`) são desviados pro
+container via um snippet compartilhado (`infra/nginx/proxy-snippet.conf` →
+copiar pra `/etc/nginx/ditofeito-proxy.conf` na VPS, referenciado com
+`include` nas location{} — evita repetir o mesmo bloco de proxy_set_header
+6 vezes).
 
 ```bash
 cp infra/nginx/proxy-snippet.conf /etc/nginx/ditofeito-proxy.conf

@@ -125,6 +125,7 @@ export function MarketPage() {
   const { data: related } = trpc.market.related.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!market },
   );
+  const trackImpression = trpc.adEvents.trackImpression.useMutation();
   const tradeMutation = trpc.trade.execute.useMutation();
   const commentMutation = trpc.comments.create.useMutation();
 
@@ -141,6 +142,12 @@ export function MarketPage() {
     document.title = `${market.title} — DitoFeito`;
     return () => { document.title = "DitoFeito — pode escrever"; };
   }, [market?.title]);
+
+  useEffect(() => {
+    if (!sponsorship) return;
+    trackImpression.mutate({ sponsorshipIds: [sponsorship.sponsorshipId] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sponsorship?.sponsorshipId]);
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
   if (error || !market) return <main className="page"><p className="error-text">Mercado não encontrado.</p></main>;
@@ -399,7 +406,7 @@ export function MarketPage() {
           {sponsorship && (
             <div className="patrocinio">
               {sponsorship.siteUrl ? (
-                <a className="patrocinio-main" href={sponsorship.siteUrl} target="_blank" rel="noopener noreferrer">
+                <a className="patrocinio-main" href={`/ir/${sponsorship.sponsorshipId}`} target="_blank" rel="noopener noreferrer">
                   {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
                   <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
                 </a>

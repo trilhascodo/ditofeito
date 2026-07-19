@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { getPool } from "@ditofeito/db";
 import { mountEmbed } from "./http/embed.js";
 import { mountVindication } from "./http/vindication.js";
+import { mountAdClick } from "./http/adClick.js";
 import { mountAuth } from "./http/auth.js";
 import { startJobs } from "./jobs/schedule.js";
 import { APP_CONFIG } from "./config.js";
@@ -25,6 +26,7 @@ const pool = getPool();
 // CORS restrito (frame-ancestors * é o requisito ali, não Access-Control).
 mountEmbed(app, pool);
 mountVindication(app, pool);
+mountAdClick(app, pool);
 
 app.use(express.json());
 app.use(cookieParser());

@@ -86,10 +86,16 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
 }
 
 interface HomeSponsor {
+  sponsorshipId: string;
   label: string; sponsorName: string; logoUrl: string | null; siteUrl: string | null;
   creativeUrl: string | null;
   socialLinks: SocialLinkItem[];
 }
+
+// Link de anúncio passa pelo redirect /ir/:id (registra clique) em vez de
+// ir direto pro site do patrocinador — base de medição pra negociação de
+// espaço/preço (adEvents.ts).
+const adHref = (sponsorshipId: string) => `/ir/${sponsorshipId}`;
 
 // Até 5 espaços de publicidade ao lado do destaque (layout.pdf — coluna
 // lateral empilhada, não mais faixa única embaixo do grid). Só renderiza o
@@ -112,7 +118,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
             <div key={i} className="patro-slot patro-slot-creative">
               <span className="patro-slot-label">{s.label}</span>
               {s.siteUrl ? (
-                <a className="patro-slot-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer" aria-label={s.sponsorName}>
+                <a className="patro-slot-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer" aria-label={s.sponsorName}>
                   {img}
                 </a>
               ) : img}
@@ -131,7 +137,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
         return (
           <div key={i} className="patro-slot">
             {s.siteUrl ? (
-              <a className="patro-slot-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+              <a className="patro-slot-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
             ) : conteudo}
             <SocialLinks items={s.socialLinks} />
           </div>
@@ -214,7 +220,7 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
         return (
           <div key={i} className="patro-faixa-item">
             {s.siteUrl ? (
-              <a className="patro-faixa-main" href={s.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+              <a className="patro-faixa-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
             ) : conteudo}
             <SocialLinks items={s.socialLinks} />
           </div>
@@ -239,7 +245,7 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
   return (
     <div className="market-tile market-tile-ad">
       {ad.siteUrl ? (
-        <a className="market-tile-ad-main" href={ad.siteUrl} target="_blank" rel="noopener noreferrer">{conteudo}</a>
+        <a className="market-tile-ad-main" href={adHref(ad.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
       ) : conteudo}
       <SocialLinks items={ad.socialLinks} />
     </div>
@@ -260,6 +266,16 @@ export function Home() {
   const { data: mostVoted } = trpc.market.mostVoted.useQuery();
   const { data: newest } = trpc.market.newest.useQuery();
   const { data: homeLinks } = trpc.homeLinks.list.useQuery();
+  const trackImpression = trpc.adEvents.trackImpression.useMutation();
+
+  // Impressão dos anúncios da home — dispara 1x quando o conjunto exibido
+  // muda (getActiveHome sorteia a cada carregamento, ver sponsor.ts).
+  useEffect(() => {
+    if (!home) return;
+    const ids = [...home.sidebar, ...home.banner, ...home.grid].map((s) => s.sponsorshipId);
+    if (ids.length > 0) trackImpression.mutate({ sponsorshipIds: ids });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [home]);
 
   // Anúncio nativo intercalado a cada 6 mercados reais — só se a lista for
   // grande o bastante pra não deixar o anúncio dominar (plano de mais

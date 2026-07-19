@@ -273,7 +273,7 @@ export const sponsorRouter = router({
     .input(z.object({ marketId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const r = await ctx.pool.query(
-        `SELECT sp.label, s.id AS sponsor_id, s.name, s.logo_url, s.site_url
+        `SELECT sp.id AS sponsorship_id, sp.label, s.id AS sponsor_id, s.name, s.logo_url, s.site_url
            FROM sponsorships sp
            JOIN sponsors s ON s.id = sp.sponsor_id
           WHERE sp.market_id = $1
@@ -285,6 +285,7 @@ export const sponsorRouter = router({
       const row = r.rows[0];
       const links = await socialLinksBySponsor(ctx.pool, [row.sponsor_id]);
       return {
+        sponsorshipId: row.sponsorship_id as string,
         label: row.label as string, sponsorName: row.name as string,
         logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
         socialLinks: links.get(row.sponsor_id) ?? [],
@@ -304,7 +305,8 @@ export const sponsorRouter = router({
     // exposição justa pra todo mundo ativo, sem precisar de infra de rodízio
     // com estado (cron, contador de impressão etc.).
     const r = await ctx.pool.query(
-      `SELECT sp.label, sp.home_placement, sp.region_scope, sp.region_uf, sp.region_city,
+      `SELECT sp.id AS sponsorship_id, sp.label, sp.home_placement,
+              sp.region_scope, sp.region_uf, sp.region_city,
               s.id AS sponsor_id, s.name, s.logo_url, s.site_url, s.creative_url
          FROM sponsorships sp
          JOIN sponsors s ON s.id = sp.sponsor_id
@@ -333,6 +335,7 @@ export const sponsorRouter = router({
 
     const links = await socialLinksBySponsor(ctx.pool, [...new Set(rows.map((row) => row.sponsor_id))]);
     const toItem = (row: (typeof rows)[number]) => ({
+      sponsorshipId: row.sponsorship_id as string,
       label: row.label as string, sponsorName: row.name as string,
       logoUrl: row.logo_url as string | null, siteUrl: row.site_url as string | null,
       creativeUrl: row.creative_url as string | null,
