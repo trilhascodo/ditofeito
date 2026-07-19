@@ -4,10 +4,7 @@ import { trpc } from "../lib/trpc";
 import { pct, relativeClose } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
 import { SocialLinks, type SocialLinkItem } from "../lib/socialIcons";
-
-const STATUS_LABEL: Record<string, string> = {
-  CLOSED: "ENCERRADO", RESOLVED: "RESOLVIDO", VOIDED: "ANULADO",
-};
+import { MarketTile } from "../components/MarketTile";
 
 interface FeaturedMarket {
   slug: string; title: string; type: string; closeAt: string; categoryName: string;
@@ -227,17 +224,6 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
   );
 }
 
-// Ícone por categoria — emoji, não foto (identidade §7: sem tratamento
-// heroico/pejorativo de candidatos). Fundo é sempre violeta-2, nunca uma
-// cor "de bandeira" por categoria — consistência de marca > variedade.
-const CATEGORY_EMOJI: Record<string, string> = {
-  "eleicoes-2026": "🗳️",
-  "esportes": "🏆",
-  "entretenimento": "🎬",
-  "mencoes": "💬",
-};
-const FALLBACK_EMOJI = "◆";
-
 // Terceira superfície de anúncio: card nativo intercalado na grade de
 // mercados (Home()). Rótulo "PUBLICIDADE" explícito — transparência sobre
 // o que é conteúdo vs. anúncio importa pra confiança do produto (mesmo
@@ -349,33 +335,7 @@ export function Home() {
           {gridItems.map((item) => item.kind === "ad" ? (
             <MarketTileAd key={item.key} ad={item.ad} />
           ) : (
-            <Link key={item.m.slug} to={`/m/${item.m.slug}`} className="market-tile">
-              <div className="market-tile-top">
-                <span className="market-tile-icon">{CATEGORY_EMOJI[item.m.categorySlug] ?? FALLBACK_EMOJI}</span>
-                <span className="market-tile-category">{item.m.categoryName}</span>
-                {item.m.status !== "OPEN" && (
-                  <span className="badge" style={{ marginLeft: "auto" }}>
-                    {STATUS_LABEL[item.m.status] ?? item.m.status}
-                  </span>
-                )}
-              </div>
-              <h3 className="market-tile-title">{item.m.title}</h3>
-              <div className="market-tile-bottom">
-                <span className="hint-text">{relativeClose(item.m.closeAt)}</span>
-                {item.m.summary && (
-                  <span className="market-tile-price">
-                    <small>{item.m.summary.label === "SIM" ? "chance de SIM" : item.m.summary.label}</small>
-                    <b className="mono">{pct(item.m.summary.price)}</b>
-                  </span>
-                )}
-              </div>
-              {item.m.sponsor && (
-                <div className="market-tile-sponsor">
-                  {item.m.sponsor.logoUrl && <img src={item.m.sponsor.logoUrl} alt="" height={14} style={{ width: "auto", maxWidth: 48 }} />}
-                  {item.m.sponsor.label} <b>{item.m.sponsor.name}</b>
-                </div>
-              )}
-            </Link>
+            <MarketTile key={item.m.slug} m={item.m} />
           ))}
         </div>
       )}

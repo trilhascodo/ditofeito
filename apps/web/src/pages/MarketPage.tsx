@@ -6,6 +6,7 @@ import { useAuth } from "../lib/useAuth";
 import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
 import { SocialLinks } from "../lib/socialIcons";
+import { MarketTile } from "../components/MarketTile";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
@@ -120,6 +121,9 @@ export function MarketPage() {
   );
   const { data: vindication } = trpc.user.myVindicationCard.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!user && market?.status === "RESOLVED" },
+  );
+  const { data: related } = trpc.market.related.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!market },
   );
   const tradeMutation = trpc.trade.execute.useMutation();
   const commentMutation = trpc.comments.create.useMutation();
@@ -453,6 +457,15 @@ export function MarketPage() {
           </div>
         )}
       </div>
+
+      {related && related.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 14px" }}>Continue explorando</h2>
+          <div className="market-grid">
+            {related.map((m) => <MarketTile key={m.slug} m={m} />)}
+          </div>
+        </div>
+      )}
 
       <div className={`carimbo ${showStamp ? "show" : ""}`} role="status">
         <div className="selo-big">DITO ✓<small>Registrado. Agora é esperar o feito.</small></div>

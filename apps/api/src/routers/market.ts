@@ -488,4 +488,60 @@ export const marketRouter = router({
         };
       });
     }),
+
+  // "Continue explorando" (fim da página de mercado) — mesma categoria
+  // primeiro, completa com os mais novos de qualquer categoria. É a peça que
+  // faltava no loop: sem isso, quem termina de ler um mercado não tem pra
+  // onde ir a não ser voltar pra home manualmente.
+  related: publicProcedure
+    .input(z.object({ marketId: z.string().uuid(), limit: z.number().int().min(1).max(12).default(6) }))
+    .query(async ({ ctx, input }) => {
+      const mk = await ctx.pool.query(`SELECT category_id FROM markets WHERE id = $1`, [input.marketId]);
+      if (!mk.rowCount) return [];
+      const categoryId = mk.rows[0].category_id as string;
+
+      const r = await ctx.pool.query(
+        `SELECT m.id, m.slug, m.title, m.status, m.type, m.liquidity_b, m.close_at,
+                c.slug AS category_slug, c.name AS category_name
+           FROM markets m JOIN categories c ON c.id = m.category_id
+          WHERE m.status = 'OPEN' AND m.id != $1
+          ORDER BY (m.category_id = $2) DESC, m.created_at DESC
+          LIMIT $3`,
+        [input.marketId, categoryId, input.limit],
+      );
+      if (!r.rowCount) return [];
+
+      const marketIds = r.rows.map((row) => row.id as string);
+      const out = await ctx.pool.query(
+        `SELECT market_id, label, q, is_catchall FROM market_outcomes
+          WHERE market_id = ANY($1) ORDER BY market_id, display_order, id`,
+        [marketIds],
+      );
+      const byMarket = new Map<string, { label: string; q: number; isCatchall: boolean }[]>();
+      for (const o of out.rows) {
+        const arr = byMarket.get(o.market_id) ?? [];
+        arr.push({ label: o.label, q: Number(o.q), isCatchall: o.is_catchall });
+        byMarket.set(o.market_id, arr);
+      }
+
+      return r.rows.map((row) => {
+        const outcomes = byMarket.get(row.id as string) ?? [];
+        const prices = lmsrPrices(outcomes.map((o) => o.q), Number(row.liquidity_b));
+        let summary: { label: string; price: number } | null = null;
+        if (row.type === "BINARY") {
+          const idx = outcomes.findIndex((o) => o.label === "SIM");
+          if (idx >= 0) summary = { label: "SIM", price: prices[idx] };
+        } else {
+          let best = -1;
+          outcomes.forEach((o, i) => { if (!o.isCatchall && (best < 0 || prices[i] > prices[best])) best = i; });
+          if (best >= 0) summary = { label: outcomes[best].label, price: prices[best] };
+        }
+        return {
+          slug: row.slug as string, title: row.title as string, status: row.status as string,
+          closeAt: row.close_at as Date,
+          categorySlug: row.category_slug as string, categoryName: row.category_name as string,
+          summary, sponsor: null as { label: string; name: string; logoUrl: string | null } | null,
+        };
+      });
+    }),
 });
