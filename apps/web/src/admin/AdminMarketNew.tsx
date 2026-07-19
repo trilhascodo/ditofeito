@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+
+interface PrefillState {
+  prefillTitle?: string; prefillCriteria?: string; prefillSource?: string;
+}
 
 // Espelha o regex de apps/api/src/routers/market.ts (slug) — sanitiza a
 // cada tecla (sem cortar hífen final, pra não atrapalhar quem tá digitando
@@ -22,19 +26,21 @@ function plusDaysLocal(dtLocalStr: string, days: number): string {
 
 export function AdminMarketNew() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = (location.state ?? {}) as PrefillState;
   const { data: categories } = trpc.market.categories.useQuery();
   const createMutation = trpc.market.create.useMutation();
 
-  const [slug, setSlug] = useState("");
+  const [slug, setSlug] = useState(prefill.prefillTitle ? finalizeSlug(prefill.prefillTitle) : "");
   const [slugTouched, setSlugTouched] = useState(false);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(prefill.prefillTitle ?? "");
   const [description, setDescription] = useState("");
   const [categorySlug, setCategorySlug] = useState("");
   const [type, setType] = useState<"BINARY" | "MULTI">("BINARY");
   const [outcomes, setOutcomes] = useState(["", ""]);
   const [includeCatchall, setIncludeCatchall] = useState(true);
-  const [resolutionCriteria, setResolutionCriteria] = useState("");
-  const [resolutionSource, setResolutionSource] = useState("");
+  const [resolutionCriteria, setResolutionCriteria] = useState(prefill.prefillCriteria ?? "");
+  const [resolutionSource, setResolutionSource] = useState(prefill.prefillSource ?? "");
   const [closeAt, setCloseAt] = useState("");
   const [resolveBy, setResolveBy] = useState("");
   const [resolveByTouched, setResolveByTouched] = useState(false);
@@ -83,6 +89,12 @@ export function AdminMarketNew() {
     <div>
       <div className="card">
         <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: 0 }}>Novo mercado</h1>
+        {prefill.prefillTitle && (
+          <p className="hint-text" style={{ marginTop: 8 }}>
+            Pré-preenchido a partir de uma solicitação — revise título, critério e fonte antes de publicar,
+            como qualquer outro mercado.
+          </p>
+        )}
       </div>
       <form onSubmit={onSubmit}>
         <div className="card" style={{ marginTop: 20 }}>
