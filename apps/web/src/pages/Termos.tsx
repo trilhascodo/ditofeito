@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-const ATUALIZADO = "18 de julho de 2026";
+const ATUALIZADO = "19 de julho de 2026";
 
 export function Termos() {
   return (
@@ -63,10 +63,21 @@ export function Termos() {
       <h3>Conduta</h3>
       <ul>
         <li>Comentários e previsões são públicos e ficam associados ao seu perfil.</li>
+        <li>Cada comentário mostra, junto com o texto, sua posição no mercado (quantas previsões e em que preço) e seu histórico de acerto no momento do post — é assim que o produto diferencia opinião com previsão registrada de opinião solta.</li>
         <li>Não é permitido assédio, discurso de ódio, ou conteúdo ilegal nos comentários.</li>
+        <li>Qualquer usuário logado pode denunciar um comentário. Denúncia nunca oculta nada sozinha — um moderador revisa manualmente antes de qualquer ação.</li>
         <li>Contas suspeitas de manipulação coordenada podem ser sinalizadas e revisadas manualmente antes de qualquer ação.</li>
         <li>Contas banidas perdem acesso ao site; pontos e posições não são reembolsados nem convertidos em nada.</li>
+        <li>Enviamos um e-mail quando um mercado que você previu resolve ou é anulado — dá pra desligar isso a qualquer momento em "Notificações", no seu perfil.</li>
       </ul>
+
+      <h3>Compartilhamento de resultado</h3>
+      <p>
+        Quando você acerta um mercado resolvido, geramos um card compartilhável
+        ("card de vindicação") com seu nome, o mercado e a previsão que você
+        registrou. A página fica publicada num link opaco (não listado, não
+        adivinhável) que só existe se você mesmo escolher compartilhar.
+      </p>
 
       <h3>Patrocínio</h3>
       <p>
@@ -74,7 +85,9 @@ export function Termos() {
         nativos, página de mercado) podem exibir patrocínio identificado
         como tal ("Apresentado por" ou "Publicidade"). Anunciantes têm um
         painel próprio pra gerenciar logo, site e redes sociais do próprio
-        anúncio, dentro do plano contratado.
+        anúncio, dentro do plano contratado. Patrocínio pode ser segmentado
+        por região (estado/cidade) com base no que o próprio anunciante e o
+        próprio usuário declararam — nunca por geolocalização automática.
       </p>
 
       <h3>Isenção de responsabilidade</h3>
@@ -107,9 +120,22 @@ export function Termos() {
         <li><b>CPF</b> — só pra garantir que cada pessoa tenha uma única conta (ver "Uma conta por pessoa" acima). Validamos formato e dígito verificador; não consultamos nenhuma base de terceiros.</li>
         <li><b>IP e navegador no momento do cadastro</b> — usados internamente pra identificar padrões de criação de múltiplas contas a partir do mesmo lugar. Não é usado pra rastrear sua navegação.</li>
         <li><b>Cookie de sessão</b> (httpOnly, não acessível por JavaScript) — necessário pra manter você logado. Não usamos cookies de rastreamento ou publicidade de terceiros.</li>
+        <li><b>Estado e cidade</b> (opcional, você escolhe informar ou não, no cadastro ou depois no perfil) — usados só pra decidir quais patrocinadores regionais mostrar pra você. Nunca inferimos sua localização por IP.</li>
         <li><b>Previsões, posições e comentários</b> — o conteúdo que você mesmo cria ao usar o site, público por natureza do produto.</li>
         <li><b>Dados de patrocinador</b> (pra contas de anunciante): nome, logo, site e redes sociais do próprio negócio — não são dados pessoais de pessoa física.</li>
+        <li><b>Nome, empresa, e-mail e telefone</b> — se você preenche o formulário de "Anuncie" ou "Solicitar mercado", mesmo sem ter conta no site, coletamos isso só pra te responder sobre a proposta.</li>
       </ul>
+
+      <h3>Audiência e anúncios (sem cookie, sem terceiro)</h3>
+      <p>
+        Medimos visitas às páginas e impressões/cliques em anúncios com um
+        hash calculado a partir do seu IP e navegador, misturado com um
+        segredo que troca todo dia e nunca é salvo em lugar nenhum. Isso deixa
+        contar "quantos visitantes diferentes hoje" sem conseguir remontar
+        pra quem é a pessoa, e sem precisar de cookie ou de ferramenta de
+        terceiro (tipo Google Analytics). Esse número não é associado à sua
+        conta, mesmo se você estiver logado.
+      </p>
 
       <h3>Com quem compartilhamos</h3>
       <p>
@@ -117,8 +143,8 @@ export function Termos() {
         prestadores de serviço, cada um só com o necessário pra função dele:
       </p>
       <ul>
-        <li><b>Resend</b> — envio de e-mails transacionais (confirmação de cadastro, redefinição de senha). Recebe seu e-mail e o conteúdo da mensagem.</li>
-        <li><b>Cloudflare</b> — verificação de que você é humano no cadastro (Turnstile) e armazenamento cifrado dos backups do banco de dados.</li>
+        <li><b>Resend</b> — envio de e-mails transacionais (confirmação de cadastro, redefinição de senha, aviso de resultado de mercado). Recebe seu e-mail e o conteúdo da mensagem.</li>
+        <li><b>Cloudflare</b> — verificação de que você é humano no cadastro e nos formulários públicos do site (Turnstile), e armazenamento cifrado dos backups do banco de dados.</li>
       </ul>
 
       <h3>Por quanto tempo guardamos</h3>
