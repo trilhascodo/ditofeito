@@ -43,6 +43,7 @@ export function AdminLayout() {
         <NavLink to="/admin/suspeitas" className={navClass}>Contas suspeitas</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin/patrocinadores" className={navClass}>Patrocinadores</NavLink>}
         {user.role === "ADMIN" && <NavLink to="/admin/links-home" className={navClass}>Links da home</NavLink>}
+        {user.role === "ADMIN" && <NavLink to="/admin/leads" className={navClass}>Leads</NavLink>}
         {user.role === "ADMIN" && <NavLink to="/admin/email" className={navClass}>E-mail</NavLink>}
         {user.role === "ADMIN" && (
           <Link to="/admin/mercados/novo" className="btn-small" style={{ marginLeft: "auto" }}>

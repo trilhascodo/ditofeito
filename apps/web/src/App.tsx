@@ -17,6 +17,8 @@ import { AdminMarketDetail } from "./admin/AdminMarketDetail";
 import { AdminCandidates } from "./admin/AdminCandidates";
 import { AdminSponsors } from "./admin/AdminSponsors";
 import { AdminHomeLinks } from "./admin/AdminHomeLinks";
+import { AdminLeads } from "./admin/AdminLeads";
+import { Anuncie } from "./pages/Anuncie";
 import { AdminEmailSettings } from "./admin/AdminEmailSettings";
 import { AdminSuspicious } from "./admin/AdminSuspicious";
 
@@ -34,6 +36,7 @@ const router = createBrowserRouter([
       { path: "/m/:slug", element: <MarketPage /> },
       { path: "/perfil", element: <Profile /> },
       { path: "/patrocinador", element: <SponsorPanel /> },
+      { path: "/anuncie", element: <Anuncie /> },
       {
         path: "/admin",
         element: <AdminLayout />,
@@ -45,6 +48,7 @@ const router = createBrowserRouter([
           { path: "candidatos", element: <AdminCandidates /> },
           { path: "patrocinadores", element: <AdminSponsors /> },
           { path: "links-home", element: <AdminHomeLinks /> },
+          { path: "leads", element: <AdminLeads /> },
           { path: "email", element: <AdminEmailSettings /> },
           { path: "suspeitas", element: <AdminSuspicious /> },
         ],
