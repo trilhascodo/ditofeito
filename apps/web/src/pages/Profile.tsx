@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
@@ -27,9 +28,23 @@ interface LedgerRow {
 
 export function Profile() {
   const { user, isLoading: authLoading } = useAuth();
+  const utils = trpc.useUtils();
   const { data: me, isLoading: meLoading } = trpc.user.me.useQuery(undefined, { enabled: !!user });
   const { data: positions, isLoading: positionsLoading } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
   const { data: ledger, isLoading: ledgerLoading } = trpc.user.myLedger.useQuery(undefined, { enabled: !!user });
+  const setEmailNotifications = trpc.user.setEmailNotifications.useMutation();
+  const [emailNotif, setEmailNotif] = useState(true);
+
+  useEffect(() => {
+    if (me) setEmailNotif(me.emailNotifications);
+  }, [me?.emailNotifications]);
+
+  async function onToggleEmailNotif() {
+    const next = !emailNotif;
+    setEmailNotif(next);
+    await setEmailNotifications.mutateAsync({ enabled: next });
+    await utils.user.me.invalidate();
+  }
 
   if (authLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
 
@@ -87,6 +102,14 @@ export function Profile() {
           </div>
         </div>
       )}
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Notificações</h2>
+        <label className="checkbox-row" style={{ marginBottom: 0 }}>
+          <input type="checkbox" checked={emailNotif} onChange={onToggleEmailNotif} disabled={setEmailNotifications.isPending} />
+          Avisar por e-mail quando um mercado que eu previ resolver ou for anulado
+        </label>
+      </div>
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Posições</h2>

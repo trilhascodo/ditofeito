@@ -38,8 +38,12 @@ export const userRouter = router({
          FROM user_reputation WHERE user_id = $1`,
       [ctx.user.id],
     );
+    const pref = await ctx.pool.query(
+      `SELECT email_notifications FROM users WHERE id = $1`, [ctx.user.id],
+    );
     return {
       ...ctx.user,
+      emailNotifications: pref.rows[0]?.email_notifications ?? true,
       balance: bal.rowCount ? Number(bal.rows[0].balance_after) : 0,
       reputation: rep.rowCount
         ? {
@@ -52,6 +56,19 @@ export const userRouter = router({
         : null,
     };
   }),
+
+  // Opt-out de e-mail de notificação (resolução/anulação de mercado) — sino
+  // no header continua funcionando independente disso, essa preferência é
+  // só do canal por e-mail.
+  setEmailNotifications: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(
+        `UPDATE users SET email_notifications = $2, updated_at = now() WHERE id = $1`,
+        [ctx.user.id, input.enabled],
+      );
+      return { ok: true };
+    }),
 
   myPositions: protectedProcedure.query(async ({ ctx }) => {
     const pos = await ctx.pool.query(

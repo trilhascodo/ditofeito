@@ -21,6 +21,20 @@ import {
   brierScore, userImpliedProbs, skillDelta,
 } from "@ditofeito/core";
 import { notify } from "./notify.js";
+import { sendTransactionalEmail } from "../lib/email.js";
+import { APP_CONFIG } from "../config.js";
+
+interface QueuedEmail { to: string; subject: string; html: string }
+
+// Dispara DEPOIS que a transação já commitou (nunca dentro do BEGIN/COMMIT —
+// e-mail é chamada de rede pro Resend, não pode segurar lock de linha nem
+// derrubar a resolução se falhar). Cada envio tem catch próprio: um e-mail
+// que falha não deveria afetar os outros.
+async function flushEmailQueue(pool: Pool, queue: QueuedEmail[]): Promise<void> {
+  for (const msg of queue) {
+    await sendTransactionalEmail(pool, msg).catch((e) => console.error("[trade] envio de e-mail falhou", e));
+  }
+}
 
 // ------------------------------- Config -------------------------------------
 export const TRADE_CONFIG = {
@@ -228,10 +242,12 @@ export async function resolveMarket(
        justification: string; sourceUrl: string },
 ): Promise<{ payouts: number; totalPaid: number }> {
   const c = await pool.connect();
+  const emailQueue: QueuedEmail[] = [];
+  let txResult: { payouts: number; totalPaid: number };
   try {
     await c.query("BEGIN");
     const mkt = await c.query(
-      `SELECT id, status, title FROM markets WHERE id = $1 FOR UPDATE`, [p.marketId]);
+      `SELECT id, status, title, slug FROM markets WHERE id = $1 FOR UPDATE`, [p.marketId]);
     if (!mkt.rowCount) throw new TradeError("MERCADO_INEXISTENTE", "não encontrado");
     if (!["OPEN", "CLOSED"].includes(mkt.rows[0].status))
       throw new TradeError("STATUS_INVALIDO", `Mercado ${mkt.rows[0].status}`);
@@ -306,23 +322,38 @@ export async function resolveMarket(
 
     // Notifica quem tinha posição aberta — ganhador ou não, todo mundo que
     // arriscou pontos merece saber que o mercado resolveu (é o gatilho que
-    // traz de volta sem precisar lembrar sozinho).
+    // traz de volta sem precisar lembrar sozinho). E-mail além do sino: quem
+    // não visita o site não vê o sino nunca.
     const winnerIds = new Set(winners.rows.map((w) => w.user_id as string));
     const winLabel = out.rows[winIdx].label as string;
     const title = mkt.rows[0].title as string;
+    const slug = mkt.rows[0].slug as string;
+    const marketUrl = `${APP_CONFIG.webOrigin}/m/${slug}`;
     const activeHolders = await c.query(
-      `SELECT DISTINCT user_id FROM positions WHERE market_id=$1 AND shares > 0`, [p.marketId]);
+      `SELECT DISTINCT p.user_id, u.email, u.email_notifications
+         FROM positions p JOIN users u ON u.id = p.user_id
+        WHERE p.market_id = $1 AND p.shares > 0`, [p.marketId]);
     for (const row of activeHolders.rows) {
       const uid = row.user_id as string;
-      const body = winnerIds.has(uid)
+      const won = winnerIds.has(uid);
+      const body = won
         ? `"${title}" resolveu: ${winLabel}. Você ganhou pontos — confira.`
         : `"${title}" resolveu: ${winLabel}. Não foi dessa vez.`;
       await notify(c, uid, "MARKET_RESOLVED", body, { marketId: p.marketId });
+      if (row.email_notifications) {
+        emailQueue.push({
+          to: row.email as string,
+          subject: `"${title}" resolveu — DitoFeito`,
+          html: `<p>${body}</p><p><a href="${marketUrl}">${marketUrl}</a></p>`,
+        });
+      }
     }
 
     await c.query("COMMIT");
-    return { payouts: winners.rowCount ?? 0, totalPaid };
+    txResult = { payouts: winners.rowCount ?? 0, totalPaid };
   } catch (e) { await c.query("ROLLBACK"); throw e; } finally { c.release(); }
+  await flushEmailQueue(pool, emailQueue);
+  return txResult;
 }
 
 // ---------------------------- Anulação ---------------------------------------
@@ -331,10 +362,12 @@ export async function voidMarket(
   p: { marketId: string; resolverUserId: string; justification: string; sourceUrl: string },
 ): Promise<{ refunds: number }> {
   const c = await pool.connect();
+  const emailQueue: QueuedEmail[] = [];
+  let txResult: { refunds: number };
   try {
     await c.query("BEGIN");
     const mkt = await c.query(
-      `SELECT status, title FROM markets WHERE id=$1 FOR UPDATE`, [p.marketId]);
+      `SELECT status, title, slug FROM markets WHERE id=$1 FOR UPDATE`, [p.marketId]);
     if (!mkt.rowCount || !["OPEN", "CLOSED"].includes(mkt.rows[0].status))
       throw new TradeError("STATUS_INVALIDO", "mercado não anulável");
     await c.query(
@@ -343,19 +376,30 @@ export async function voidMarket(
       [p.marketId, p.justification, p.sourceUrl, p.resolverUserId]);
     await c.query(`UPDATE markets SET status='VOIDED' WHERE id=$1`, [p.marketId]);
     const pos = await c.query(
-      `SELECT user_id, sum(cost_basis) AS basis FROM positions
-        WHERE market_id=$1 GROUP BY user_id HAVING sum(cost_basis) > 0
-        ORDER BY user_id`, [p.marketId]);
+      `SELECT p.user_id, sum(p.cost_basis) AS basis, u.email, u.email_notifications
+         FROM positions p JOIN users u ON u.id = p.user_id
+        WHERE p.market_id=$1 GROUP BY p.user_id, u.email, u.email_notifications
+       HAVING sum(p.cost_basis) > 0
+        ORDER BY p.user_id`, [p.marketId]);
     const title = mkt.rows[0].title as string;
+    const marketUrl = `${APP_CONFIG.webOrigin}/m/${mkt.rows[0].slug as string}`;
     for (const r of pos.rows) {
       await c.query(`SELECT id FROM users WHERE id=$1 FOR UPDATE`, [r.user_id]);
       await appendLedger(c, r.user_id, Number(r.basis), "MARKET_VOIDED", "market", p.marketId);
-      await notify(c, r.user_id, "MARKET_VOIDED",
-        `"${title}" foi anulado — seus pontos comprometidos foram devolvidos.`, { marketId: p.marketId });
+      const body = `"${title}" foi anulado — seus pontos comprometidos foram devolvidos.`;
+      await notify(c, r.user_id, "MARKET_VOIDED", body, { marketId: p.marketId });
+      if (r.email_notifications) {
+        emailQueue.push({
+          to: r.email as string, subject: `"${title}" foi anulado — DitoFeito`,
+          html: `<p>${body}</p><p><a href="${marketUrl}">${marketUrl}</a></p>`,
+        });
+      }
     }
     await c.query("COMMIT");
-    return { refunds: pos.rowCount ?? 0 };
+    txResult = { refunds: pos.rowCount ?? 0 };
   } catch (e) { await c.query("ROLLBACK"); throw e; } finally { c.release(); }
+  await flushEmailQueue(pool, emailQueue);
+  return txResult;
 }
 
 // --------------------- Auditoria do ledger (job/endpoint) --------------------
