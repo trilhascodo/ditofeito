@@ -122,7 +122,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
                   {img}
                 </a>
               ) : img}
-              <SocialLinks items={s.socialLinks} />
+              <SocialLinks items={s.socialLinks} sponsorshipId={s.sponsorshipId} />
             </div>
           );
         }
@@ -139,7 +139,7 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
             {s.siteUrl ? (
               <a className="patro-slot-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
             ) : conteudo}
-            <SocialLinks items={s.socialLinks} />
+            <SocialLinks items={s.socialLinks} sponsorshipId={s.sponsorshipId} />
           </div>
         );
       })}
@@ -222,7 +222,7 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
             {s.siteUrl ? (
               <a className="patro-faixa-main" href={adHref(s.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
             ) : conteudo}
-            <SocialLinks items={s.socialLinks} />
+            <SocialLinks items={s.socialLinks} sponsorshipId={s.sponsorshipId} />
           </div>
         );
       })}
@@ -247,7 +247,7 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
       {ad.siteUrl ? (
         <a className="market-tile-ad-main" href={adHref(ad.sponsorshipId)} target="_blank" rel="noopener noreferrer">{conteudo}</a>
       ) : conteudo}
-      <SocialLinks items={ad.socialLinks} />
+      <SocialLinks items={ad.socialLinks} sponsorshipId={ad.sponsorshipId} />
     </div>
   );
 }

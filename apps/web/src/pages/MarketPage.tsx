@@ -449,7 +449,7 @@ export function MarketPage() {
                   <span>{sponsorship.label} <b>{sponsorship.sponsorName}</b></span>
                 </>
               )}
-              <SocialLinks items={sponsorship.socialLinks} />
+              <SocialLinks items={sponsorship.socialLinks} sponsorshipId={sponsorship.sponsorshipId} />
             </div>
           )}
         </aside>

@@ -18,15 +18,21 @@ export const SOCIAL_LABEL: Record<SocialPlatform, string> = {
   YOUTUBE: "YouTube", FACEBOOK: "Facebook", WHATSAPP: "WhatsApp",
 };
 
-export interface SocialLinkItem { platform: SocialPlatform; url: string }
+export interface SocialLinkItem { id: string; platform: SocialPlatform; url: string }
 
-export function SocialLinks({ items }: { items: SocialLinkItem[] }) {
+// sponsorshipId opcional: quando presente, o clique passa pelo redirect
+// /ir/:sponsorshipId/social/:id (mesma métrica de ad_events do link
+// principal — clique é clique, rede social não é canal à parte pro CTR).
+// Sem sponsorshipId (não deveria acontecer nos 4 lugares que usam isso hoje,
+// mas evita quebrar se algum uso futuro não tiver), cai no link direto.
+export function SocialLinks({ items, sponsorshipId }: { items: SocialLinkItem[]; sponsorshipId?: string }) {
   if (items.length === 0) return null;
   return (
     <div className="social-links">
       {items.map((it) => (
         <a
-          key={it.platform} className="social-link" href={it.url}
+          key={it.id} className="social-link"
+          href={sponsorshipId ? `/ir/${sponsorshipId}/social/${it.id}` : it.url}
           target="_blank" rel="noopener noreferrer" aria-label={SOCIAL_LABEL[it.platform]}
         >
           <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor"
