@@ -42,6 +42,7 @@ export function AdminLayout() {
         <NavLink to="/admin/candidatos" className={navClass}>Candidatos</NavLink>
         <NavLink to="/admin/suspeitas" className={navClass}>Contas suspeitas</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin/usuarios" className={navClass}>Usuários</NavLink>}
+        {user.role === "ADMIN" && <NavLink to="/admin/audiencia" className={navClass}>Audiência</NavLink>}
         {user.role === "ADMIN" && <NavLink to="/admin/patrocinadores" className={navClass}>Patrocinadores</NavLink>}
         {user.role === "ADMIN" && <NavLink to="/admin/links-home" className={navClass}>Links da home</NavLink>}
         {user.role === "ADMIN" && <NavLink to="/admin/leads" className={navClass}>Leads</NavLink>}

@@ -1,14 +1,36 @@
-import { useState, type FormEvent } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { logout } from "./lib/auth";
 import { useAuth } from "./lib/useAuth";
+import { trpc } from "./lib/trpc";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
+
+// Analytics próprio (page_views) — 1 track por mudança de rota da SPA, sem
+// cookie e sem terceiro (visitorHash.ts cuida do hash no backend). Referrer
+// só interessa na primeira carga (navegação interna não teria terceiro).
+function usePageViewTracking() {
+  const location = useLocation();
+  const track = trpc.pageViews.track.useMutation();
+  useEffect(() => {
+    const referrerHost = (() => {
+      try {
+        const ref = document.referrer && new URL(document.referrer);
+        return ref && ref.hostname !== window.location.hostname ? ref.hostname : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    track.mutate({ path: location.pathname, referrerHost });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+}
 
 export function Layout() {
   const { user, isLoading, refresh } = useAuth();
   const navigate = useNavigate();
   const [busca, setBusca] = useState("");
+  usePageViewTracking();
 
   async function onLogout() {
     await logout();
