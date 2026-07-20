@@ -8,8 +8,10 @@
 //     -> sem MULTI (não há "vencedor" da disputa); só binários individuais
 //   TODO CANDIDATO (qualquer cargo):
 //     -> binário "será eleito?"           (slug eleito-*)
-//     -> na fase 1, binário "vai registrar?" (slug registro-*  ← convenção que
-//        o matcher.ts usa p/ resolução automática no match TSE)
+//
+// "vai registrar candidatura?" (slug registro-*) foi aposentado por decisão
+// de produto (migrations/023_remove_registro_markets.sql apaga os existentes
+// sem atividade real) — não recriar.
 //
 // Idempotente: dedupe por slug (ON CONFLICT DO NOTHING) + sincronização de
 // outcomes dos MULTI quando novos pré-candidatos entram na disputa.
@@ -20,7 +22,6 @@ import { suggestB } from "@ditofeito/core";
 // ------------------------------ Calendário -----------------------------------
 // Datas oficiais do ciclo 2026 (ajustar por resolução TSE se mudarem)
 export const CALENDARIO_2026 = {
-  prazoRegistro: "2026-08-15T23:59:59-03:00",   // fim do registro de candidaturas
   primeiroTurno: "2026-10-04T17:00:00-03:00",
   segundoTurno:  "2026-10-25T17:00:00-03:00",
   prazoResolucaoEleito: "2026-12-20T23:59:59-03:00", // pós-diplomação
@@ -63,8 +64,7 @@ const sufixoLocal = (c: Candidato) =>
 // 1. BINÁRIOS POR CANDIDATO — "vai registrar?" (fase 1) e "será eleito?"
 // ============================================================================
 export async function gerarBinariosCandidatos(
-  pool: Pool, opts: { categoriaEleicoesId: string; sistemaUserId: string;
-                      incluirRegistro?: boolean; publicarDireto?: boolean },
+  pool: Pool, opts: { categoriaEleicoesId: string; sistemaUserId: string; publicarDireto?: boolean },
 ): Promise<{ criados: number }> {
   const c = await pool.connect();
   let criados = 0;
@@ -82,24 +82,6 @@ export async function gerarBinariosCandidatos(
       const local = sufixoLocal(cand);
       const cargoTxt = CARGO_LABEL[cand.office] ?? cand.office.toLowerCase();
       const base = `${slugify(nome)}-${slugify(cand.office)}${cand.uf ? "-" + cand.uf.toLowerCase() : ""}`;
-
-      // --- "vai registrar candidatura?" — só na fase 1, fecha no prazo TSE ---
-      const ehFase1 = ["PRE_ANUNCIADO", "PRE_REIVINDICADO"].includes(cand.candidacy_status);
-      if ((opts.incluirRegistro ?? true) && ehFase1) {
-        criados += await criarBinario(c, {
-          slug: `registro-${base}`,   // convenção esperada pelo matcher.ts
-          titulo: `${nome} (${cand.party}) vai registrar candidatura a ${cargoTxt}${local} no TSE?`,
-          criterio:
-            `Resolve SIM se constar registro de candidatura de ${cand.name} ao cargo de ` +
-            `${cargoTxt}${local ? " pela UF " + cand.uf : ""} na base oficial do TSE ` +
-            `(consulta_cand 2026) até o fim do prazo legal de registro. Caso contrário, resolve NÃO.`,
-          fonte: "TSE — DivulgaCandContas / dados abertos (consulta_cand 2026)",
-          closeAt: CALENDARIO_2026.prazoRegistro,
-          resolveBy: "2026-08-31T23:59:59-03:00",
-          categoriaId: opts.categoriaEleicoesId, criadoPor: opts.sistemaUserId,
-          candidateId: cand.id, publicarDireto: opts.publicarDireto,
-        });
-      }
 
       // --- "será eleito?" — todo candidato, resolve após diplomação ---
       criados += await criarBinario(c, {

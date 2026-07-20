@@ -112,7 +112,7 @@ export async function applyMatchEffects(
   client: { query: (q: string, v?: unknown[]) => Promise<{ rows: any[] }> },
   candidateId: string, sqCandidato: string,
 ) {
-  // 1. Hidrata o candidato com os dados oficiais
+  // Hidrata o candidato com os dados oficiais
   await client.query(
     `UPDATE candidates c SET
        tse_sq_candidato = t.sq_candidato,
@@ -126,15 +126,6 @@ export async function applyMatchEffects(
      WHERE c.id = $1 AND t.sq_candidato = $2`,
     [candidateId, sqCandidato],
   );
-  // 2. Marca p/ resolução os mercados "vai registrar candidatura?" (SIM)
-  //    A resolução em si segue o fluxo normal (resolutions), com fonte = TSE.
-  await client.query(
-    `UPDATE markets m SET status='CLOSED'
-      FROM market_outcomes o
-     WHERE o.market_id = m.id AND o.candidate_id = $1
-       AND m.status='OPEN' AND m.slug LIKE 'registro-%'`,
-    [candidateId],
-  );
 }
 
 // Após o prazo final de registro: quem sobrou sem par não registrou.
@@ -143,7 +134,6 @@ export async function markNonRegistered(pool: Pool) {
     `UPDATE candidates SET candidacy_status='NAO_REGISTROU', updated_at=now()
       WHERE candidacy_status IN ('PRE_ANUNCIADO','PRE_REIVINDICADO')
         AND tse_sq_candidato IS NULL`);
-  // mercados "registro-*" desses candidatos resolvem NÃO pelo fluxo normal
 }
 
 // Candidatos que só existem no TSE (nunca passaram pela fase 1): criar do zero.
