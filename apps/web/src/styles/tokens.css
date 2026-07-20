@@ -213,27 +213,37 @@ a { color: var(--violeta); text-decoration: none; }
 .patro-slot-creative .social-links { padding: 10px 14px; margin-top: 0; }
 
 /* .patro-slots-mobile usa o mesmo .patro-slot pensado pra uma coluna lateral
-   de 300px (padding generoso, vertical, arte cheia responsiva). Em largura de
-   tela toda isso ficou pesado no teste em aparelho real — nome truncando,
-   card grande, e a arte pronta (width:100%/height:auto) desalinhava dependendo
-   da largura da tela, empurrando o resto da página pra baixo. Solução mais
-   robusta: só logo + redes sociais, tudo em caixa de tamanho FIXO (nada de
-   % ou auto que dependa da largura da viewport) — rótulo, nome e CTA somem. */
+   de 300px — mesmo reduzido a logo+social num box de tamanho fixo, ainda não
+   fluiu bem no teste em aparelho real. Simplifica pro mínimo possível: só um
+   link de texto com o nome do patrocinador, sem card/logo/ícone nenhum. */
 @media (max-width: 860px) {
-  .patro-slots-mobile .patro-slots { gap: 10px; }
+  .patro-slots-mobile .patro-slots { gap: 2px; }
+
+  /* Arte pronta (upload do próprio anunciante) não reduz bem a texto —
+     melhor não mostrar em tela pequena do que exibir uma miniatura sem
+     sentido do design dela. */
+  .patro-slots-mobile .patro-slot-creative { display: none; }
+
   .patro-slots-mobile .patro-slot {
-    flex-direction: row; align-items: center; justify-content: flex-start;
-    padding: 10px 16px; min-height: 0; gap: 10px; background: #fff;
+    background: none; border: 0; padding: 8px 0; min-height: 0;
+    border-bottom: 1px solid var(--linha);
   }
+  .patro-slots-mobile .patro-slots > .patro-slot:last-child { border-bottom: 0; }
+  .patro-slots-mobile .patro-slot::before { display: none; }
   .patro-slots-mobile .patro-slot-label,
-  .patro-slots-mobile .patro-slot b,
-  .patro-slots-mobile .patro-slot-cta { display: none; }
-  .patro-slots-mobile .patro-slot-main { flex: none; display: flex; align-items: center; width: auto; }
   .patro-slots-mobile .patro-slot img,
-  .patro-slots-mobile .patro-slot-creative .patro-slot-creative-img {
-    width: 44px; height: 44px; max-width: 44px; max-height: 44px; object-fit: contain; flex: none;
+  .patro-slots-mobile .patro-slot-cta,
+  .patro-slots-mobile .social-links { display: none; }
+  .patro-slots-mobile .patro-slot-main { display: inline; width: auto; }
+  /* Sem site cadastrado não tem link nenhum — nesse caso o nome vira filho
+     direto de .patro-slot (sem .patro-slot-main em volta) em vez de <a>, e
+     "só o link" quer dizer não mostrar nada, já que não há aonde clicar
+     (sem isso sobra uma linha vazia, só com a borda, no lugar do card). */
+  .patro-slots-mobile .patro-slot:not(.patro-slot-creative):not(:has(.patro-slot-main)) { display: none; }
+  .patro-slots-mobile .patro-slot-main b {
+    display: inline; font: 500 13px var(--sans); color: var(--violeta);
   }
-  .patro-slots-mobile .social-links { margin-top: 0; }
+  .patro-slots-mobile .patro-slot-main b::before { content: "Patrocinado por "; font-weight: 400; color: var(--grafite); }
 }
 
 /* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
