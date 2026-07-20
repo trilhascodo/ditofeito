@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { router, publicProcedure, adminProcedure, sponsorProcedure } from "../trpc/trpc.js";
+import { router, publicProcedure, protectedProcedure, adminProcedure, sponsorProcedure } from "../trpc/trpc.js";
+import { notify } from "../domain/notify.js";
+import { sendTransactionalEmail } from "../lib/email.js";
+import { APP_CONFIG } from "../config.js";
 
 // ----------------------------------------------------------------------------
 // Patrocínio nativo (identidade-ditofeito.md — card "Apresentado por", nunca
@@ -59,6 +62,32 @@ const sponsorshipInput = sponsorshipBase
 // schemas trava o TS em inferência de overload do zod).
 const sponsorshipUpdateInput = sponsorshipBase
   .extend({ id: z.string().uuid() })
+  .refine((d) => new Date(d.endsAt) > new Date(d.startsAt), {
+    message: "endsAt deve ser depois de startsAt",
+    path: ["endsAt"],
+  })
+  .refine((d) => d.marketId || d.isHome, {
+    message: "escolha um mercado ou marque como faixa da home",
+    path: ["marketId"],
+  })
+  .refine((d) => !d.isHome || d.homePlacement, {
+    message: "escolha a posição na home",
+    path: ["homePlacement"],
+  })
+  .refine((d) => d.regionScope === "NACIONAL" || !!d.regionUf, {
+    message: "escolha o estado pro escopo regional",
+    path: ["regionUf"],
+  })
+  .refine((d) => d.regionScope !== "MUNICIPAL" || !!d.regionCity, {
+    message: "escolha a cidade pro escopo municipal",
+    path: ["regionCity"],
+  });
+
+// Mesmo shape de sponsorshipInput, sem `sponsorId` — pedido de autoatendimento
+// nunca aceita sponsorId do cliente, sempre usa ctx.sponsorId (sponsorProcedure).
+// Duplicado por causa do mesmo problema de inferência do zod citado acima.
+const selfSponsorshipInput = sponsorshipBase
+  .omit({ sponsorId: true })
   .refine((d) => new Date(d.endsAt) > new Date(d.startsAt), {
     message: "endsAt deve ser depois de startsAt",
     path: ["endsAt"],
@@ -156,16 +185,40 @@ async function socialLinksBySponsor(pool: import("pg").Pool, sponsorIds: string[
   return map;
 }
 
+// Avisa (in-app + e-mail) toda conta SPONSOR vinculada ao sponsor — normalmente
+// uma só, mas linkUser não impede vincular mais de uma. E-mail nunca derruba a
+// mutation principal (mesma convenção de auth.ts: falha vira log, não erro).
+async function notifySponsorUsers(
+  pool: import("pg").Pool,
+  sponsorId: string,
+  kind: "SPONSOR_REVIEW_APPROVED" | "SPONSOR_REVIEW_REJECTED",
+  body: string,
+  email: { subject: string; html: string },
+): Promise<void> {
+  const r = await pool.query(
+    `SELECT id, email FROM users WHERE sponsor_id = $1 AND role = 'SPONSOR'`, [sponsorId]);
+  for (const row of r.rows) {
+    await notify(pool, row.id as string, kind, body);
+    sendTransactionalEmail(pool, { to: row.email as string, ...email })
+      .catch((e) => console.error("[sponsor] envio de e-mail falhou", e));
+  }
+}
+
 export const sponsorRouter = router({
   // ---- ADMIN: cadastro de patrocinadores ----------------------------------
   list: adminProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(
-      `SELECT id, name, logo_url, site_url, creative_url, is_active, plan FROM sponsors ORDER BY name`);
+      `SELECT id, name, logo_url, site_url, creative_url, pending_creative_url,
+              creative_review_status, creative_admin_note, is_active, plan
+         FROM sponsors ORDER BY name`);
     const links = await socialLinksBySponsor(ctx.pool, r.rows.map((s) => s.id as string));
     return r.rows.map((s) => ({
       id: s.id as string, name: s.name as string,
       logoUrl: s.logo_url as string | null, siteUrl: s.site_url as string | null,
       creativeUrl: s.creative_url as string | null,
+      pendingCreativeUrl: s.pending_creative_url as string | null,
+      creativeReviewStatus: s.creative_review_status as "NONE" | "PENDING" | "APPROVED" | "REJECTED",
+      creativeAdminNote: s.creative_admin_note as string | null,
       isActive: s.is_active as boolean, plan: s.plan as string,
       socialLinks: links.get(s.id as string) ?? [],
     }));
@@ -222,6 +275,137 @@ export const sponsorRouter = router({
           WHERE handle = $2 AND role = 'USER' RETURNING id`,
         [input.sponsorId, input.handle]);
       if (!r.rowCount) throw new Error("Usuário não encontrado ou já tem outro papel no site");
+      return { ok: true };
+    }),
+
+  // ---- AUTOATENDIMENTO: aplicação de conta de anunciante ------------------
+  // Substitui os dois passos manuais acima (create + linkUser) por um único
+  // clique de aprovação — o próprio interessado preenche os dados.
+  createApplication: protectedProcedure
+    .input(z.object({
+      companyName: z.string().trim().min(1).max(120),
+      requestedPlan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]),
+      siteUrl: z.string().trim().url().optional(),
+      logoUrl: z.string().trim().url().optional(),
+      message: z.string().trim().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "USER")
+        throw new Error("Essa conta já tem outro papel no site — fale com o suporte.");
+      if (!ctx.user.emailVerified)
+        throw new Error("Confirme seu e-mail antes de aplicar pra virar anunciante.");
+      const pending = await ctx.pool.query(
+        `SELECT 1 FROM sponsor_applications WHERE user_id = $1 AND status = 'NOVO'`, [ctx.user.id]);
+      if (pending.rowCount) throw new Error("Você já tem uma aplicação em análise.");
+      const r = await ctx.pool.query(
+        `INSERT INTO sponsor_applications (user_id, company_name, requested_plan, site_url, logo_url, message)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [ctx.user.id, input.companyName, input.requestedPlan,
+          input.siteUrl ?? null, input.logoUrl ?? null, input.message ?? null]);
+      return { id: r.rows[0].id as string };
+    }),
+
+  listMyApplications: protectedProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT id, company_name, requested_plan, status, admin_note, created_at
+         FROM sponsor_applications WHERE user_id = $1 ORDER BY created_at DESC`, [ctx.user.id]);
+    return r.rows.map((row) => ({
+      id: row.id as string, companyName: row.company_name as string,
+      requestedPlan: row.requested_plan as string, status: row.status as "NOVO" | "APROVADO" | "REJEITADO",
+      adminNote: row.admin_note as string | null, createdAt: row.created_at as string,
+    }));
+  }),
+
+  listApplications: adminProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT sa.id, sa.company_name, sa.requested_plan, sa.site_url, sa.logo_url, sa.message,
+              sa.status, sa.admin_note, sa.created_at,
+              u.id AS user_id, u.handle, u.display_name, u.email
+         FROM sponsor_applications sa
+         JOIN users u ON u.id = sa.user_id
+        ORDER BY sa.created_at DESC`);
+    return r.rows.map((row) => ({
+      id: row.id as string, companyName: row.company_name as string,
+      requestedPlan: row.requested_plan as string, siteUrl: row.site_url as string | null,
+      logoUrl: row.logo_url as string | null, message: row.message as string | null,
+      status: row.status as "NOVO" | "APROVADO" | "REJEITADO", adminNote: row.admin_note as string | null,
+      createdAt: row.created_at as string,
+      applicant: { id: row.user_id as string, handle: row.handle as string, displayName: row.display_name as string },
+    }));
+  }),
+
+  // Aprovar cria o sponsor E promove o usuário numa transação só — mesma
+  // guarda de linkUser (só promove role='USER' puro).
+  approveApplication: adminProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      plan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]).optional(),
+      name: z.string().trim().min(1).max(120).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const client = await ctx.pool.connect();
+      let userId: string;
+      let userEmail: string;
+      try {
+        await client.query("BEGIN");
+        const app = await client.query(
+          `SELECT user_id, company_name, requested_plan, site_url, logo_url
+             FROM sponsor_applications WHERE id = $1 AND status = 'NOVO' FOR UPDATE`, [input.id]);
+        if (!app.rowCount) throw new Error("Aplicação não encontrada ou já decidida");
+        const row = app.rows[0];
+        userId = row.user_id as string;
+
+        const sp = await client.query(
+          `INSERT INTO sponsors (name, logo_url, site_url, plan) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [input.name ?? row.company_name, row.logo_url, row.site_url, input.plan ?? row.requested_plan]);
+        const sponsorId = sp.rows[0].id as string;
+
+        const promoted = await client.query(
+          `UPDATE users SET role = 'SPONSOR', sponsor_id = $1, updated_at = now()
+             WHERE id = $2 AND role = 'USER' RETURNING email`,
+          [sponsorId, userId]);
+        if (!promoted.rowCount) throw new Error("Usuário já tem outro papel no site — não foi promovido");
+        userEmail = promoted.rows[0].email as string;
+
+        await client.query(`UPDATE sponsor_applications SET status = 'APROVADO' WHERE id = $1`, [input.id]);
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
+
+      const link = `${APP_CONFIG.appBaseUrl}/patrocinador`;
+      await notify(ctx.pool, userId, "SPONSOR_REVIEW_APPROVED",
+        "Sua conta de anunciante foi aprovada — acesse o painel pra configurar sua campanha.");
+      sendTransactionalEmail(ctx.pool, {
+        to: userEmail, subject: "Conta de anunciante aprovada — DitoFeito",
+        html: `<p>Sua aplicação foi aprovada. Acesse seu painel de anunciante:</p>
+               <p><a href="${link}">${link}</a></p>`,
+      }).catch((e) => console.error("[sponsor] envio de e-mail falhou", e));
+      return { ok: true };
+    }),
+
+  rejectApplication: adminProcedure
+    .input(z.object({ id: z.string().uuid(), adminNote: z.string().trim().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `UPDATE sponsor_applications SET status = 'REJEITADO', admin_note = $2
+           WHERE id = $1 AND status = 'NOVO' RETURNING user_id`,
+        [input.id, input.adminNote]);
+      if (!r.rowCount) throw new Error("Aplicação não encontrada ou já decidida");
+      const userId = r.rows[0].user_id as string;
+      const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+      await notify(ctx.pool, userId, "SPONSOR_REVIEW_REJECTED",
+        `Sua aplicação de anunciante não foi aprovada: ${input.adminNote}`);
+      const email = u.rows[0]?.email as string | undefined;
+      if (email) {
+        sendTransactionalEmail(ctx.pool, {
+          to: email, subject: "Sobre sua aplicação de anunciante — DitoFeito",
+          html: `<p>Sua aplicação de anunciante não foi aprovada.</p><p>${input.adminNote}</p>`,
+        }).catch((e) => console.error("[sponsor] envio de e-mail falhou", e));
+      }
       return { ok: true };
     }),
 
@@ -294,22 +478,120 @@ export const sponsorRouter = router({
       return { ok: true };
     }),
 
+  // ---- ADMIN: fila de aprovação de campanhas pedidas em autoatendimento ---
+  listPendingSponsorships: adminProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT sp.id, sp.label, sp.starts_at, sp.ends_at, sp.market_id, sp.is_home, sp.home_placement,
+              sp.region_scope, sp.region_uf, sp.region_city,
+              s.id AS sponsor_id, s.name AS sponsor_name,
+              m.title AS market_title, m.slug AS market_slug
+         FROM sponsorships sp
+         JOIN sponsors s ON s.id = sp.sponsor_id
+         LEFT JOIN markets m ON m.id = sp.market_id
+        WHERE sp.approval_status = 'PENDING'
+        ORDER BY sp.starts_at ASC`);
+    return r.rows.map((row) => ({
+      id: row.id as string, label: row.label as string,
+      startsAt: row.starts_at as string, endsAt: row.ends_at as string,
+      marketId: row.market_id as string | null, isHome: row.is_home as boolean,
+      homePlacement: row.home_placement as "SIDEBAR" | "BANNER" | "GRID",
+      regionScope: row.region_scope as "NACIONAL" | "ESTADUAL" | "MUNICIPAL",
+      regionUf: row.region_uf as string | null, regionCity: row.region_city as string | null,
+      marketTitle: row.market_title as string | null, marketSlug: row.market_slug as string | null,
+      sponsor: { id: row.sponsor_id as string, name: row.sponsor_name as string },
+    }));
+  }),
+
+  approveSponsorship: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `UPDATE sponsorships SET approval_status = 'APPROVED'
+           WHERE id = $1 AND approval_status = 'PENDING' RETURNING sponsor_id`, [input.id]);
+      if (!r.rowCount) throw new Error("Patrocínio não encontrado ou já decidido");
+      await notifySponsorUsers(
+        ctx.pool, r.rows[0].sponsor_id as string, "SPONSOR_REVIEW_APPROVED",
+        "Seu patrocínio foi aprovado e já está no ar.",
+        { subject: "Patrocínio aprovado — DitoFeito", html: "<p>Seu patrocínio foi aprovado e já está no ar.</p>" },
+      );
+      return { ok: true };
+    }),
+
+  rejectSponsorship: adminProcedure
+    .input(z.object({ id: z.string().uuid(), adminNote: z.string().trim().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `UPDATE sponsorships SET approval_status = 'REJECTED', admin_note = $2
+           WHERE id = $1 AND approval_status = 'PENDING' RETURNING sponsor_id`, [input.id, input.adminNote]);
+      if (!r.rowCount) throw new Error("Patrocínio não encontrado ou já decidido");
+      await notifySponsorUsers(
+        ctx.pool, r.rows[0].sponsor_id as string, "SPONSOR_REVIEW_REJECTED",
+        `Seu pedido de patrocínio não foi aprovado: ${input.adminNote}`,
+        { subject: "Sobre seu pedido de patrocínio — DitoFeito",
+          html: `<p>Seu pedido de patrocínio não foi aprovado.</p><p>${input.adminNote}</p>` },
+      );
+      return { ok: true };
+    }),
+
+  // ---- ADMIN: fila de aprovação de arte enviada em autoatendimento --------
+  approveCreative: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `UPDATE sponsors SET creative_url = pending_creative_url, pending_creative_url = NULL,
+                creative_review_status = 'NONE', creative_admin_note = NULL
+           WHERE id = $1 AND creative_review_status = 'PENDING' RETURNING id`, [input.id]);
+      if (!r.rowCount) throw new Error("Arte não encontrada ou já decidida");
+      await notifySponsorUsers(
+        ctx.pool, input.id, "SPONSOR_REVIEW_APPROVED",
+        "Sua arte foi aprovada e já está no ar.",
+        { subject: "Arte aprovada — DitoFeito", html: "<p>Sua arte foi aprovada e já está no ar.</p>" },
+      );
+      return { ok: true };
+    }),
+
+  rejectCreative: adminProcedure
+    .input(z.object({ id: z.string().uuid(), adminNote: z.string().trim().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `UPDATE sponsors SET pending_creative_url = NULL, creative_review_status = 'NONE',
+                creative_admin_note = $2
+           WHERE id = $1 AND creative_review_status = 'PENDING' RETURNING id`, [input.id, input.adminNote]);
+      if (!r.rowCount) throw new Error("Arte não encontrada ou já decidida");
+      await notifySponsorUsers(
+        ctx.pool, input.id, "SPONSOR_REVIEW_REJECTED",
+        `Sua arte não foi aprovada: ${input.adminNote}`,
+        { subject: "Sobre sua arte — DitoFeito", html: `<p>Sua arte não foi aprovada.</p><p>${input.adminNote}</p>` },
+      );
+      return { ok: true };
+    }),
+
   // ---- AUTOATENDIMENTO: painel do anunciante (só a própria conta) ---------
   getMine: sponsorProcedure.query(async ({ ctx }) => {
     const s = await ctx.pool.query(
-      `SELECT name, logo_url, site_url, creative_url, plan FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
+      `SELECT name, logo_url, site_url, creative_url, pending_creative_url,
+              creative_review_status, creative_admin_note, plan
+         FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
     if (!s.rowCount) throw new Error("Patrocinador não encontrado");
     const links = await socialLinksBySponsor(ctx.pool, [ctx.sponsorId]);
     const row = s.rows[0];
     return {
       name: row.name as string, logoUrl: row.logo_url as string | null,
       siteUrl: row.site_url as string | null, creativeUrl: row.creative_url as string | null,
+      pendingCreativeUrl: row.pending_creative_url as string | null,
+      creativeReviewStatus: row.creative_review_status as "NONE" | "PENDING" | "APPROVED" | "REJECTED",
+      creativeAdminNote: row.creative_admin_note as string | null,
       plan: row.plan as string,
       socialLinksMax: PLAN_LIMITS[row.plan] ?? 1,
       socialLinks: links.get(ctx.sponsorId) ?? [],
     };
   }),
 
+  // Arte nova/trocada fica pendente de revisão editorial (nunca pula a fila,
+  // mesmo pra sponsor antigo — só assim a regra de "nunca publicidade de
+  // candidato/partido" é garantida, ver Metodologia §7). Campo em branco
+  // (remover a arte) é seguro aplicar na hora: só reduz conteúdo, não
+  // adiciona nada novo pra revisar.
   updateMine: sponsorProcedure
     .input(z.object({
       logoUrl: z.string().trim().url().optional(),
@@ -317,9 +599,76 @@ export const sponsorRouter = router({
       creativeUrl: z.string().trim().url().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.pool.query(
-        `UPDATE sponsors SET logo_url = $2, site_url = $3, creative_url = $4 WHERE id = $1`,
-        [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl ?? null]);
+      const current = await ctx.pool.query(`SELECT creative_url FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
+      const liveCreative = current.rows[0]?.creative_url as string | null;
+
+      if (input.creativeUrl === undefined) {
+        await ctx.pool.query(
+          `UPDATE sponsors SET logo_url = $2, site_url = $3, creative_url = NULL,
+                  pending_creative_url = NULL, creative_review_status = 'NONE'
+            WHERE id = $1`,
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null]);
+      } else if (input.creativeUrl === liveCreative) {
+        await ctx.pool.query(
+          `UPDATE sponsors SET logo_url = $2, site_url = $3 WHERE id = $1`,
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null]);
+      } else {
+        await ctx.pool.query(
+          `UPDATE sponsors SET logo_url = $2, site_url = $3,
+                  pending_creative_url = $4, creative_review_status = 'PENDING'
+            WHERE id = $1`,
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl]);
+      }
+      return { ok: true };
+    }),
+
+  // ---- AUTOATENDIMENTO: campanhas (sponsorships) da própria conta ---------
+  listMySponsorships: sponsorProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT sp.id, sp.label, sp.starts_at, sp.ends_at, sp.market_id, sp.is_home, sp.home_placement,
+              sp.region_scope, sp.region_uf, sp.region_city, sp.approval_status, sp.admin_note,
+              m.title AS market_title, m.slug AS market_slug
+         FROM sponsorships sp
+         LEFT JOIN markets m ON m.id = sp.market_id
+        WHERE sp.sponsor_id = $1
+        ORDER BY sp.starts_at DESC`, [ctx.sponsorId]);
+    return r.rows.map((row) => ({
+      id: row.id as string, label: row.label as string,
+      startsAt: row.starts_at as string, endsAt: row.ends_at as string,
+      marketId: row.market_id as string | null, isHome: row.is_home as boolean,
+      homePlacement: row.home_placement as "SIDEBAR" | "BANNER" | "GRID",
+      regionScope: row.region_scope as "NACIONAL" | "ESTADUAL" | "MUNICIPAL",
+      regionUf: row.region_uf as string | null, regionCity: row.region_city as string | null,
+      approvalStatus: row.approval_status as "PENDING" | "APPROVED" | "REJECTED",
+      adminNote: row.admin_note as string | null,
+      marketTitle: row.market_title as string | null, marketSlug: row.market_slug as string | null,
+    }));
+  }),
+
+  requestSponsorship: sponsorProcedure.input(selfSponsorshipInput).mutation(async ({ ctx, input }) => {
+    const full = { ...input, sponsorId: ctx.sponsorId };
+    const homePlacement = await resolveHomePlacement(ctx.pool, full);
+    await assertNoMarketOverlap(ctx.pool, full);
+    const r = await ctx.pool.query(
+      `INSERT INTO sponsorships
+         (sponsor_id, market_id, is_home, home_placement, region_scope, region_uf, region_city,
+          label, starts_at, ends_at, approval_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING') RETURNING id`,
+      [ctx.sponsorId, full.marketId ?? null, full.isHome, homePlacement,
+        full.regionScope, full.regionUf ?? null, full.regionCity?.trim() || null,
+        full.label, full.startsAt, full.endsAt]);
+    return { id: r.rows[0].id as string };
+  }),
+
+  // Só cancela o que ainda está PENDING — depois de aprovado, a mudança
+  // passa pelo admin (mantém o registro de auditoria da decisão original).
+  cancelMySponsorship: sponsorProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `DELETE FROM sponsorships WHERE id = $1 AND sponsor_id = $2 AND approval_status = 'PENDING'`,
+        [input.id, ctx.sponsorId]);
+      if (!r.rowCount) throw new Error("Patrocínio não encontrado ou já foi decidido");
       return { ok: true };
     }),
 
@@ -358,6 +707,7 @@ export const sponsorRouter = router({
            FROM sponsorships sp
            JOIN sponsors s ON s.id = sp.sponsor_id
           WHERE sp.market_id = $1
+            AND sp.approval_status = 'APPROVED'
             AND s.is_active = true
             AND now() BETWEEN sp.starts_at AND sp.ends_at
           ORDER BY sp.starts_at DESC
@@ -392,6 +742,7 @@ export const sponsorRouter = router({
          FROM sponsorships sp
          JOIN sponsors s ON s.id = sp.sponsor_id
         WHERE sp.is_home = true
+          AND sp.approval_status = 'APPROVED'
           AND s.is_active = true
           AND now() BETWEEN sp.starts_at AND sp.ends_at
         ORDER BY random()`);

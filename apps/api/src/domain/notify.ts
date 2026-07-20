@@ -5,7 +5,9 @@ import type { Pool, PoolClient } from "pg";
 // deveria derrubar o fluxo principal por falha aqui; quem chama decide se
 // quer capturar erro ou deixar propagar.
 export async function notify(
-  c: Pool | PoolClient, userId: string, kind: "MARKET_RESOLVED" | "MARKET_VOIDED" | "NEW_COMMENT",
+  c: Pool | PoolClient,
+  userId: string,
+  kind: "MARKET_RESOLVED" | "MARKET_VOIDED" | "NEW_COMMENT" | "SPONSOR_REVIEW_APPROVED" | "SPONSOR_REVIEW_REJECTED",
   body: string, opts: { marketId?: string; commentId?: string } = {},
 ): Promise<void> {
   await c.query(

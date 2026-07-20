@@ -50,6 +50,8 @@ export function AdminSponsors() {
   const { data: sponsorships } = trpc.sponsor.listSponsorships.useQuery(undefined);
   const { data: markets } = trpc.admin.listMarkets.useQuery();
   const { data: adStats } = trpc.adEvents.stats.useQuery({ days: 30 });
+  const { data: applications } = trpc.sponsor.listApplications.useQuery();
+  const { data: pendingSponsorships } = trpc.sponsor.listPendingSponsorships.useQuery();
 
   const createSponsor = trpc.sponsor.create.useMutation();
   const setActive = trpc.sponsor.setActive.useMutation();
@@ -58,6 +60,19 @@ export function AdminSponsors() {
   const updateSponsorship = trpc.sponsor.updateSponsorship.useMutation();
   const removeSponsorship = trpc.sponsor.removeSponsorship.useMutation();
   const linkUser = trpc.sponsor.linkUser.useMutation();
+  const approveApplication = trpc.sponsor.approveApplication.useMutation();
+  const rejectApplication = trpc.sponsor.rejectApplication.useMutation();
+  const approveSponsorshipReq = trpc.sponsor.approveSponsorship.useMutation();
+  const rejectSponsorshipReq = trpc.sponsor.rejectSponsorship.useMutation();
+  const approveCreative = trpc.sponsor.approveCreative.useMutation();
+  const rejectCreative = trpc.sponsor.rejectCreative.useMutation();
+
+  const [rejectingAppId, setRejectingAppId] = useState<string | null>(null);
+  const [rejectAppNote, setRejectAppNote] = useState("");
+  const [rejectingSpReqId, setRejectingSpReqId] = useState<string | null>(null);
+  const [rejectSpReqNote, setRejectSpReqNote] = useState("");
+  const [rejectingCreativeId, setRejectingCreativeId] = useState<string | null>(null);
+  const [rejectCreativeNote, setRejectCreativeNote] = useState("");
 
   const [name, setName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -94,6 +109,47 @@ export function AdminSponsors() {
 
   async function refresh() {
     await Promise.all([utils.sponsor.list.invalidate(), utils.sponsor.listSponsorships.invalidate()]);
+  }
+
+  async function refreshPendentes() {
+    await Promise.all([
+      utils.sponsor.listApplications.invalidate(),
+      utils.sponsor.listPendingSponsorships.invalidate(),
+      utils.sponsor.list.invalidate(),
+    ]);
+  }
+
+  async function onApproveApplication(id: string) {
+    await approveApplication.mutateAsync({ id });
+    await refreshPendentes();
+  }
+  async function onRejectApplication(id: string) {
+    if (!rejectAppNote.trim()) return;
+    await rejectApplication.mutateAsync({ id, adminNote: rejectAppNote.trim() });
+    setRejectingAppId(null); setRejectAppNote("");
+    await refreshPendentes();
+  }
+
+  async function onApproveSponsorshipReq(id: string) {
+    await approveSponsorshipReq.mutateAsync({ id });
+    await refreshPendentes();
+  }
+  async function onRejectSponsorshipReq(id: string) {
+    if (!rejectSpReqNote.trim()) return;
+    await rejectSponsorshipReq.mutateAsync({ id, adminNote: rejectSpReqNote.trim() });
+    setRejectingSpReqId(null); setRejectSpReqNote("");
+    await refreshPendentes();
+  }
+
+  async function onApproveCreative(id: string) {
+    await approveCreative.mutateAsync({ id });
+    await refreshPendentes();
+  }
+  async function onRejectCreative(id: string) {
+    if (!rejectCreativeNote.trim()) return;
+    await rejectCreative.mutateAsync({ id, adminNote: rejectCreativeNote.trim() });
+    setRejectingCreativeId(null); setRejectCreativeNote("");
+    await refreshPendentes();
   }
 
   async function onCreateSponsor(e: FormEvent) {
@@ -233,6 +289,185 @@ export function AdminSponsors() {
       <div className="card">
         <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: 0 }}>Patrocinadores</h1>
       </div>
+
+      {(() => {
+        const pendingApplications = applications?.filter((a) => a.status === "NOVO") ?? [];
+        const pendingCreatives = sponsors?.filter((s) => s.creativeReviewStatus === "PENDING") ?? [];
+        return (
+          <>
+            <div className="card" style={{ marginTop: 20 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>
+                Aplicações de conta {pendingApplications.length > 0 && <span className="badge" style={{ marginLeft: 6 }}>{pendingApplications.length}</span>}
+              </h2>
+              <p className="hint-text" style={{ marginBottom: 12 }}>
+                Pedido de autoatendimento pra virar anunciante — aprovar cria o patrocinador
+                e promove a conta pra SPONSOR num clique só.
+              </p>
+              {pendingApplications.length === 0 ? (
+                <p className="hint-text">Nenhuma aplicação pendente.</p>
+              ) : (
+                pendingApplications.map((a) => (
+                  <div key={a.id} className="admin-row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <span className="titulo">
+                      {a.companyName}
+                      <div className="meta">
+                        @{a.applicant.handle} ({a.applicant.displayName}) · plano {PLAN_LABEL[a.requestedPlan] ?? a.requestedPlan}
+                        {" · "}{dtDisplay.format(new Date(a.createdAt))}
+                      </div>
+                      {a.siteUrl && (
+                        <div className="meta"><a href={a.siteUrl} target="_blank" rel="noopener noreferrer">{a.siteUrl}</a></div>
+                      )}
+                      {a.message && <p style={{ marginTop: 8, fontSize: 13 }}><b>Mensagem:</b> {a.message}</p>}
+                    </span>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }}
+                        onClick={() => onApproveApplication(a.id)} disabled={approveApplication.isPending}
+                      >
+                        Aprovar
+                      </button>
+                      {rejectingAppId === a.id ? (
+                        <div style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
+                          <input
+                            className="input" placeholder="Motivo da rejeição" value={rejectAppNote}
+                            onChange={(e) => setRejectAppNote(e.target.value)} style={{ flex: 1 }}
+                          />
+                          <button
+                            className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
+                            onClick={() => onRejectApplication(a.id)} disabled={rejectApplication.isPending || !rejectAppNote.trim()}
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
+                          onClick={() => { setRejectingAppId(a.id); setRejectAppNote(""); }}
+                        >
+                          Rejeitar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card" style={{ marginTop: 20 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>
+                Patrocínios pendentes {(pendingSponsorships?.length ?? 0) > 0 && (
+                  <span className="badge" style={{ marginLeft: 6 }}>{pendingSponsorships?.length}</span>
+                )}
+              </h2>
+              <p className="hint-text" style={{ marginBottom: 12 }}>
+                Campanha pedida em autoatendimento (/patrocinador) — só fica visível pro
+                público depois de aprovada aqui.
+              </p>
+              {!pendingSponsorships || pendingSponsorships.length === 0 ? (
+                <p className="hint-text">Nenhum patrocínio pendente.</p>
+              ) : (
+                pendingSponsorships.map((sp) => (
+                  <div key={sp.id} className="admin-row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <span className="titulo">
+                      {sp.sponsor.name} → {sp.isHome
+                        ? `Espaço da home (${PLACEMENT_LABEL[sp.homePlacement] ?? sp.homePlacement})`
+                        : sp.marketSlug ? <Link to={`/admin/mercados/${sp.marketSlug}`}>{sp.marketTitle}</Link> : "mercado removido"}
+                      <div className="meta">
+                        {sp.label ? `"${sp.label}" · ` : ""}{fmtPeriod(sp.startsAt)} até {fmtPeriod(sp.endsAt)}
+                        {sp.isHome && ` · ${REGION_SCOPE_LABEL[sp.regionScope] ?? sp.regionScope}`}
+                      </div>
+                    </span>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }}
+                        onClick={() => onApproveSponsorshipReq(sp.id)} disabled={approveSponsorshipReq.isPending}
+                      >
+                        Aprovar
+                      </button>
+                      {rejectingSpReqId === sp.id ? (
+                        <div style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
+                          <input
+                            className="input" placeholder="Motivo da rejeição" value={rejectSpReqNote}
+                            onChange={(e) => setRejectSpReqNote(e.target.value)} style={{ flex: 1 }}
+                          />
+                          <button
+                            className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
+                            onClick={() => onRejectSponsorshipReq(sp.id)} disabled={rejectSponsorshipReq.isPending || !rejectSpReqNote.trim()}
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
+                          onClick={() => { setRejectingSpReqId(sp.id); setRejectSpReqNote(""); }}
+                        >
+                          Rejeitar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card" style={{ marginTop: 20 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>
+                Arte pendente {pendingCreatives.length > 0 && <span className="badge" style={{ marginLeft: 6 }}>{pendingCreatives.length}</span>}
+              </h2>
+              <p className="hint-text" style={{ marginBottom: 12 }}>
+                Arte enviada pelo próprio anunciante em /patrocinador — a arte anterior (se
+                houver) continua no ar até você decidir. Checagem manual: nunca publicidade
+                de candidato, partido, coligação ou comitê financeiro (Metodologia §7).
+              </p>
+              {pendingCreatives.length === 0 ? (
+                <p className="hint-text">Nenhuma arte pendente.</p>
+              ) : (
+                pendingCreatives.map((s) => (
+                  <div key={s.id} className="admin-row" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                    {s.pendingCreativeUrl && (
+                      <img src={s.pendingCreativeUrl} alt="arte pendente" style={{ height: 64, width: "auto", maxWidth: 90, objectFit: "cover", borderRadius: 6, flex: "none" }} />
+                    )}
+                    <span className="titulo">
+                      {s.name}
+                      <div className="meta">Plano {PLAN_LABEL[s.plan] ?? s.plan}</div>
+                    </span>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }}
+                        onClick={() => onApproveCreative(s.id)} disabled={approveCreative.isPending}
+                      >
+                        Aprovar
+                      </button>
+                      {rejectingCreativeId === s.id ? (
+                        <div style={{ display: "flex", gap: 6, flexBasis: "100%" }}>
+                          <input
+                            className="input" placeholder="Motivo da rejeição" value={rejectCreativeNote}
+                            onChange={(e) => setRejectCreativeNote(e.target.value)} style={{ flex: 1 }}
+                          />
+                          <button
+                            className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13, width: "auto" }}
+                            onClick={() => onRejectCreative(s.id)} disabled={rejectCreative.isPending || !rejectCreativeNote.trim()}
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
+                          onClick={() => { setRejectingCreativeId(s.id); setRejectCreativeNote(""); }}
+                        >
+                          Rejeitar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Novo patrocinador</h2>

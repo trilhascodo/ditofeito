@@ -563,6 +563,7 @@ export const marketRouter = router({
           if (best >= 0) summary = { label: outcomes[best].label, price: prices[best] };
         }
         return {
+          id: row.id as string,
           slug: row.slug as string, title: row.title as string, status: row.status as string,
           type: row.type as string, isElectoral: row.is_electoral as boolean,
           closeAt: row.close_at as Date, regionUf: row.region_uf as string | null,

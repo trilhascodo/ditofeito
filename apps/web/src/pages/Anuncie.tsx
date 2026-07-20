@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { Turnstile } from "../components/Turnstile";
+import { useAuth } from "../lib/useAuth";
 
 type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
 
@@ -45,7 +47,97 @@ const PLANOS: {
   },
 ];
 
+// Autoatendimento: usuário comum (role USER) aplica pra virar anunciante em
+// vez de mandar um lead pra alguém digitar depois — admin só aprova/rejeita
+// (sponsor.applications.approve cria o sponsor e promove a conta num clique só).
+function AplicacaoAnunciante() {
+  const utils = trpc.useUtils();
+  const { data: minhas } = trpc.sponsor.listMyApplications.useQuery();
+  const createApplication = trpc.sponsor.createApplication.useMutation();
+
+  const [companyName, setCompanyName] = useState("");
+  const [requestedPlan, setRequestedPlan] = useState<Plan>("BASICO");
+  const [siteUrl, setSiteUrl] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  const pendente = minhas?.find((a) => a.status === "NOVO");
+  const ultimaRejeitada = minhas?.find((a) => a.status === "REJEITADO");
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    try {
+      await createApplication.mutateAsync({
+        companyName: companyName.trim(), requestedPlan,
+        siteUrl: siteUrl.trim() || undefined, logoUrl: logoUrl.trim() || undefined,
+        message: message.trim() || undefined,
+      });
+      await utils.sponsor.listMyApplications.invalidate();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Erro ao enviar. Tenta de novo.");
+    }
+  }
+
+  if (pendente) {
+    return (
+      <div className="card">
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 4px" }}>Aplicação em análise</h2>
+        <p className="hint-text">
+          Sua aplicação pra "{pendente.companyName}" está em análise. Avisamos por
+          notificação e e-mail assim que decidirmos.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 4px" }}>Aplicar pra virar anunciante</h2>
+      <p className="hint-text" style={{ marginBottom: 20 }}>
+        Preenche os dados da sua empresa — a gente aprova e você mesmo configura
+        campanha e arte no seu painel, sem esperar retorno da nossa equipe.
+      </p>
+      {ultimaRejeitada && (
+        <p className="hint-text" style={{ marginBottom: 16 }}>
+          Sua última aplicação não foi aprovada: {ultimaRejeitada.adminNote}. Pode tentar de novo abaixo.
+        </p>
+      )}
+      <form onSubmit={onSubmit}>
+        <div className="field">
+          <label className="label" htmlFor="app-company">Empresa</label>
+          <input className="input" id="app-company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="app-plan">Plano desejado</label>
+          <select id="app-plan" value={requestedPlan} onChange={(e) => setRequestedPlan(e.target.value as Plan)}>
+            {PLANOS.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="app-site">URL do site (opcional)</label>
+          <input className="input" id="app-site" type="url" placeholder="https://…" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="app-logo">URL do logo (opcional)</label>
+          <input className="input" id="app-logo" type="url" placeholder="https://…" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="app-message">Mensagem (opcional)</label>
+          <textarea id="app-message" value={message} onChange={(e) => setMessage(e.target.value)} />
+        </div>
+        {err && <p className="error-text">{err}</p>}
+        <button className="btn" disabled={createApplication.isPending}>
+          {createApplication.isPending ? "Enviando…" : "Aplicar"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export function Anuncie() {
+  const { user, isLoading: authLoading } = useAuth();
   const createLead = trpc.leads.create.useMutation();
 
   const [name, setName] = useState("");
@@ -194,7 +286,26 @@ export function Anuncie() {
       </section>
 
       <section id="contato" style={{ maxWidth: 480, margin: "0 auto 60px" }}>
+        {!authLoading && user?.role === "SPONSOR" ? (
+          <div className="card">
+            <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 8px" }}>Você já é anunciante</h2>
+            <p className="hint-text" style={{ marginBottom: 16 }}>
+              Configure campanha, arte e redes sociais no seu painel.
+            </p>
+            <Link to="/patrocinador" className="btn" style={{ display: "inline-block", textDecoration: "none", textAlign: "center" }}>
+              Ir pro painel
+            </Link>
+          </div>
+        ) : !authLoading && user?.role === "USER" ? (
+          <AplicacaoAnunciante />
+        ) : (
         <div className="card">
+          {!authLoading && !user && (
+            <p className="hint-text" style={{ marginBottom: 16 }}>
+              Já decidiu? <Link to="/cadastro">Crie sua conta</Link> e aplique você
+              mesmo em poucos cliques, sem esperar retorno da nossa equipe.
+            </p>
+          )}
           <h2 style={{ fontFamily: "var(--serif)", fontSize: 20, margin: "0 0 4px" }}>Falar com o comercial</h2>
           <p className="hint-text" style={{ marginBottom: 20 }}>
             Preenche e a gente responde por e-mail.
@@ -242,6 +353,7 @@ export function Anuncie() {
             </form>
           )}
         </div>
+        )}
       </section>
     </main>
   );
