@@ -213,38 +213,27 @@ a { color: var(--violeta); text-decoration: none; }
 .patro-slot-creative .social-links { padding: 10px 14px; margin-top: 0; }
 
 /* .patro-slots-mobile usa o mesmo .patro-slot pensado pra uma coluna lateral
-   de 300px — cheio de padding e min-height:168px, vertical e centralizado.
-   Em largura de tela toda isso fica enorme. Vira card baixo e horizontal
-   (mesma ideia da .patro-faixa-item), só na cópia mobile — a lateral do
-   desktop não muda. */
+   de 300px (padding generoso, vertical, arte cheia responsiva). Em largura de
+   tela toda isso ficou pesado no teste em aparelho real — nome truncando,
+   card grande, e a arte pronta (width:100%/height:auto) desalinhava dependendo
+   da largura da tela, empurrando o resto da página pra baixo. Solução mais
+   robusta: só logo + redes sociais, tudo em caixa de tamanho FIXO (nada de
+   % ou auto que dependa da largura da viewport) — rótulo, nome e CTA somem. */
 @media (max-width: 860px) {
   .patro-slots-mobile .patro-slots { gap: 10px; }
-  /* flex-direction:row no próprio .patro-slot (não só no -main) porque o
-     rótulo/logo/nome/CTA só ficam dentro de .patro-slot-main quando o
-     patrocinador tem site (link clicável) — sem site, esse conteúdo é
-     filho direto de .patro-slot. Cobre os dois casos com a mesma regra. */
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) {
-    flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start;
-    padding: 12px 16px; min-height: 0; text-align: left; gap: 8px 10px;
+  .patro-slots-mobile .patro-slot {
+    flex-direction: row; align-items: center; justify-content: flex-start;
+    padding: 10px 16px; min-height: 0; gap: 10px; background: #fff;
   }
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) .patro-slot-main {
-    flex: 1; min-width: 0; flex-direction: row; align-items: center; gap: 8px;
+  .patro-slots-mobile .patro-slot-label,
+  .patro-slots-mobile .patro-slot b,
+  .patro-slots-mobile .patro-slot-cta { display: none; }
+  .patro-slots-mobile .patro-slot-main { flex: none; display: flex; align-items: center; width: auto; }
+  .patro-slots-mobile .patro-slot img,
+  .patro-slots-mobile .patro-slot-creative .patro-slot-creative-img {
+    width: 44px; height: 44px; max-width: 44px; max-height: 44px; object-fit: contain; flex: none;
   }
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) .patro-slot-label {
-    flex: none; font-size: 8px; padding: 3px 6px; white-space: nowrap;
-  }
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) img { flex: none; max-height: 24px; }
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) b {
-    flex: 1; min-width: 40px; font-size: 14px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  /* CTA "Visitar site ↗" some no compacto — o card inteiro já é o link,
-     o texto só competia por espaço com o nome numa linha só. */
-  .patro-slots-mobile .patro-slot:not(.patro-slot-creative) .patro-slot-cta { display: none; }
-  /* Arte pronta é a peça que o anunciante mandou — não dá pra reformatar
-     pra linha sem recompor o design dele. Só limita a altura (sem cortar:
-     max-height em vez de crop) pra não dominar a tela num card só. */
-  .patro-slots-mobile .patro-slot-creative .patro-slot-creative-img { max-height: 260px; object-fit: contain; background: #fff; }
+  .patro-slots-mobile .social-links { margin-top: 0; }
 }
 
 /* Segunda superfície de anúncio: faixa horizontal abaixo do destaque —
