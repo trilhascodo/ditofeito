@@ -20,7 +20,9 @@ export function AdminCandidates() {
     search: search.trim() || undefined,
   });
   const removeMutation = trpc.candidate.remove.useMutation();
+  const runGeradorMutation = trpc.candidate.runGerador.useMutation();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [geradorMsg, setGeradorMsg] = useState<string | null>(null);
 
   async function onRemove(id: string) {
     if (!confirm("Remover essa sugestão de pré-candidato?")) return;
@@ -33,10 +35,34 @@ export function AdminCandidates() {
     }
   }
 
+  async function onRunGerador() {
+    setGeradorMsg(null);
+    const r = await runGeradorMutation.mutateAsync();
+    setGeradorMsg(`${r.binarios} binário(s) e ${r.multis} disputa(s) criados (${r.outcomesSincronizados} outcome(s) sincronizado(s)).`);
+    await utils.candidate.list.invalidate();
+  }
+
   return (
     <div className="card">
-      <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "0 0 4px" }}>Fila de moderação — candidatos</h1>
-      <p className="hint-text" style={{ marginBottom: 12 }}>Sugestões pendentes de revisão (PRE_ANUNCIADO).</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "0 0 4px" }}>Fila de moderação — candidatos</h1>
+          <p className="hint-text" style={{ marginBottom: 12 }}>Sugestões pendentes de revisão (PRE_ANUNCIADO).</p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <button
+            type="button" className="btn-outline" style={{ padding: "10px 16px", fontSize: 13, width: "auto" }}
+            onClick={onRunGerador} disabled={runGeradorMutation.isPending}
+          >
+            {runGeradorMutation.isPending ? "Rodando…" : "Rodar gerador agora"}
+          </button>
+          <p className="hint-text" style={{ marginTop: 6, maxWidth: 260 }}>
+            Normalmente roda sozinho às 6h — usa isso pra criar mercado na hora
+            pra pré-candidato recém-cadastrado, sem esperar o cron.
+          </p>
+          {geradorMsg && <p style={{ color: "var(--conferido)", fontSize: 13, marginTop: 4 }}>{geradorMsg}</p>}
+        </div>
+      </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <input

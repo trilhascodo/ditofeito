@@ -6,7 +6,8 @@
 // ============================================================================
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { router, publicProcedure, protectedProcedure, resolverProcedure } from "../trpc/trpc.js";
+import { router, publicProcedure, protectedProcedure, resolverProcedure, adminProcedure } from "../trpc/trpc.js";
+import { rodarGerador } from "../jobs/gerador.js";
 
 const OFFICE = z.enum([
   "PRESIDENTE", "GOVERNADOR", "SENADOR",
@@ -111,5 +112,12 @@ export const candidateRouter = router({
         message: "candidato não encontrado ou já avançou de fase (não é mais PRE_ANUNCIADO)",
       });
     return { removed: true };
+  }),
+
+  // Normalmente roda sozinho às 6h (schedule.ts) — este botão existe pra não
+  // depender de esperar o cron (ou de SSH na VPS pra rodar o CLI) toda vez
+  // que candidato novo entra e precisa virar mercado na hora.
+  runGerador: adminProcedure.mutation(async ({ ctx }) => {
+    return rodarGerador(ctx.pool);
   }),
 });
