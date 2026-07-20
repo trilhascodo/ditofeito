@@ -285,14 +285,14 @@ a { color: var(--violeta); text-decoration: none; }
   text-wrap: balance;
 }
 .destaque-corpo { display: flex; align-items: center; gap: 28px; margin-bottom: 12px; }
-.destaque-linhas { display: flex; flex-direction: column; gap: 12px; flex: none; width: 230px; justify-content: center; }
+.destaque-linhas { display: flex; flex-direction: column; gap: 12px; flex: none; width: 300px; justify-content: center; }
 .destaque-linha { display: flex; align-items: center; gap: 10px; }
 .destaque-linha-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--linha); flex: none; }
 .destaque-linha-label {
   flex: 1; min-width: 0; font: 500 13px var(--sans); color: var(--tinta);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.destaque-linha-barra { flex: none; width: 56px; height: 5px; border-radius: 99px; background: var(--violeta-2); overflow: hidden; }
+.destaque-linha-barra { flex: none; width: 44px; height: 5px; border-radius: 99px; background: var(--violeta-2); overflow: hidden; }
 .destaque-linha-barra span { display: block; height: 100%; background: var(--linha); border-radius: 99px; }
 .destaque-linha-pct { flex: none; width: 44px; text-align: right; font: 700 13px var(--mono); color: var(--grafite); }
 .destaque-linha-lead .destaque-linha-dot { background: var(--violeta); }
