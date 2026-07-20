@@ -262,6 +262,7 @@ export function Home() {
   const [searchParams, setSearchParams] = useSearchParams();
   const categorySlug = searchParams.get("categoria");
   const busca = searchParams.get("busca");
+  const status = searchParams.get("status");
   const ufParam = searchParams.get("uf");
   const uf = ufParam ?? "";
 
@@ -280,6 +281,20 @@ export function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Monta "/?..." preservando uf/status atuais — usado nas abas de categoria
+  // e no link "Resolvidos", pra trocar de categoria sem perder o filtro de
+  // estado/status já escolhido (e vice-versa).
+  function buildQuery(overrides: Record<string, string | undefined>): string {
+    const merged: Record<string, string | undefined> = {
+      categoria: categorySlug ?? undefined, uf: uf || undefined, status: status ?? undefined,
+      ...overrides,
+    };
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
+    const s = p.toString();
+    return s ? `/?${s}` : "/";
+  }
+
   function onUfChange(next: string) {
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
@@ -292,9 +307,12 @@ export function Home() {
 
   const { data: categories } = trpc.market.categories.useQuery();
   const { data: states } = trpc.market.states.useQuery();
-  const listInput = { categorySlug: categorySlug ?? undefined, q: busca ?? undefined, uf: uf || undefined };
+  const listInput = {
+    categorySlug: categorySlug ?? undefined, q: busca ?? undefined,
+    uf: uf || undefined, status: status ?? undefined,
+  };
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
-    (listInput.categorySlug || listInput.q || listInput.uf) ? listInput : undefined,
+    (listInput.categorySlug || listInput.q || listInput.uf || listInput.status) ? listInput : undefined,
   );
   const { data: home } = trpc.sponsor.getActiveHome.useQuery();
   const { data: featured } = trpc.market.featured.useQuery({ uf: uf || undefined });
@@ -393,18 +411,24 @@ export function Home() {
 
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
-          <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to={uf ? `/?uf=${uf}` : "/"}>
+          <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to={buildQuery({ categoria: undefined })}>
             Todos
           </Link>
           {categories.map((c) => (
             <Link
               key={c.slug}
               className={`cat-tab ${categorySlug === c.slug ? "on" : ""}`}
-              to={`/?categoria=${c.slug}${uf ? `&uf=${uf}` : ""}`}
+              to={buildQuery({ categoria: c.slug })}
             >
               {c.name}
             </Link>
           ))}
+          <Link
+            className={`cat-tab ${status === "RESOLVED" ? "on" : ""}`}
+            to={buildQuery({ status: status === "RESOLVED" ? undefined : "RESOLVED" })}
+          >
+            Resolvidos
+          </Link>
         </div>
       )}
 
