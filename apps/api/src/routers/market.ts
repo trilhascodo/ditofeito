@@ -452,7 +452,14 @@ export const marketRouter = router({
     .query(async ({ ctx, input }) => {
       const conds: string[] = ["m.status != 'DRAFT'"];
       const params: unknown[] = [];
-      if (input?.status) { params.push(input.status); conds.push(`m.status = $${params.length}`); }
+      if (input?.status) {
+        params.push(input.status); conds.push(`m.status = $${params.length}`);
+      } else {
+        // Anulado não é histórico normal como resolvido (que continua
+        // aparecendo) — sem filtro explícito de status, some da grade padrão
+        // (bug relatado: aparecia misturado com os mercados ativos).
+        conds.push(`m.status != 'VOIDED'`);
+      }
       if (input?.categorySlug) { params.push(input.categorySlug); conds.push(`c.slug = $${params.length}`); }
       if (input?.q) { params.push(`%${input.q}%`); conds.push(`m.title ILIKE $${params.length}`); }
       const where = `WHERE ${conds.join(" AND ")}`;
