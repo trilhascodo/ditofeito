@@ -267,6 +267,13 @@ a { color: var(--violeta); text-decoration: none; }
    pra caber uma barra superior com categoria + navegação por dentro do
    cartão, como no Kalshi — sem aninhar os botões de navegação dentro do
    <Link> (inválido em HTML, <a> não pode conter elemento interativo). */
+/* enquadramento "não é aposta" na primeira dobra — defesa jurídica e
+   diferencial de comunicação, precisa aparecer antes de qualquer card. */
+.home-tagline {
+  font: 600 13px var(--mono); color: var(--violeta); text-transform: uppercase;
+  letter-spacing: .04em; margin: 0 0 16px;
+}
+
 .destaque { margin-bottom: 28px; background: #fff; border: 1px solid var(--linha); border-radius: 12px; }
 .destaque:hover { border-color: var(--violeta); box-shadow: 0 4px 16px rgba(79, 46, 153, .07); }
 .destaque-top { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px 0; }

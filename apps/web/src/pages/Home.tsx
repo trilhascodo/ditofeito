@@ -485,6 +485,7 @@ export function Home() {
 
   return (
     <main className="page">
+      <p className="home-tagline">Mercado de previsão por reputação — pontos.</p>
       {hasSideContent ? (
         <div className="home-layout">
           <div className="home-main">{mainContent}</div>

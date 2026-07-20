@@ -64,11 +64,12 @@ export function Metodologia() {
         ))}
       </div>
 
-      <p>
-        Este documento explica como o DitoFeito funciona por dentro, pra quem
-        vai citar, embutir ou cobrir a plataforma — imprensa, blogueiros e
-        qualquer pessoa curiosa. Escrito pela própria equipe a partir de como
-        o produto funciona de fato.
+      <p style={{ fontSize: 16, lineHeight: 1.55 }}>
+        Em uma frase: no DitoFeito você registra um palpite com pontos (sem
+        valor em dinheiro), e a porcentagem que aparece em cada mercado é a
+        soma de todos os palpites — não uma pesquisa com amostra, não uma
+        aposta com dinheiro real. Os detalhes de como isso funciona por
+        dentro estão abaixo, pra quem for citar ou cobrir a plataforma.
       </p>
 
       <h2>1. O que é</h2>
