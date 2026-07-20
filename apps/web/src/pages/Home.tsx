@@ -483,6 +483,23 @@ export function Home() {
   const hasSideContent = hasSidebarAds || !!trending?.length || !!mostVoted?.length
     || !!newest?.length || !!homeLinks?.length;
 
+  // Intercala os anúncios (plano Premium, até 5) entre os painéis de
+  // conteúdo da lateral no desktop, em vez de empilhar todos juntos no topo —
+  // o conteúdo disfarça a intenção e o anúncio é consumido com mais leveza.
+  // O primeiro balde nunca fica vazio antes de conteúdo real: mantém o
+  // primeiro anúncio como a própria primeira coisa da coluna, preservando a
+  // "posição mais visível" vendida no plano. Excedente (5º anúncio em
+  // diante) vai todo pro último balde, depois de Novos mercados.
+  const sidebarAds = home?.sidebar ?? [];
+  const adBuckets: HomeSponsor[][] = [[], [], [], []];
+  sidebarAds.forEach((ad, i) => adBuckets[Math.min(i, 3)].push(ad));
+  const AdBucket = ({ items }: { items: HomeSponsor[] }) =>
+    items.length > 0 ? (
+      <div className="patro-slots-desktop">
+        <PatroSlots items={items} />
+      </div>
+    ) : null;
+
   return (
     <main className="page">
       <p className="home-tagline">Mercado de previsão por reputação — pontos.</p>
@@ -490,23 +507,22 @@ export function Home() {
         <div className="home-layout">
           <div className="home-main">{mainContent}</div>
           <div className="home-side">
-            {hasSidebarAds && (
-              <div className="patro-slots-desktop">
-                <PatroSlots items={home.sidebar} />
-              </div>
-            )}
+            <AdBucket items={adBuckets[0]} />
             <SidePanelList<TrendingItem>
               heading="Tendências" items={trending ?? []}
               badge={(it) => <DeltaBadge delta={it.delta} />}
             />
+            <AdBucket items={adBuckets[1]} />
             <SidePanelList<MostVotedItem>
               heading="Mais votados" items={mostVoted ?? []}
               badge={(it) => <span className="badge">{it.voters} voto{it.voters === 1 ? "" : "s"}</span>}
             />
+            <AdBucket items={adBuckets[2]} />
             <SidePanelList<NewestItem>
               heading="Novos mercados" items={newest ?? []}
               badge={(it) => <span className="badge">{it.categoryName}</span>}
             />
+            <AdBucket items={adBuckets[3]} />
             <HomeLinks items={homeLinks ?? []} />
           </div>
         </div>
