@@ -32,7 +32,7 @@ export const EMBED_CONFIG = {
   cacheSeconds: 60,
 } as const;
 
-const DISCLAIMER =
+export const DISCLAIMER =
   "Agregado de opiniões de participantes. Não é pesquisa eleitoral (Lei 9.504/97).";
 
 // Paleta neutra p/ outcomes (sem cor partidária — neutralidade visual).
@@ -123,7 +123,7 @@ export async function getMarketPublicData(
 export const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
    .replace(/"/g, "&quot;");
-const pct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
+export const pct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
 
 function sparklinePath(pts: [number, number][], w: number, h: number): string {
   if (pts.length < 2) return "";
