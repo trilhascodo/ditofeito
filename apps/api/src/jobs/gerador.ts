@@ -97,7 +97,7 @@ export async function gerarBinariosCandidatos(
         closeAt: CALENDARIO_2026.primeiroTurno,
         resolveBy: CALENDARIO_2026.prazoResolucaoEleito,
         categoriaId: opts.categoriaEleicoesId, criadoPor: opts.sistemaUserId,
-        candidateId: cand.id, publicarDireto: opts.publicarDireto,
+        candidateId: cand.id, regionUf: cand.uf, publicarDireto: opts.publicarDireto,
       });
     }
     await c.query("COMMIT");
@@ -108,18 +108,18 @@ export async function gerarBinariosCandidatos(
 async function criarBinario(c: PoolClient, p: {
   slug: string; titulo: string; criterio: string; fonte: string;
   closeAt: string; resolveBy: string; categoriaId: string; criadoPor: string;
-  candidateId: string; publicarDireto?: boolean;
+  candidateId: string; regionUf: string | null; publicarDireto?: boolean;
 }): Promise<number> {
   const b = suggestB(2, GERADOR_CONFIG.depthBinario);
   const r = await c.query(
     `INSERT INTO markets (slug, title, category_id, type, liquidity_b, status,
                           resolution_criteria, resolution_source, close_at,
-                          resolve_by, is_electoral, created_by)
-     VALUES ($1,$2,$3,'BINARY',$4,$5,$6,$7,$8,$9,true,$10)
+                          resolve_by, is_electoral, created_by, region_uf)
+     VALUES ($1,$2,$3,'BINARY',$4,$5,$6,$7,$8,$9,true,$10,$11)
      ON CONFLICT (slug) DO NOTHING RETURNING id`,
     [p.slug, p.titulo, p.categoriaId, b.toFixed(4),
      (p.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
-     p.criterio, p.fonte, p.closeAt, p.resolveBy, p.criadoPor]);
+     p.criterio, p.fonte, p.closeAt, p.resolveBy, p.criadoPor, p.regionUf]);
   if (!r.rowCount) return 0; // já existia — idempotência
   const mid = r.rows[0].id;
   await c.query(
@@ -175,8 +175,8 @@ export async function gerarDisputasMajoritarias(
       const mkt = await c.query(
         `INSERT INTO markets (slug, title, category_id, group_id, type, liquidity_b,
                               status, resolution_criteria, resolution_source,
-                              close_at, resolve_by, is_electoral, created_by)
-         VALUES ($1,$2,$3,$4,'MULTI',$5,$6,$7,$8,$9,$10,true,$11)
+                              close_at, resolve_by, is_electoral, created_by, region_uf)
+         VALUES ($1,$2,$3,$4,'MULTI',$5,$6,$7,$8,$9,$10,true,$11,$12)
          ON CONFLICT (slug) DO NOTHING RETURNING id`,
         [`quem-vence-${slugDisputa}`,
          `Quem vence a eleição para ${cargoTxt}${local} em 2026?`,
@@ -187,7 +187,7 @@ export async function gerarDisputasMajoritarias(
          `Anulação da eleição pela Justiça Eleitoral antes da diplomação ANULA o mercado.`,
          "TSE — resultado oficial / diplomação",
          CALENDARIO_2026.segundoTurno, CALENDARIO_2026.prazoResolucaoEleito,
-         opts.sistemaUserId]);
+         opts.sistemaUserId, d.uf]);
 
       let marketId: string;
       if (mkt.rowCount) {

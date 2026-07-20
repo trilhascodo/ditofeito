@@ -25,6 +25,10 @@ const createMarketInput = z
     closeAt: z.string().datetime(),
     resolveBy: z.string().datetime(),
     isElectoral: z.boolean().default(false),
+    // null/omitido = mercado nacional (aparece em qualquer filtro de estado
+    // na home). Só mercados com recorte estadual (ex.: Governador/UF)
+    // ganham region_uf — ver 025_market_region.sql.
+    regionUf: z.string().length(2).toUpperCase().optional(),
     liquidityB: z.number().positive().optional(),
     // false = fica em DRAFT pra revisão editorial antes de abrir pro público
     // (mesma opção do gerador.ts eleitoral, GERADOR_CONFIG.publicarDireto).
@@ -55,12 +59,12 @@ export const marketRouter = router({
       const m = await client.query(
         `INSERT INTO markets (slug, title, description, category_id, type, liquidity_b, status,
                               resolution_criteria, resolution_source, close_at, resolve_by,
-                              is_electoral, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+                              is_electoral, created_by, region_uf)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
         [
           input.slug, input.title, input.description ?? null, categoryId, input.type,
           b.toFixed(4), input.publish ? "OPEN" : "DRAFT", input.resolutionCriteria, input.resolutionSource,
-          input.closeAt, input.resolveBy, input.isElectoral, ctx.user.id,
+          input.closeAt, input.resolveBy, input.isElectoral, ctx.user.id, input.regionUf ?? null,
         ],
       );
       const marketId = m.rows[0].id as string;
@@ -103,6 +107,7 @@ export const marketRouter = router({
         closeAt: z.string().datetime().optional(),
         resolveBy: z.string().datetime().optional(),
         isElectoral: z.boolean().optional(),
+        regionUf: z.string().length(2).toUpperCase().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -110,7 +115,7 @@ export const marketRouter = router({
       const colMap: Record<string, string> = {
         title: "title", description: "description", resolutionCriteria: "resolution_criteria",
         resolutionSource: "resolution_source", closeAt: "close_at", resolveBy: "resolve_by",
-        isElectoral: "is_electoral",
+        isElectoral: "is_electoral", regionUf: "region_uf",
       };
       const sets: string[] = [];
       const params: unknown[] = [];
@@ -152,13 +157,19 @@ export const marketRouter = router({
   // Slide de destaque da home (inspirado no carrossel do Polymarket — só o
   // layout). Prioriza featured=true (curadoria do admin); completa com quem
   // fecha mais cedo se tiver menos de 3 marcados, pro slide nunca ficar vazio.
-  featured: publicProcedure.query(async ({ ctx }) => {
+  featured: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+    const params: unknown[] = [];
+    let where = "m.status = 'OPEN'";
+    if (input?.uf) { params.push(input.uf); where += ` AND (m.region_uf = $${params.length} OR m.region_uf IS NULL)`; }
     const r = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.type, m.close_at, m.liquidity_b,
               c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
-        WHERE m.status = 'OPEN'
+        WHERE ${where}
         ORDER BY m.featured DESC, m.close_at ASC LIMIT 6`,
+      params,
     );
     if (!r.rowCount) return [];
     const marketIds = r.rows.map((row) => row.id as string);
@@ -239,11 +250,17 @@ export const marketRouter = router({
   // probabilidade nas últimas 24h, pra cima ou pra baixo. Reaproveita
   // price_snapshots (mesma fonte da sparkline do slide de destaque) em vez
   // de introduzir métrica nova (page views, trade count) — sem infra extra.
-  trending: publicProcedure.query(async ({ ctx }) => {
+  trending: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+    const params: unknown[] = [];
+    let where = "m.status = 'OPEN'";
+    if (input?.uf) { params.push(input.uf); where += ` AND (m.region_uf = $${params.length} OR m.region_uf IS NULL)`; }
     const r = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.type, m.liquidity_b, c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
-        WHERE m.status = 'OPEN'`,
+        WHERE ${where}`,
+      params,
     );
     if (!r.rowCount) return [];
     const marketIds = r.rows.map((row) => row.id as string);
@@ -305,16 +322,22 @@ export const marketRouter = router({
   // "Mais votados" (coluna lateral da home) — participantes únicos por
   // mercado, não total de previsões: como uma enquete, 1 pessoa = 1 voto,
   // não importa quantas vezes ela mudou de posição.
-  mostVoted: publicProcedure.query(async ({ ctx }) => {
+  mostVoted: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+    const params: unknown[] = [];
+    let where = "m.status = 'OPEN'";
+    if (input?.uf) { params.push(input.uf); where += ` AND (m.region_uf = $${params.length} OR m.region_uf IS NULL)`; }
     const r = await ctx.pool.query(
       `SELECT m.slug, m.title, c.name AS category_name, count(DISTINCT t.user_id)::int AS voters
          FROM markets m
          JOIN categories c ON c.id = m.category_id
          JOIN trades t ON t.market_id = m.id
-        WHERE m.status = 'OPEN'
+        WHERE ${where}
         GROUP BY m.id, c.name
         ORDER BY voters DESC, m.created_at DESC
         LIMIT 5`,
+      params,
     );
     return r.rows.map((row) => ({
       slug: row.slug as string, title: row.title as string,
@@ -323,13 +346,19 @@ export const marketRouter = router({
   }),
 
   // "Novos mercados" (coluna lateral da home) — os mais recentemente abertos.
-  newest: publicProcedure.query(async ({ ctx }) => {
+  newest: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+    const params: unknown[] = [];
+    let where = "m.status = 'OPEN'";
+    if (input?.uf) { params.push(input.uf); where += ` AND (m.region_uf = $${params.length} OR m.region_uf IS NULL)`; }
     const r = await ctx.pool.query(
       `SELECT m.slug, m.title, c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
-        WHERE m.status = 'OPEN'
+        WHERE ${where}
         ORDER BY m.created_at DESC
         LIMIT 5`,
+      params,
     );
     return r.rows.map((row) => ({
       slug: row.slug as string, title: row.title as string, categoryName: row.category_name as string,
@@ -382,11 +411,22 @@ export const marketRouter = router({
     return r.rows as { slug: string; name: string }[];
   }),
 
+  // Estados com pelo menos 1 mercado aberto — alimenta o seletor de UF da
+  // home (só lista o que tem conteúdo de verdade, não as 27 UFs sempre).
+  states: publicProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT region_uf AS uf, count(*)::int AS n FROM markets
+        WHERE status = 'OPEN' AND region_uf IS NOT NULL
+        GROUP BY region_uf ORDER BY region_uf`,
+    );
+    return r.rows as { uf: string; n: number }[];
+  }),
+
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
               m.close_at, m.resolve_by, m.resolution_criteria, m.resolution_source, m.featured,
-              c.slug AS category_slug, c.name AS category_name
+              m.region_uf, c.slug AS category_slug, c.name AS category_name
          FROM markets m JOIN categories c ON c.id = m.category_id
         WHERE m.slug = $1`,
       [input.slug],
@@ -434,6 +474,7 @@ export const marketRouter = router({
       resolutionCriteria: mk.resolution_criteria as string, resolutionSource: mk.resolution_source as string,
       categorySlug: mk.category_slug as string, categoryName: mk.category_name as string,
       liquidityB: Number(mk.liquidity_b), featured: mk.featured as boolean,
+      regionUf: mk.region_uf as string | null,
       outcomes: out.rows.map((r, i) => ({
         id: r.id as string, label: r.label as string,
         isCatchall: r.is_catchall as boolean, price: prices[i],
@@ -448,6 +489,10 @@ export const marketRouter = router({
     .input(z.object({
       status: z.string().optional(), categorySlug: z.string().optional(),
       q: z.string().trim().max(200).optional(),
+      // Mercado sem region_uf (nacional: Presidente, esporte/cultura sem
+      // recorte estadual) sempre aparece, em qualquer estado filtrado —
+      // por isso "OR region_uf IS NULL", nunca só "= uf".
+      uf: z.string().length(2).toUpperCase().optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       const conds: string[] = ["m.status != 'DRAFT'"];
@@ -462,11 +507,12 @@ export const marketRouter = router({
       }
       if (input?.categorySlug) { params.push(input.categorySlug); conds.push(`c.slug = $${params.length}`); }
       if (input?.q) { params.push(`%${input.q}%`); conds.push(`m.title ILIKE $${params.length}`); }
+      if (input?.uf) { params.push(input.uf); conds.push(`(m.region_uf = $${params.length} OR m.region_uf IS NULL)`); }
       const where = `WHERE ${conds.join(" AND ")}`;
 
       const r = await ctx.pool.query(
         `SELECT m.id, m.slug, m.title, m.status, m.type, m.is_electoral, m.liquidity_b, m.close_at,
-                c.slug AS category_slug, c.name AS category_name
+                m.region_uf, c.slug AS category_slug, c.name AS category_name
            FROM markets m JOIN categories c ON c.id = m.category_id
            ${where}
           ORDER BY m.created_at DESC LIMIT 300`,
@@ -519,7 +565,7 @@ export const marketRouter = router({
         return {
           slug: row.slug as string, title: row.title as string, status: row.status as string,
           type: row.type as string, isElectoral: row.is_electoral as boolean,
-          closeAt: row.close_at as Date,
+          closeAt: row.close_at as Date, regionUf: row.region_uf as string | null,
           categorySlug: row.category_slug as string, categoryName: row.category_name as string,
           summary,
           sponsor: sponsorByMarket.get(row.id as string) ?? null,

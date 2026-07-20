@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { UFS } from "../lib/ufs";
 
 interface Ctx { role: string }
 
@@ -39,6 +40,7 @@ export function AdminMarketDetail() {
   const [closeAt, setCloseAt] = useState("");
   const [resolveByField, setResolveByField] = useState("");
   const [isElectoral, setIsElectoral] = useState(false);
+  const [regionUf, setRegionUf] = useState("");
 
   const [winningOutcomeId, setWinningOutcomeId] = useState("");
   const [justification, setJustification] = useState("");
@@ -61,6 +63,7 @@ export function AdminMarketDetail() {
     setCloseAt(dtLocal(market.closeAt));
     setResolveByField(dtLocal(market.resolveBy));
     setIsElectoral(market.isElectoral);
+    setRegionUf(market.regionUf ?? "");
   }, [market?.id]);
 
   async function refresh() {
@@ -76,7 +79,7 @@ export function AdminMarketDetail() {
         id: market.id, title, description: description || null,
         resolutionCriteria, resolutionSource,
         closeAt: new Date(closeAt).toISOString(), resolveBy: new Date(resolveByField).toISOString(),
-        isElectoral,
+        isElectoral, regionUf: regionUf || null,
       });
       setMsg("Salvo.");
       await refresh();
@@ -324,6 +327,13 @@ export function AdminMarketDetail() {
             <div className="field">
               <label className="label">Resolve até</label>
               <input className="input" type="datetime-local" value={resolveByField} onChange={(e) => setResolveByField(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="regionUf">Estado</label>
+              <select id="regionUf" value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
+                <option value="">Nacional — todos os estados</option>
+                {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+              </select>
             </div>
             <label className="checkbox-row">
               <input type="checkbox" checked={isElectoral} onChange={(e) => setIsElectoral(e.target.checked)} />

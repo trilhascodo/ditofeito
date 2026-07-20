@@ -5,6 +5,12 @@ import { pct, relativeClose } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
 import { SocialLinks, type SocialLinkItem } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
+import { UFS } from "../lib/ufs";
+
+// Seletor de estado da home: guarda a última escolha no navegador (sem
+// login, sem geo-IP — mesma filosofia de users.region_uf) só pra semear a
+// visita seguinte; link com ?uf= na URL sempre manda, pra ficar compartilhável.
+const UF_STORAGE_KEY = "ditofeito:uf";
 
 interface FeaturedMarket {
   slug: string; title: string; type: string; closeAt: string; categoryName: string;
@@ -253,18 +259,48 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
 }
 
 export function Home() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const categorySlug = searchParams.get("categoria");
   const busca = searchParams.get("busca");
+  const ufParam = searchParams.get("uf");
+  const uf = ufParam ?? "";
+
+  // Semeia o estado salvo do navegador só quando a URL chega sem "uf" —
+  // link compartilhado com ?uf=SP nunca é sobrescrito pelo que já tava
+  // salvo localmente numa visita anterior.
+  useEffect(() => {
+    if (ufParam !== null) return;
+    const saved = localStorage.getItem(UF_STORAGE_KEY);
+    if (!saved) return;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("uf", saved);
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onUfChange(next: string) {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next) p.set("uf", next); else p.delete("uf");
+      return p;
+    });
+    if (next) localStorage.setItem(UF_STORAGE_KEY, next);
+    else localStorage.removeItem(UF_STORAGE_KEY);
+  }
+
   const { data: categories } = trpc.market.categories.useQuery();
+  const { data: states } = trpc.market.states.useQuery();
+  const listInput = { categorySlug: categorySlug ?? undefined, q: busca ?? undefined, uf: uf || undefined };
   const { data: markets, isLoading, error } = trpc.market.list.useQuery(
-    (categorySlug || busca) ? { categorySlug: categorySlug ?? undefined, q: busca ?? undefined } : undefined,
+    (listInput.categorySlug || listInput.q || listInput.uf) ? listInput : undefined,
   );
   const { data: home } = trpc.sponsor.getActiveHome.useQuery();
-  const { data: featured } = trpc.market.featured.useQuery();
-  const { data: trending } = trpc.market.trending.useQuery();
-  const { data: mostVoted } = trpc.market.mostVoted.useQuery();
-  const { data: newest } = trpc.market.newest.useQuery();
+  const { data: featured } = trpc.market.featured.useQuery({ uf: uf || undefined });
+  const { data: trending } = trpc.market.trending.useQuery({ uf: uf || undefined });
+  const { data: mostVoted } = trpc.market.mostVoted.useQuery({ uf: uf || undefined });
+  const { data: newest } = trpc.market.newest.useQuery({ uf: uf || undefined });
   const { data: homeLinks } = trpc.homeLinks.list.useQuery();
   const trackImpression = trpc.adEvents.trackImpression.useMutation();
 
@@ -343,16 +379,28 @@ export function Home() {
         </p>
       )}
 
+      {states && states.length > 0 && (
+        <div className="uf-select-row" style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px" }}>
+          <label htmlFor="uf-select" className="hint-text" style={{ margin: 0 }}>Estado</label>
+          <select id="uf-select" value={uf} onChange={(e) => onUfChange(e.target.value)} style={{ width: "auto" }}>
+            <option value="">Todos os estados</option>
+            {states.map((s) => (
+              <option key={s.uf} value={s.uf}>{UFS.find((u) => u.value === s.uf)?.label ?? s.uf}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {categories && categories.length > 0 && (
         <div className="cat-tabs">
-          <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to="/">
+          <Link className={`cat-tab ${categorySlug === null ? "on" : ""}`} to={uf ? `/?uf=${uf}` : "/"}>
             Todos
           </Link>
           {categories.map((c) => (
             <Link
               key={c.slug}
               className={`cat-tab ${categorySlug === c.slug ? "on" : ""}`}
-              to={`/?categoria=${c.slug}`}
+              to={`/?categoria=${c.slug}${uf ? `&uf=${uf}` : ""}`}
             >
               {c.name}
             </Link>

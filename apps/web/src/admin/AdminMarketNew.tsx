@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { UFS } from "../lib/ufs";
 
 interface PrefillState {
   prefillTitle?: string; prefillCriteria?: string; prefillSource?: string;
@@ -36,6 +37,7 @@ export function AdminMarketNew() {
   const [title, setTitle] = useState(prefill.prefillTitle ?? "");
   const [description, setDescription] = useState("");
   const [categorySlug, setCategorySlug] = useState("");
+  const [regionUf, setRegionUf] = useState("");
   const [type, setType] = useState<"BINARY" | "MULTI">("BINARY");
   const [outcomes, setOutcomes] = useState(["", ""]);
   const [includeCatchall, setIncludeCatchall] = useState(true);
@@ -77,7 +79,7 @@ export function AdminMarketNew() {
           : undefined,
         includeCatchall, resolutionCriteria: resolutionCriteria.trim(), resolutionSource: resolutionSource.trim(),
         closeAt: new Date(closeAt).toISOString(), resolveBy: new Date(resolveBy).toISOString(),
-        isElectoral, publish,
+        isElectoral, regionUf: regionUf || undefined, publish,
       });
       navigate(`/admin/mercados/${r.slug}`);
     } catch (err) {
@@ -125,6 +127,17 @@ export function AdminMarketNew() {
               <option value="">selecione</option>
               {categories?.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="regionUf">Estado (opcional)</label>
+            <select id="regionUf" value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
+              <option value="">Nacional — todos os estados</option>
+              {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+            </select>
+            <p className="hint-text" style={{ marginTop: 4 }}>
+              Só marque um estado se o mercado for específico dele (ex.: Governador/UF).
+              Deixe em branco pra mercado nacional — aparece em qualquer filtro de estado na home.
+            </p>
           </div>
           <div className="field">
             <label className="label" htmlFor="type">Tipo</label>

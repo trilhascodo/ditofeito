@@ -15,7 +15,7 @@ const FALLBACK_EMOJI = "◆";
 
 export interface MarketTileData {
   slug: string; title: string; status: string; closeAt: string | Date;
-  categorySlug: string; categoryName: string;
+  categorySlug: string; categoryName: string; regionUf?: string | null;
   summary: { label: string; price: number } | null;
   sponsor: { label: string; name: string; logoUrl: string | null } | null;
 }
@@ -29,6 +29,7 @@ export function MarketTile({ m }: { m: MarketTileData }) {
       <div className="market-tile-top">
         <span className="market-tile-icon">{CATEGORY_EMOJI[m.categorySlug] ?? FALLBACK_EMOJI}</span>
         <span className="market-tile-category">{m.categoryName}</span>
+        {m.regionUf && <span className="badge">{m.regionUf}</span>}
         {m.status !== "OPEN" && (
           <span className="badge" style={{ marginLeft: "auto" }}>
             {STATUS_LABEL[m.status] ?? m.status}
