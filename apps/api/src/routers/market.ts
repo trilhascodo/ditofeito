@@ -346,6 +346,37 @@ export const marketRouter = router({
     return { id: r.rows[0].id as string };
   }),
 
+  // Só apaga de verdade em DRAFT — nunca esteve visível pro público, então
+  // nunca teve trade/posição/comentário/resolução possível (essas telas só
+  // existem em mercados OPEN pra frente). Publicado pra frente, a ferramenta
+  // certa é Anular (admin.voidMarket): devolve o comprometido e mantém o
+  // histórico público, em vez de sumir sem rastro.
+  remove: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
+    const c = await ctx.pool.connect();
+    try {
+      await c.query("BEGIN");
+      const m = await c.query(`SELECT status FROM markets WHERE id = $1 FOR UPDATE`, [input.id]);
+      if (!m.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
+      if (m.rows[0].status !== "DRAFT") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Só é possível excluir mercados em rascunho. Mercados já publicados usam Anular — devolve o comprometido e mantém o histórico público.",
+        });
+      }
+      // Patrocínio pode ter sido vinculado antes de publicar — sem cascade
+      // no schema (RESTRICT), precisa limpar antes do DELETE do mercado.
+      await c.query(`DELETE FROM sponsorships WHERE market_id = $1`, [input.id]);
+      await c.query(`DELETE FROM markets WHERE id = $1`, [input.id]);
+      await c.query("COMMIT");
+      return { ok: true };
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+  }),
+
   categories: publicProcedure.query(async ({ ctx }) => {
     const r = await ctx.pool.query(`SELECT slug, name FROM categories ORDER BY name`);
     return r.rows as { slug: string; name: string }[];

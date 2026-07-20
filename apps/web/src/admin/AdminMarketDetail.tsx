@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 
 interface Ctx { role: string }
@@ -18,12 +18,14 @@ export function AdminMarketDetail() {
   const { slug = "" } = useParams();
   const { role } = useOutletContext<Ctx>();
   const canEdit = role === "ADMIN";
+  const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { data: market, isLoading, error } = trpc.market.get.useQuery({ slug }, { enabled: !!slug });
   const { data: news } = trpc.news.list.useQuery({ marketId: market?.id ?? "" }, { enabled: !!market });
 
   const updateMutation = trpc.market.update.useMutation();
   const publishMutation = trpc.market.publish.useMutation();
+  const removeMutation = trpc.market.remove.useMutation();
   const resolveMutation = trpc.admin.resolveMarket.useMutation();
   const voidMutation = trpc.admin.voidMarket.useMutation();
   const addNewsMutation = trpc.news.add.useMutation();
@@ -92,6 +94,19 @@ export function AdminMarketDetail() {
       await refresh();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : "Erro ao publicar");
+    }
+  }
+
+  async function onRemove() {
+    if (!market) return;
+    if (!confirm(`Excluir "${market.title}"? Isso apaga o rascunho por completo, sem deixar rastro público.`)) return;
+    setMsg(null); setErr(null);
+    try {
+      await removeMutation.mutateAsync({ id: market.id });
+      await utils.admin.listMarkets.invalidate();
+      navigate("/admin/mercados");
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Erro ao excluir");
     }
   }
 
@@ -268,9 +283,17 @@ export function AdminMarketDetail() {
           <p className="hint-text" style={{ marginBottom: 12 }}>
             Rascunho — não aparece pro público até publicar.
           </p>
-          <button className="btn" style={{ width: "auto" }} onClick={onPublish} disabled={publishMutation.isPending}>
-            {publishMutation.isPending ? "Publicando…" : "Publicar mercado"}
-          </button>
+          <div className="form-actions">
+            <button className="btn" onClick={onPublish} disabled={publishMutation.isPending}>
+              {publishMutation.isPending ? "Publicando…" : "Publicar mercado"}
+            </button>
+            <button
+              type="button" className="btn-outline btn-danger"
+              onClick={onRemove} disabled={removeMutation.isPending}
+            >
+              {removeMutation.isPending ? "Excluindo…" : "Excluir mercado"}
+            </button>
+          </div>
         </div>
       )}
 
