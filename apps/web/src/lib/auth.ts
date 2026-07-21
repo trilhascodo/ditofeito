@@ -30,6 +30,26 @@ export function login(input: { email: string; password: string }) {
   return call<{ user: AuthUser }>("/auth/login", { method: "POST", body: JSON.stringify(input) });
 }
 
+// 1ª etapa do login com Google: já loga se a identidade (ou o e-mail, se
+// verificado pelo Google) já tem conta; senão devolve NEEDS_PROFILE pra
+// front pedir handle+CPF (ver oauthGoogleComplete).
+export type OauthGoogleStartResult =
+  | { status: "LOGGED_IN"; user: AuthUser }
+  | { status: "NEEDS_PROFILE"; email: string; name: string };
+
+export function oauthGoogleLogin(credential: string) {
+  return call<OauthGoogleStartResult>("/auth/oauth/google", {
+    method: "POST", body: JSON.stringify({ credential }),
+  });
+}
+
+export function oauthGoogleComplete(input: {
+  credential: string; handle: string; displayName: string; cpf: string; captchaToken: string;
+  regionUf?: string; regionCity?: string;
+}) {
+  return call<{ user: AuthUser }>("/auth/oauth/google/complete", { method: "POST", body: JSON.stringify(input) });
+}
+
 export function requestPasswordReset(input: { email: string }) {
   return call<{ mensagem: string }>("/auth/request-password-reset", { method: "POST", body: JSON.stringify(input) });
 }

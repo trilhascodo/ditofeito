@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
-import { signup } from "../lib/auth";
+import { signup, oauthGoogleLogin } from "../lib/auth";
 import { Turnstile } from "../components/Turnstile";
 import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
+import { useAuth } from "../lib/useAuth";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
+import { GoogleCompleteProfileForm } from "../components/GoogleCompleteProfileForm";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 // Sem chave configurada (dev/local): backend também aceita qualquer token
 // quando TURNSTILE_SECRET_KEY está vazio, então o front não trava sem captcha.
 const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
+const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export function Signup() {
   const [handle, setHandle] = useState("");
@@ -23,7 +27,26 @@ export function Signup() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [googlePending, setGooglePending] = useState<{ credential: string; name: string } | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const ufGeo = useUfGeolocation();
+  const navigate = useNavigate();
+  const { refresh } = useAuth();
+
+  async function onGoogleCredential(credential: string) {
+    setGoogleError(null);
+    try {
+      const result = await oauthGoogleLogin(credential);
+      if (result.status === "LOGGED_IN") {
+        refresh();
+        navigate("/");
+      } else {
+        setGooglePending({ credential, name: result.name });
+      }
+    } catch (err) {
+      setGoogleError(err instanceof Error ? err.message : "Erro ao continuar com Google");
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,10 +89,33 @@ export function Signup() {
     );
   }
 
+  if (googlePending) {
+    return (
+      <main className="page-narrow">
+        <div className="card">
+          <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, marginTop: 0 }}>Concluir cadastro</h1>
+          <GoogleCompleteProfileForm
+            credential={googlePending.credential}
+            suggestedName={googlePending.name}
+            onDone={() => { refresh(); navigate("/"); }}
+            onCancel={() => setGooglePending(null)}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="page-narrow">
       <div className="card">
         <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, marginTop: 0 }}>Cadastrar</h1>
+        {GOOGLE_ENABLED && (
+          <>
+            <GoogleSignInButton onCredential={onGoogleCredential} />
+            {googleError && <p className="error-text" style={{ marginTop: 8 }}>{googleError}</p>}
+            <p className="hint-text" style={{ margin: "16px 0", textAlign: "center" }}>ou</p>
+          </>
+        )}
         <form onSubmit={onSubmit}>
           <div className="field">
             <label className="label" htmlFor="handle">Nome de usuário</label>

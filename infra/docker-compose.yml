@@ -39,6 +39,7 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-DitoFeito <nao-responda@ditofeito.com>}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       EMAIL_CONFIG_KEY: ${EMAIL_CONFIG_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     ports:
       # Porta do HOST é configurável (VPS compartilhada: outros apps já usam
       # 3000-3003/3100) — nginx do host faz o proxy_pass pra cá. Loopback-only:

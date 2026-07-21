@@ -33,3 +33,24 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8).max(200),
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+// credential = ID token do Google Identity Services (JWT assinado pelo
+// Google, verificado em lib/googleAuth.ts — nunca confiar nele sem checar).
+export const oauthGoogleSchema = z.object({
+  credential: z.string().min(1),
+});
+export type OauthGoogleInput = z.infer<typeof oauthGoogleSchema>;
+
+// Segunda etapa só pra quem é conta nova (oauthGoogleSchema não achou
+// identidade nem e-mail existente) — CPF continua obrigatório, senha e
+// verificação de e-mail somem (Google já garante o e-mail).
+export const oauthCompleteSchema = z.object({
+  credential: z.string().min(1),
+  handle: z.string().regex(/^[a-z0-9_]{3,30}$/, "3–30 caracteres: a-z, 0-9, _"),
+  displayName: z.string().trim().min(1).max(80),
+  cpf: z.string().refine(isValidCpf, "CPF inválido").transform(onlyDigits),
+  captchaToken: z.string().min(1, "Captcha obrigatório"),
+  regionUf: z.string().length(2).optional(),
+  regionCity: z.string().trim().max(120).optional(),
+});
+export type OauthCompleteInput = z.infer<typeof oauthCompleteSchema>;

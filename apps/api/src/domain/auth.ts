@@ -6,12 +6,15 @@
 import { randomBytes, createHash } from "node:crypto";
 import { hash as argonHash, verify as argonVerify } from "@node-rs/argon2";
 import { isDisposableEmail } from "@ditofeito/core";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import { appendLedger } from "./trade.js";
 import { sendTransactionalEmail } from "../lib/email.js";
 import { verifyCaptcha } from "../lib/captcha.js";
+import { verifyGoogleCredential } from "../lib/googleAuth.js";
 import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
-import type { SignupInput, LoginInput, RequestPasswordResetInput, ResetPasswordInput } from "./auth.schemas.js";
+import type {
+  SignupInput, LoginInput, RequestPasswordResetInput, ResetPasswordInput, OauthCompleteInput,
+} from "./auth.schemas.js";
 
 export class AuthError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -100,6 +103,31 @@ export async function signup(
   return { userId };
 }
 
+// -------------------------- Sessão (compartilhado) -------------------------------
+async function issueSession(
+  db: Pool | PoolClient, userId: string, meta: { userAgent?: string; ip?: string },
+): Promise<{ token: string; expiresAt: Date }> {
+  const token = randomToken();
+  const expiresAt = new Date(Date.now() + AUTH_CONFIG.sessionTtlDays * 86_400_000);
+  await db.query(
+    `INSERT INTO sessions (user_id, token_hash, user_agent, ip, expires_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [userId, hashToken(token), meta.userAgent ?? null, meta.ip ?? null, expiresAt.toISOString()]);
+  return { token, expiresAt };
+}
+
+interface UserRow {
+  id: string; handle: string; display_name: string; role: string;
+  is_banned: boolean; email_verified_at: string | null; sponsor_id: string | null;
+}
+function toSessionUser(row: UserRow): SessionUser {
+  return {
+    id: row.id, handle: row.handle, displayName: row.display_name,
+    role: row.role, emailVerified: row.email_verified_at !== null,
+    sponsorId: row.sponsor_id,
+  };
+}
+
 // -------------------------------- Login ----------------------------------------
 export async function login(
   pool: Pool, input: LoginInput, meta: { userAgent?: string; ip?: string },
@@ -111,25 +139,131 @@ export async function login(
   if (!u.rowCount) throw invalid();
   const row = u.rows[0];
   if (row.is_banned) throw new AuthError("USUARIO_SUSPENSO", "Conta suspensa");
+  // Conta criada só por login social (ex.: Google) não tem senha — nada pra
+  // comparar, então é sempre "credenciais inválidas" nesse caminho (a pessoa
+  // deveria entrar pelo botão do provedor, não pelo formulário).
+  if (!row.password_hash) throw invalid();
 
   const ok = await argonVerify(row.password_hash, input.password);
   if (!ok) throw invalid();
 
-  const token = randomToken();
-  const expiresAt = new Date(Date.now() + AUTH_CONFIG.sessionTtlDays * 86_400_000);
-  await pool.query(
-    `INSERT INTO sessions (user_id, token_hash, user_agent, ip, expires_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [row.id, hashToken(token), meta.userAgent ?? null, meta.ip ?? null, expiresAt.toISOString()]);
+  const { token, expiresAt } = await issueSession(pool, row.id, meta);
+  return { token, expiresAt, user: toSessionUser(row) };
+}
 
-  return {
-    token, expiresAt,
-    user: {
-      id: row.id, handle: row.handle, displayName: row.display_name,
-      role: row.role, emailVerified: row.email_verified_at !== null,
-      sponsorId: row.sponsor_id,
-    },
-  };
+// ---------------------------- Login com Google ------------------------------------
+// Duas etapas porque CPF continua obrigatório (login social não resolve "1
+// conta por pessoa"): 1ª chamada (oauthGoogleLogin) resolve se já existe
+// conta pra logar; se for gente nova, front pede handle+CPF e chama
+// oauthGoogleComplete com o MESMO credential (reverificado — nunca confia em
+// claim que já passou pelo cliente sem novo check de assinatura).
+export type OauthGoogleResult =
+  | { status: "LOGGED_IN"; token: string; expiresAt: Date; user: SessionUser }
+  | { status: "NEEDS_PROFILE"; email: string; name: string };
+
+export async function oauthGoogleLogin(
+  pool: Pool, credential: string, meta: { ip?: string; userAgent?: string } = {},
+): Promise<OauthGoogleResult> {
+  const identity = await verifyGoogleCredential(credential);
+
+  const existing = await pool.query(
+    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id
+       FROM oauth_identities oi JOIN users u ON u.id = oi.user_id
+      WHERE oi.provider = 'GOOGLE' AND oi.provider_user_id = $1`,
+    [identity.sub]);
+  if (existing.rowCount) {
+    const row = existing.rows[0] as UserRow;
+    if (row.is_banned) throw new AuthError("USUARIO_SUSPENSO", "Conta suspensa");
+    const { token, expiresAt } = await issueSession(pool, row.id, meta);
+    return { status: "LOGGED_IN", token, expiresAt, user: toSessionUser(row) };
+  }
+
+  // 1ª vez com Google: se o Google confirma o e-mail e ele já é de uma conta
+  // existente (senha), liga a identidade em vez de arriscar duplicata — só
+  // quando o e-mail é verificado pelo provedor, nunca confia numa claim não
+  // verificada pra fundir com conta de outra pessoa.
+  if (identity.emailVerified) {
+    const byEmail = await pool.query(
+      `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id
+         FROM users WHERE email = $1`, [identity.email]);
+    if (byEmail.rowCount) {
+      const row = byEmail.rows[0] as UserRow;
+      if (row.is_banned) throw new AuthError("USUARIO_SUSPENSO", "Conta suspensa");
+      await pool.query(
+        `INSERT INTO oauth_identities (user_id, provider, provider_user_id, email)
+         VALUES ($1,'GOOGLE',$2,$3)`,
+        [row.id, identity.sub, identity.email]);
+      const { token, expiresAt } = await issueSession(pool, row.id, meta);
+      return { status: "LOGGED_IN", token, expiresAt, user: toSessionUser(row) };
+    }
+  }
+
+  return { status: "NEEDS_PROFILE", email: identity.email, name: identity.name };
+}
+
+export async function oauthGoogleComplete(
+  pool: Pool, input: OauthCompleteInput, meta: { ip?: string; userAgent?: string } = {},
+): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
+  const captchaOk = await verifyCaptcha(input.captchaToken, meta.ip);
+  if (!captchaOk) throw new AuthError("CAPTCHA_INVALIDO", "Não foi possível validar o captcha");
+
+  const identity = await verifyGoogleCredential(input.credential);
+  if (isDisposableEmail(identity.email))
+    throw new AuthError("EMAIL_DESCARTAVEL", "E-mails temporários não são aceitos");
+
+  const client = await pool.connect();
+  let userId: string;
+  try {
+    await client.query("BEGIN");
+
+    const already = await client.query(
+      `SELECT 1 FROM oauth_identities WHERE provider = 'GOOGLE' AND provider_user_id = $1`,
+      [identity.sub]);
+    if (already.rowCount)
+      throw new AuthError("EMAIL_EM_USO", "Essa conta Google já está vinculada a um cadastro");
+
+    const dup = await client.query(
+      `SELECT handle, email, cpf FROM users WHERE handle=$1 OR email=$2 OR cpf=$3`,
+      [input.handle, identity.email, input.cpf]);
+    if (dup.rowCount) {
+      const row = dup.rows[0];
+      const code = row.email === identity.email ? "EMAIL_EM_USO"
+        : row.cpf === input.cpf ? "CPF_EM_USO" : "HANDLE_EM_USO";
+      const message = { EMAIL_EM_USO: "E-mail já cadastrado", CPF_EM_USO: "CPF já cadastrado",
+        HANDLE_EM_USO: "Nome de usuário já em uso" }[code];
+      throw new AuthError(code, message);
+    }
+
+    const u = await client.query(
+      `INSERT INTO users (handle, display_name, email, cpf, signup_ip, signup_user_agent,
+                          region_uf, region_city, email_verified_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [input.handle, input.displayName, identity.email, input.cpf,
+        meta.ip ?? null, meta.userAgent ?? null,
+        input.regionUf ?? null, input.regionCity?.trim() || null,
+        identity.emailVerified ? new Date() : null]);
+    userId = u.rows[0].id;
+
+    await client.query(
+      `INSERT INTO oauth_identities (user_id, provider, provider_user_id, email)
+       VALUES ($1,'GOOGLE',$2,$3)`,
+      [userId, identity.sub, identity.email]);
+
+    await appendLedger(client, userId, AUTH_CONFIG.signupBonusPoints, "SIGNUP_BONUS", null, null);
+
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  const { token, expiresAt } = await issueSession(pool, userId, meta);
+  const row = (await pool.query(
+    `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id
+       FROM users WHERE id = $1`, [userId])).rows[0] as UserRow;
+  return { token, expiresAt, user: toSessionUser(row) };
 }
 
 export async function logout(pool: Pool, rawToken: string): Promise<void> {

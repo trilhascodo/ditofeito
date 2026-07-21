@@ -1,8 +1,14 @@
 import type express from "express";
 import rateLimit from "express-rate-limit";
 import type { Pool } from "pg";
-import { signup, login, logout, verifyEmail, requestPasswordReset, resetPassword, AuthError } from "../domain/auth.js";
-import { signupSchema, loginSchema, requestPasswordResetSchema, resetPasswordSchema } from "../domain/auth.schemas.js";
+import {
+  signup, login, logout, verifyEmail, requestPasswordReset, resetPassword,
+  oauthGoogleLogin, oauthGoogleComplete, AuthError,
+} from "../domain/auth.js";
+import {
+  signupSchema, loginSchema, requestPasswordResetSchema, resetPasswordSchema,
+  oauthGoogleSchema, oauthCompleteSchema,
+} from "../domain/auth.schemas.js";
 import { optionalAuth, requireAuth } from "./middleware.js";
 import { asyncHandler } from "./asyncHandler.js";
 import { AUTH_CONFIG, APP_CONFIG } from "../config.js";
@@ -66,6 +72,39 @@ export function mountAuth(app: express.Express, pool: Pool) {
       throw e;
     }
   }));
+
+  // 1ª etapa do login com Google: loga direto se já existe identidade/conta
+  // vinculável, ou devolve "precisa completar perfil" (handle+CPF) pra gente
+  // nova — nunca cria conta sozinha (ver domain/auth.ts::oauthGoogleLogin).
+  app.post("/auth/oauth/google", authLimiter(AUTH_CONFIG.rateLimit.loginMax), asyncHandler(async (req, res) => {
+    const parsed = oauthGoogleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
+    try {
+      const result = await oauthGoogleLogin(pool, parsed.data.credential, { ip: req.ip, userAgent: req.get("user-agent") });
+      if (result.status === "NEEDS_PROFILE") return res.json({ status: "NEEDS_PROFILE", email: result.email, name: result.name });
+      res.cookie(AUTH_CONFIG.sessionCookieName, result.token, cookieOptions());
+      res.json({ status: "LOGGED_IN", user: result.user });
+    } catch (e) {
+      if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });
+      throw e;
+    }
+  }));
+
+  // 2ª etapa: só chega aqui quem oauthGoogleLogin mandou completar o perfil.
+  // Reverifica o credential (nunca confia no que já passou pelo cliente).
+  app.post("/auth/oauth/google/complete",
+    authLimiter(AUTH_CONFIG.rateLimit.signupMax), asyncHandler(async (req, res) => {
+      const parsed = oauthCompleteSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
+      try {
+        const { token, user } = await oauthGoogleComplete(pool, parsed.data, { ip: req.ip, userAgent: req.get("user-agent") });
+        res.cookie(AUTH_CONFIG.sessionCookieName, token, cookieOptions());
+        res.status(201).json({ user });
+      } catch (e) {
+        if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });
+        throw e;
+      }
+    }));
 
   // Sempre responde a mesma mensagem genérica, exista ou não o e-mail —
   // requestPasswordReset() já não revela isso (evita enumeração de contas).
