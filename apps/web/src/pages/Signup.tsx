@@ -119,7 +119,8 @@ export function Signup() {
                 {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
               </select>
               <button
-                type="button" className="btn-outline" style={{ width: "auto", padding: "10px 14px" }}
+                type="button" className="btn-outline"
+                style={{ width: "auto", flex: "0 0 auto", padding: "10px 14px" }}
                 disabled={ufGeo.status === "locating"}
                 onClick={() => ufGeo.locate(setRegionUf)}
               >

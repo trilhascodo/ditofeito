@@ -172,7 +172,8 @@ export function Profile() {
             <input className="input" id="profile-city" placeholder="Codó" value={regionCity} onChange={(e) => setRegionCity(e.target.value)} />
           </div>
           <button
-            type="button" className="btn-outline" style={{ width: "auto", padding: "10px 14px" }}
+            type="button" className="btn-outline"
+            style={{ width: "auto", flex: "0 0 auto", padding: "10px 14px" }}
             disabled={ufGeo.status === "locating"}
             onClick={() => ufGeo.locate(setRegionUf)}
           >

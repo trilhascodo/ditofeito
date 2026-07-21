@@ -410,7 +410,8 @@ export function Home() {
             ))}
           </select>
           <button
-            type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px", fontSize: 13 }}
+            type="button" className="btn-outline"
+            style={{ width: "auto", flex: "0 0 auto", padding: "6px 12px", fontSize: 13 }}
             disabled={ufGeo.status === "locating"}
             onClick={() => ufGeo.locate(onUfChange)}
           >
