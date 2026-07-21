@@ -2,7 +2,6 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure, adminProcedure, sponsorProcedure } from "../trpc/trpc.js";
 import { notify } from "../domain/notify.js";
 import { sendTransactionalEmail } from "../lib/email.js";
-import { APP_CONFIG } from "../config.js";
 
 // ----------------------------------------------------------------------------
 // Patrocínio nativo (identidade-ditofeito.md — card "Apresentado por", nunca
@@ -278,133 +277,42 @@ export const sponsorRouter = router({
       return { ok: true };
     }),
 
-  // ---- AUTOATENDIMENTO: aplicação de conta de anunciante ------------------
-  // Substitui os dois passos manuais acima (create + linkUser) por um único
-  // clique de aprovação — o próprio interessado preenche os dados.
-  createApplication: protectedProcedure
+  // ---- AUTOATENDIMENTO: virar anunciante é instantâneo --------------------
+  // Sem fila de aprovação pra conta em si: nada fica público sem passar pela
+  // aprovação de campanha (approveSponsorship) ou de arte (approveCreative),
+  // que continuam existindo — revisar a CONTA também só duplicava esse
+  // controle e atrasava sem ganho nenhum ("autoatendimento" que na prática
+  // ainda esperava retorno de alguém não é autoatendimento).
+  becomeSponsor: protectedProcedure
     .input(z.object({
       companyName: z.string().trim().min(1).max(120),
-      requestedPlan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]),
+      plan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]).default("BASICO"),
       siteUrl: z.string().trim().url().optional(),
       logoUrl: z.string().trim().url().optional(),
-      message: z.string().trim().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       if (ctx.user.role !== "USER")
         throw new Error("Essa conta já tem outro papel no site — fale com o suporte.");
       if (!ctx.user.emailVerified)
-        throw new Error("Confirme seu e-mail antes de aplicar pra virar anunciante.");
-      const pending = await ctx.pool.query(
-        `SELECT 1 FROM sponsor_applications WHERE user_id = $1 AND status = 'NOVO'`, [ctx.user.id]);
-      if (pending.rowCount) throw new Error("Você já tem uma aplicação em análise.");
-      const r = await ctx.pool.query(
-        `INSERT INTO sponsor_applications (user_id, company_name, requested_plan, site_url, logo_url, message)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-        [ctx.user.id, input.companyName, input.requestedPlan,
-          input.siteUrl ?? null, input.logoUrl ?? null, input.message ?? null]);
-      return { id: r.rows[0].id as string };
-    }),
-
-  listMyApplications: protectedProcedure.query(async ({ ctx }) => {
-    const r = await ctx.pool.query(
-      `SELECT id, company_name, requested_plan, status, admin_note, created_at
-         FROM sponsor_applications WHERE user_id = $1 ORDER BY created_at DESC`, [ctx.user.id]);
-    return r.rows.map((row) => ({
-      id: row.id as string, companyName: row.company_name as string,
-      requestedPlan: row.requested_plan as string, status: row.status as "NOVO" | "APROVADO" | "REJEITADO",
-      adminNote: row.admin_note as string | null, createdAt: row.created_at as string,
-    }));
-  }),
-
-  listApplications: adminProcedure.query(async ({ ctx }) => {
-    const r = await ctx.pool.query(
-      `SELECT sa.id, sa.company_name, sa.requested_plan, sa.site_url, sa.logo_url, sa.message,
-              sa.status, sa.admin_note, sa.created_at,
-              u.id AS user_id, u.handle, u.display_name, u.email
-         FROM sponsor_applications sa
-         JOIN users u ON u.id = sa.user_id
-        ORDER BY sa.created_at DESC`);
-    return r.rows.map((row) => ({
-      id: row.id as string, companyName: row.company_name as string,
-      requestedPlan: row.requested_plan as string, siteUrl: row.site_url as string | null,
-      logoUrl: row.logo_url as string | null, message: row.message as string | null,
-      status: row.status as "NOVO" | "APROVADO" | "REJEITADO", adminNote: row.admin_note as string | null,
-      createdAt: row.created_at as string,
-      applicant: { id: row.user_id as string, handle: row.handle as string, displayName: row.display_name as string },
-    }));
-  }),
-
-  // Aprovar cria o sponsor E promove o usuário numa transação só — mesma
-  // guarda de linkUser (só promove role='USER' puro).
-  approveApplication: adminProcedure
-    .input(z.object({
-      id: z.string().uuid(),
-      plan: z.enum(["BASICO", "PROFISSIONAL", "PREMIUM"]).optional(),
-      name: z.string().trim().min(1).max(120).optional(),
-    }))
-    .mutation(async ({ ctx, input }) => {
+        throw new Error("Confirme seu e-mail antes de virar anunciante.");
       const client = await ctx.pool.connect();
-      let userId: string;
-      let userEmail: string;
       try {
         await client.query("BEGIN");
-        const app = await client.query(
-          `SELECT user_id, company_name, requested_plan, site_url, logo_url
-             FROM sponsor_applications WHERE id = $1 AND status = 'NOVO' FOR UPDATE`, [input.id]);
-        if (!app.rowCount) throw new Error("Aplicação não encontrada ou já decidida");
-        const row = app.rows[0];
-        userId = row.user_id as string;
-
         const sp = await client.query(
           `INSERT INTO sponsors (name, logo_url, site_url, plan) VALUES ($1,$2,$3,$4) RETURNING id`,
-          [input.name ?? row.company_name, row.logo_url, row.site_url, input.plan ?? row.requested_plan]);
+          [input.companyName, input.logoUrl ?? null, input.siteUrl ?? null, input.plan]);
         const sponsorId = sp.rows[0].id as string;
-
         const promoted = await client.query(
           `UPDATE users SET role = 'SPONSOR', sponsor_id = $1, updated_at = now()
-             WHERE id = $2 AND role = 'USER' RETURNING email`,
-          [sponsorId, userId]);
-        if (!promoted.rowCount) throw new Error("Usuário já tem outro papel no site — não foi promovido");
-        userEmail = promoted.rows[0].email as string;
-
-        await client.query(`UPDATE sponsor_applications SET status = 'APROVADO' WHERE id = $1`, [input.id]);
+             WHERE id = $2 AND role = 'USER' RETURNING id`,
+          [sponsorId, ctx.user.id]);
+        if (!promoted.rowCount) throw new Error("Não foi possível criar a conta de anunciante.");
         await client.query("COMMIT");
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
       } finally {
         client.release();
-      }
-
-      const link = `${APP_CONFIG.appBaseUrl}/patrocinador`;
-      await notify(ctx.pool, userId, "SPONSOR_REVIEW_APPROVED",
-        "Sua conta de anunciante foi aprovada — acesse o painel pra configurar sua campanha.");
-      sendTransactionalEmail(ctx.pool, {
-        to: userEmail, subject: "Conta de anunciante aprovada — DitoFeito",
-        html: `<p>Sua aplicação foi aprovada. Acesse seu painel de anunciante:</p>
-               <p><a href="${link}">${link}</a></p>`,
-      }).catch((e) => console.error("[sponsor] envio de e-mail falhou", e));
-      return { ok: true };
-    }),
-
-  rejectApplication: adminProcedure
-    .input(z.object({ id: z.string().uuid(), adminNote: z.string().trim().min(1) }))
-    .mutation(async ({ ctx, input }) => {
-      const r = await ctx.pool.query(
-        `UPDATE sponsor_applications SET status = 'REJEITADO', admin_note = $2
-           WHERE id = $1 AND status = 'NOVO' RETURNING user_id`,
-        [input.id, input.adminNote]);
-      if (!r.rowCount) throw new Error("Aplicação não encontrada ou já decidida");
-      const userId = r.rows[0].user_id as string;
-      const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [userId]);
-      await notify(ctx.pool, userId, "SPONSOR_REVIEW_REJECTED",
-        `Sua aplicação de anunciante não foi aprovada: ${input.adminNote}`);
-      const email = u.rows[0]?.email as string | undefined;
-      if (email) {
-        sendTransactionalEmail(ctx.pool, {
-          to: email, subject: "Sobre sua aplicação de anunciante — DitoFeito",
-          html: `<p>Sua aplicação de anunciante não foi aprovada.</p><p>${input.adminNote}</p>`,
-        }).catch((e) => console.error("[sponsor] envio de e-mail falhou", e));
       }
       return { ok: true };
     }),
