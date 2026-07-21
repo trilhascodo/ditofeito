@@ -169,6 +169,13 @@ function MinhasCampanhas({ plan }: { plan: string }) {
                 <option value="ESTADUAL">Estadual (só quem declarou o estado no perfil)</option>
                 <option value="MUNICIPAL">Municipal (só quem declarou estado + cidade no perfil)</option>
               </select>
+              <p className="hint-text" style={{ marginTop: 6 }}>
+                {regionScope === "NACIONAL"
+                  ? "Alcance máximo — ideal pra marca que atende o Brasil todo."
+                  : regionScope === "ESTADUAL"
+                    ? "Escolha esse alcance se seu negócio atende um estado específico — evita pagar por audiência fora da sua área."
+                    : "Escolha esse alcance se seu negócio é local (ex.: comércio de uma cidade) — o espaço custa menos e mira só em quem pode virar cliente de verdade."}
+              </p>
               {regionScope !== "NACIONAL" && (
                 <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
                   <select value={regionUf} onChange={(e) => setRegionUf(e.target.value)} style={{ flex: "1 1 200px" }} required>

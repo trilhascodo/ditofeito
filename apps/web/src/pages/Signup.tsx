@@ -4,6 +4,7 @@ import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
 import { signup } from "../lib/auth";
 import { Turnstile } from "../components/Turnstile";
 import { UFS } from "../lib/ufs";
+import { useUfGeolocation } from "../lib/useUfGeolocation";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 // Sem chave configurada (dev/local): backend também aceita qualquer token
@@ -22,6 +23,7 @@ export function Signup() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const ufGeo = useUfGeolocation();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -111,10 +113,20 @@ export function Signup() {
           </div>
           <div className="field">
             <label className="label" htmlFor="regionUf">Estado (opcional)</label>
-            <select id="regionUf" value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
-              <option value="">prefiro não dizer</option>
-              {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select id="regionUf" style={{ flex: 1 }} value={regionUf} onChange={(e) => setRegionUf(e.target.value)}>
+                <option value="">prefiro não dizer</option>
+                {UFS.map((uf) => <option key={uf.value} value={uf.value}>{uf.label}</option>)}
+              </select>
+              <button
+                type="button" className="btn-outline" style={{ width: "auto", padding: "10px 14px" }}
+                disabled={ufGeo.status === "locating"}
+                onClick={() => ufGeo.locate(setRegionUf)}
+              >
+                {ufGeo.status === "locating" ? "Localizando…" : "Usar minha localização"}
+              </button>
+            </div>
+            {ufGeo.error && <p className="error-text">{ufGeo.error}</p>}
             <p className="hint-text">
               Usado só pra mostrar patrocinadores e conteúdo relevante pra sua região — nunca é público.
             </p>

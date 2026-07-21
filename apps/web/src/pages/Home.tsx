@@ -6,6 +6,7 @@ import { pathFromSeries } from "../lib/chart";
 import { SocialLinks, type SocialLinkItem } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
 import { UFS } from "../lib/ufs";
+import { useUfGeolocation } from "../lib/useUfGeolocation";
 
 // Seletor de estado da home: guarda a última escolha no navegador (sem
 // login, sem geo-IP — mesma filosofia de users.region_uf) só pra semear a
@@ -295,6 +296,8 @@ export function Home() {
     return s ? `/?${s}` : "/";
   }
 
+  const ufGeo = useUfGeolocation();
+
   function onUfChange(next: string) {
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
@@ -406,6 +409,14 @@ export function Home() {
               <option key={s.uf} value={s.uf}>{UFS.find((u) => u.value === s.uf)?.label ?? s.uf}</option>
             ))}
           </select>
+          <button
+            type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px", fontSize: 13 }}
+            disabled={ufGeo.status === "locating"}
+            onClick={() => ufGeo.locate(onUfChange)}
+          >
+            {ufGeo.status === "locating" ? "Localizando…" : "Usar minha localização"}
+          </button>
+          {ufGeo.error && <span className="hint-text">{ufGeo.error}</span>}
         </div>
       )}
 

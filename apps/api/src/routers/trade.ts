@@ -11,6 +11,9 @@ export const tradeRouter = router({
         outcomeId: z.string().uuid(),
         side: z.enum(["BUY", "SELL"]),
         amount: z.number().positive(),
+        // Sugerida por geolocalização no cliente, só quando o usuário ligou o
+        // opt-in de compartilhar localização por previsão (ver user.ts).
+        regionUf: z.string().length(2).toUpperCase().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

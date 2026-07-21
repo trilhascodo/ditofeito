@@ -39,13 +39,15 @@ export const userRouter = router({
       [ctx.user.id],
     );
     const pref = await ctx.pool.query(
-      `SELECT email_notifications, region_uf, region_city FROM users WHERE id = $1`, [ctx.user.id],
+      `SELECT email_notifications, region_uf, region_city, share_location_on_trades
+         FROM users WHERE id = $1`, [ctx.user.id],
     );
     return {
       ...ctx.user,
       emailNotifications: pref.rows[0]?.email_notifications ?? true,
       regionUf: pref.rows[0]?.region_uf ?? null,
       regionCity: pref.rows[0]?.region_city ?? null,
+      shareLocationOnTrades: pref.rows[0]?.share_location_on_trades ?? false,
       balance: bal.rowCount ? Number(bal.rows[0].balance_after) : 0,
       reputation: rep.rowCount
         ? {
@@ -84,6 +86,22 @@ export const userRouter = router({
       await ctx.pool.query(
         `UPDATE users SET region_uf = $2, region_city = $3, updated_at = now() WHERE id = $1`,
         [ctx.user.id, input.regionUf ?? null, input.regionCity?.trim() || null],
+      );
+      return { ok: true };
+    }),
+
+  // Opt-in pra anexar a UF (por geolocalização do dispositivo) em cada
+  // previsão registrada — usado só como corroboração estatística agregada
+  // do resultado, nunca exposto por usuário individual (ver trade.ts e
+  // market.regionBreakdown). Front confirma a permissão do navegador antes
+  // de ligar (useUfGeolocation.ts), então chegar aqui como true já significa
+  // consentimento explícito e verificado.
+  setShareLocationOnTrades: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.pool.query(
+        `UPDATE users SET share_location_on_trades = $2, updated_at = now() WHERE id = $1`,
+        [ctx.user.id, input.enabled],
       );
       return { ok: true };
     }),

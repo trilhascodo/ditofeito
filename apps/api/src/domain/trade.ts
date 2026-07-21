@@ -53,6 +53,9 @@ export interface TradeInput {
   side: "BUY" | "SELL";
   /** BUY: pontos a gastar | SELL: shares a vender */
   amount: number;
+  /** UF sugerida por geolocalização do dispositivo, só se o usuário ligou o
+   *  opt-in (users.share_location_on_trades) — ver 028_trade_region_corroboration.sql. */
+  regionUf?: string | null;
 }
 
 export interface TradeResult {
@@ -197,11 +200,11 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
 
     // Trade + snapshots de TODOS os outcomes (LMSR move todos os preços)
     const t = await c.query(
-      `INSERT INTO trades (market_id, outcome_id, user_id, side, shares, cost_points, price_before, price_after)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      `INSERT INTO trades (market_id, outcome_id, user_id, side, shares, cost_points, price_before, price_after, region_uf)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
       [input.marketId, input.outcomeId, input.userId, input.side,
        Math.abs(shares).toFixed(6), cost.toFixed(4),
-       pricesBefore[idx].toFixed(6), pricesAfter[idx].toFixed(6)]);
+       pricesBefore[idx].toFixed(6), pricesAfter[idx].toFixed(6), input.regionUf ?? null]);
     const snapTs = (await c.query(`SELECT clock_timestamp() AS ts`)).rows[0].ts;
     for (let i = 0; i < out.rows.length; i++) {
       await c.query(

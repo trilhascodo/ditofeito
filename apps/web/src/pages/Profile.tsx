@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { UFS } from "../lib/ufs";
+import { useUfGeolocation } from "../lib/useUfGeolocation";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const pct = (p: number) => `${(p * 100).toFixed(p >= 0.1 ? 0 : 1)}%`;
@@ -35,10 +36,14 @@ export function Profile() {
   const { data: ledger, isLoading: ledgerLoading } = trpc.user.myLedger.useQuery(undefined, { enabled: !!user });
   const setEmailNotifications = trpc.user.setEmailNotifications.useMutation();
   const setRegion = trpc.user.setRegion.useMutation();
+  const setShareLocation = trpc.user.setShareLocationOnTrades.useMutation();
   const [emailNotif, setEmailNotif] = useState(true);
   const [regionUf, setRegionUf] = useState("");
   const [regionCity, setRegionCity] = useState("");
   const [regionSaved, setRegionSaved] = useState(false);
+  const [shareLocation, setShareLocationState] = useState(false);
+  const ufGeo = useUfGeolocation();
+  const shareLocGeo = useUfGeolocation();
 
   useEffect(() => {
     if (me) setEmailNotif(me.emailNotifications);
@@ -47,6 +52,10 @@ export function Profile() {
   useEffect(() => {
     if (me) { setRegionUf(me.regionUf ?? ""); setRegionCity(me.regionCity ?? ""); }
   }, [me?.regionUf, me?.regionCity]);
+
+  useEffect(() => {
+    if (me) setShareLocationState(me.shareLocationOnTrades);
+  }, [me?.shareLocationOnTrades]);
 
   async function onToggleEmailNotif() {
     const next = !emailNotif;
@@ -62,6 +71,22 @@ export function Profile() {
     await utils.user.me.invalidate();
     setRegionSaved(true);
     setTimeout(() => setRegionSaved(false), 1500);
+  }
+
+  async function onToggleShareLocation() {
+    if (shareLocation) {
+      setShareLocationState(false);
+      await setShareLocation.mutateAsync({ enabled: false });
+      await utils.user.me.invalidate();
+      return;
+    }
+    // Liga só se o navegador realmente conceder a permissão agora — o
+    // toggle nunca fica "ativo" sem geolocalização de fato disponível.
+    shareLocGeo.locate(async () => {
+      setShareLocationState(true);
+      await setShareLocation.mutateAsync({ enabled: true });
+      await utils.user.me.invalidate();
+    });
   }
 
   if (authLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
@@ -146,10 +171,36 @@ export function Profile() {
             <label className="label" htmlFor="profile-city">Cidade</label>
             <input className="input" id="profile-city" placeholder="Codó" value={regionCity} onChange={(e) => setRegionCity(e.target.value)} />
           </div>
+          <button
+            type="button" className="btn-outline" style={{ width: "auto", padding: "10px 14px" }}
+            disabled={ufGeo.status === "locating"}
+            onClick={() => ufGeo.locate(setRegionUf)}
+          >
+            {ufGeo.status === "locating" ? "Localizando…" : "Usar minha localização"}
+          </button>
           <button className="btn-outline" style={{ width: "auto", padding: "10px 18px" }} disabled={setRegion.isPending}>
             {setRegion.isPending ? "Salvando…" : regionSaved ? "Salvo!" : "Salvar"}
           </button>
         </form>
+        {ufGeo.error && <p className="error-text" style={{ marginTop: 8 }}>{ufGeo.error}</p>}
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Localização nas previsões</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Opcional. Se ativo, cada previsão que você registrar anexa a UF sugerida pela localização do
+          seu dispositivo (nunca a cidade exata, nunca por usuário individual) — ajuda a mostrar de onde
+          vêm as previsões de cada mercado, o que reforça a confiança no resultado.
+        </p>
+        <label className="checkbox-row" style={{ marginBottom: 0 }}>
+          <input
+            type="checkbox" checked={shareLocation}
+            onChange={onToggleShareLocation}
+            disabled={setShareLocation.isPending || shareLocGeo.status === "locating"}
+          />
+          Compartilhar minha localização a cada previsão
+        </label>
+        {shareLocGeo.error && <p className="error-text" style={{ marginTop: 8 }}>{shareLocGeo.error}</p>}
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>

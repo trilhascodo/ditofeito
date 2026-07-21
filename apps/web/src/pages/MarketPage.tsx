@@ -7,6 +7,7 @@ import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
 import { SocialLinks } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
+import { getCurrentUf } from "../lib/useUfGeolocation";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
@@ -136,7 +137,11 @@ export function MarketPage() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const { data: market, isLoading, error } = trpc.market.get.useQuery({ slug }, { enabled: !!slug });
+  const { data: me } = trpc.user.me.useQuery(undefined, { enabled: !!user });
   const { data: positions } = trpc.user.myPositions.useQuery(undefined, { enabled: !!user });
+  const { data: regionBreakdown } = trpc.market.regionBreakdown.useQuery(
+    { marketId: market?.id ?? "" }, { enabled: !!market },
+  );
   const { data: sponsorship } = trpc.sponsor.getActiveForMarket.useQuery(
     { marketId: market?.id ?? "" }, { enabled: !!market },
   );
@@ -202,7 +207,8 @@ export function MarketPage() {
     if (!selected || points < 1) return;
     setTradeError(null);
     try {
-      await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId: selected, side: "BUY", amount: points });
+      const regionUf = me?.shareLocationOnTrades ? (await getCurrentUf()) ?? undefined : undefined;
+      await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId: selected, side: "BUY", amount: points, regionUf });
       await Promise.all([
         utils.market.get.invalidate({ slug }),
         utils.user.myPositions.invalidate(),
@@ -364,6 +370,36 @@ export function MarketPage() {
                   {n.title}
                 </a>
               ))}
+            </div>
+          )}
+
+          {regionBreakdown && regionBreakdown.byUf.length > 0 && (
+            <div className="card" style={{ marginTop: 20 }}>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 4px" }}>De onde vêm as previsões</h2>
+              <p className="hint-text" style={{ marginBottom: 12 }}>
+                {regionBreakdown.byUf.reduce((s, r) => s + r.voters, 0)} de {regionBreakdown.totalVoters} participante
+                {regionBreakdown.totalVoters === 1 ? "" : "s"} compartilharam a localização.
+                {market.regionUf && regionBreakdown.byUf[0]?.uf === market.regionUf && (
+                  <> Reforça a confiança no resultado: a maioria previu de perto do fato.</>
+                )}
+              </p>
+              {regionBreakdown.byUf.slice(0, 8).map((r) => {
+                const max = regionBreakdown.byUf[0].voters;
+                return (
+                  <div key={r.uf} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <span className="mono" style={{ width: 28, fontSize: 13 }}>{r.uf}</span>
+                    <div style={{ flex: 1, background: "#EDE8DC", height: 8, borderRadius: 4 }}>
+                      <div style={{
+                        width: `${Math.max(6, (r.voters / max) * 100)}%`, height: 8, borderRadius: 4,
+                        background: market.regionUf === r.uf ? "var(--violeta)" : "#C9C2B2",
+                      }} />
+                    </div>
+                    <span className="hint-text mono" style={{ width: 36, textAlign: "right", fontSize: 12 }}>
+                      {r.voters}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
 

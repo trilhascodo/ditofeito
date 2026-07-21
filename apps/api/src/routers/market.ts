@@ -422,6 +422,30 @@ export const marketRouter = router({
     return r.rows as { uf: string; n: number }[];
   }),
 
+  // Corroboração/análise geográfica: distribuição por UF de quem previu
+  // nesse mercado, só entre quem ligou o opt-in de compartilhar localização
+  // (users.share_location_on_trades — ver user.ts). Sempre agregado por UF,
+  // nunca expõe usuário individual. totalVoters conta todo mundo (com ou sem
+  // UF), pra dar a base de "% que compartilhou localização".
+  regionBreakdown: publicProcedure
+    .input(z.object({ marketId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const total = await ctx.pool.query(
+        `SELECT count(DISTINCT user_id)::int AS n FROM trades WHERE market_id = $1`,
+        [input.marketId],
+      );
+      const byUf = await ctx.pool.query(
+        `SELECT region_uf AS uf, count(DISTINCT user_id)::int AS voters
+           FROM trades WHERE market_id = $1 AND region_uf IS NOT NULL
+          GROUP BY region_uf ORDER BY voters DESC`,
+        [input.marketId],
+      );
+      return {
+        totalVoters: total.rows[0]?.n ?? 0,
+        byUf: byUf.rows as { uf: string; voters: number }[],
+      };
+    }),
+
   get: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ ctx, input }) => {
     const m = await ctx.pool.query(
       `SELECT m.id, m.slug, m.title, m.description, m.status, m.type, m.liquidity_b, m.is_electoral,
