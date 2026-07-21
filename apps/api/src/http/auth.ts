@@ -3,7 +3,7 @@ import rateLimit from "express-rate-limit";
 import type { Pool } from "pg";
 import {
   signup, login, logout, verifyEmail, requestPasswordReset, resetPassword,
-  oauthGoogleLogin, oauthGoogleComplete, AuthError,
+  oauthGoogleLogin, oauthGoogleComplete, confirmEmailChange, AuthError,
 } from "../domain/auth.js";
 import {
   signupSchema, loginSchema, requestPasswordResetSchema, resetPasswordSchema,
@@ -138,6 +138,19 @@ export function mountAuth(app: express.Express, pool: Pool) {
   app.get("/auth/me", requireAuth, (req, res) => {
     res.json({ user: req.user });
   });
+
+  app.get("/auth/confirm-email-change", asyncHandler(async (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    try {
+      if (!token) throw new AuthError("TOKEN_INVALIDO", "Link inválido");
+      await confirmEmailChange(pool, token);
+      res.type("html").send(confirmacaoHtml("E-mail atualizado.", "Seu novo e-mail já está valendo — pode entrar com ele."));
+    } catch (e) {
+      const msg = e instanceof AuthError ? e.message : "Erro ao confirmar troca de e-mail";
+      res.status(e instanceof AuthError ? (AUTH_ERROR_STATUS[e.code] ?? 400) : 500)
+        .type("html").send(confirmacaoHtml("Não foi possível confirmar", msg));
+    }
+  }));
 
   app.get("/auth/verify-email", asyncHandler(async (req, res) => {
     const token = typeof req.query.token === "string" ? req.query.token : "";

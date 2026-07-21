@@ -7,11 +7,18 @@
 import { z } from "zod";
 import { lmsrPrices } from "@ditofeito/core";
 import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
+import {
+  changePassword, requestEmailChange, updateProfile, deleteAccount,
+} from "../domain/auth.js";
+import { throwAsTRPC } from "../trpc/errors.js";
 
 // Mínimo de previsões resolvidas pra entrar no ranking público — sem isso,
 // 1 acerto de sorte já colocaria alguém em 1º lugar (skill_score de amostra
 // pequena não é comparável ao de quem já resolveu dezenas).
 const LEADERBOARD_MIN_RESOLVED = 5;
+
+// Mesma regra do CHECK de users.handle (001_schema.sql) e do signupSchema.
+const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 
 export const userRouter = router({
   // Card de vindicação do próprio usuário pra um mercado (null se não ganhou
@@ -39,11 +46,14 @@ export const userRouter = router({
       [ctx.user.id],
     );
     const pref = await ctx.pool.query(
-      `SELECT email_notifications, region_uf, region_city, share_location_on_trades
+      `SELECT email, email_notifications, region_uf, region_city, share_location_on_trades,
+              (password_hash IS NOT NULL) AS has_password
          FROM users WHERE id = $1`, [ctx.user.id],
     );
     return {
       ...ctx.user,
+      email: pref.rows[0]?.email as string,
+      hasPassword: pref.rows[0]?.has_password ?? false,
       emailNotifications: pref.rows[0]?.email_notifications ?? true,
       regionUf: pref.rows[0]?.region_uf ?? null,
       regionCity: pref.rows[0]?.region_city ?? null,
@@ -103,6 +113,60 @@ export const userRouter = router({
         `UPDATE users SET share_location_on_trades = $2, updated_at = now() WHERE id = $1`,
         [ctx.user.id, input.enabled],
       );
+      return { ok: true };
+    }),
+
+  // Nome de usuário/exibição — únicos campos de identidade que ainda não
+  // tinham autoatendimento.
+  updateProfile: protectedProcedure
+    .input(z.object({
+      handle: z.string().regex(HANDLE_PATTERN, "3–30 caracteres: a-z, 0-9, _").optional(),
+      displayName: z.string().trim().min(1).max(80).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await updateProfile(ctx.pool, ctx.user.id, input);
+      } catch (e) { throwAsTRPC(e); }
+      return { ok: true };
+    }),
+
+  // Troca de senha estando logado — currentPassword só é exigido se a conta
+  // já tiver uma (conta só-Google pode "adicionar" senha direto).
+  changePassword: protectedProcedure
+    .input(z.object({
+      currentPassword: z.string().max(200).optional(),
+      newPassword: z.string().min(8).max(200),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await changePassword(ctx.pool, ctx.user.id, input, ctx.sessionToken);
+      } catch (e) { throwAsTRPC(e); }
+      return { ok: true };
+    }),
+
+  // 1ª etapa da troca de e-mail — manda confirmação pro e-mail novo, só
+  // aplica quando o link é clicado (rota HTTP /auth/confirm-email-change).
+  requestEmailChange: protectedProcedure
+    .input(z.object({
+      newEmail: z.string().trim().toLowerCase().email(),
+      password: z.string().max(200).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await requestEmailChange(ctx.pool, ctx.user.id, input);
+      } catch (e) { throwAsTRPC(e); }
+      return { ok: true };
+    }),
+
+  // Apagar = anonimizar (ver domain/auth.ts::deleteAccount e
+  // 030_account_self_service.sql) — nunca some com comentários/previsões
+  // já públicos, só some com o que identifica a pessoa.
+  deleteAccount: protectedProcedure
+    .input(z.object({ password: z.string().max(200).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await deleteAccount(ctx.pool, ctx.user.id, input);
+      } catch (e) { throwAsTRPC(e); }
       return { ok: true };
     }),
 

@@ -369,3 +369,159 @@ export async function resetPassword(pool: Pool, input: ResetPasswordInput): Prom
     client.release();
   }
 }
+
+// ------------------------- Autoatendimento de conta -------------------------------
+// Troca de senha estando logado. Conta só-Google (password_hash NULL) não tem
+// senha atual pra checar — isso também serve pra "adicionar senha" a uma
+// conta assim. currentToken (sessão atual) sobrevive; as outras são
+// derrubadas (mesmo princípio de segurança do reset por token).
+export async function changePassword(
+  pool: Pool, userId: string,
+  input: { currentPassword?: string; newPassword: string },
+  currentToken?: string,
+): Promise<void> {
+  const u = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
+  if (!u.rowCount) throw new AuthError("USUARIO_INVALIDO", "Conta não encontrada");
+  const existing = u.rows[0].password_hash as string | null;
+  if (existing) {
+    if (!input.currentPassword) throw new AuthError("CREDENCIAIS_INVALIDAS", "Informe a senha atual");
+    const ok = await argonVerify(existing, input.currentPassword);
+    if (!ok) throw new AuthError("CREDENCIAIS_INVALIDAS", "Senha atual incorreta");
+  }
+  const newHash = await argonHash(input.newPassword);
+  await pool.query(`UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`, [newHash, userId]);
+  if (currentToken) {
+    await pool.query(`DELETE FROM sessions WHERE user_id = $1 AND token_hash != $2`,
+      [userId, hashToken(currentToken)]);
+  } else {
+    await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+  }
+}
+
+// 1ª etapa da troca de e-mail: exige a senha atual (quando existe) e manda
+// confirmação pro e-mail NOVO — só aplica de fato quando esse link é clicado
+// (confirmEmailChange), prova de posse da caixa nova antes de trocar.
+export async function requestEmailChange(
+  pool: Pool, userId: string, input: { newEmail: string; password?: string },
+): Promise<void> {
+  const newEmail = input.newEmail.trim().toLowerCase();
+  if (isDisposableEmail(newEmail))
+    throw new AuthError("EMAIL_DESCARTAVEL", "E-mails temporários não são aceitos");
+  const u = await pool.query(`SELECT email, password_hash FROM users WHERE id = $1`, [userId]);
+  if (!u.rowCount) throw new AuthError("USUARIO_INVALIDO", "Conta não encontrada");
+  const row = u.rows[0];
+  if (row.password_hash) {
+    if (!input.password) throw new AuthError("CREDENCIAIS_INVALIDAS", "Informe a senha pra confirmar");
+    const ok = await argonVerify(row.password_hash, input.password);
+    if (!ok) throw new AuthError("CREDENCIAIS_INVALIDAS", "Senha incorreta");
+  }
+  if (newEmail === row.email) throw new AuthError("EMAIL_EM_USO", "Esse já é o seu e-mail atual");
+  const dup = await pool.query(`SELECT 1 FROM users WHERE email = $1`, [newEmail]);
+  if (dup.rowCount) throw new AuthError("EMAIL_EM_USO", "E-mail já cadastrado em outra conta");
+
+  const raw = randomToken();
+  const expires = new Date(Date.now() + AUTH_CONFIG.emailVerificationTtlHours * 3600_000);
+  await pool.query(
+    `INSERT INTO email_change_tokens (user_id, new_email, token_hash, expires_at)
+     VALUES ($1,$2,$3,$4)`,
+    [userId, newEmail, hashToken(raw), expires.toISOString()]);
+
+  const link = `${APP_CONFIG.appBaseUrl}/auth/confirm-email-change?token=${raw}`;
+  await sendTransactionalEmail(pool, {
+    to: newEmail,
+    subject: "Confirme seu novo e-mail — DitoFeito",
+    html: `<p>Pediram a troca do e-mail dessa conta pra este endereço. Se foi você, confirme:</p>
+           <p><a href="${link}">${link}</a></p>
+           <p>Se não foi você, ignore esta mensagem — seu e-mail atual continua o mesmo.</p>`,
+  }).catch((e) => console.error("[auth] envio de confirmação de troca de e-mail falhou", e));
+}
+
+// 2ª etapa: clicou no link do e-mail novo. Reconfirma que ninguém pegou esse
+// e-mail entre o pedido e a confirmação (janela pequena, mas checa mesmo assim).
+export async function confirmEmailChange(pool: Pool, rawToken: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const t = await client.query(
+      `SELECT id, user_id, new_email, expires_at, consumed_at FROM email_change_tokens
+        WHERE token_hash = $1 FOR UPDATE`, [hashToken(rawToken)]);
+    if (!t.rowCount) throw new AuthError("TOKEN_INVALIDO", "Link inválido");
+    const row = t.rows[0];
+    if (row.consumed_at) throw new AuthError("TOKEN_JA_USADO", "Link já utilizado");
+    if (new Date(row.expires_at) <= new Date()) throw new AuthError("TOKEN_EXPIRADO", "Link expirado");
+
+    const dup = await client.query(`SELECT 1 FROM users WHERE email = $1 AND id != $2`,
+      [row.new_email, row.user_id]);
+    if (dup.rowCount) throw new AuthError("EMAIL_EM_USO", "E-mail já cadastrado em outra conta");
+
+    await client.query(
+      `UPDATE users SET email = $1, email_verified_at = now(), updated_at = now() WHERE id = $2`,
+      [row.new_email, row.user_id]);
+    await client.query(`UPDATE email_change_tokens SET consumed_at = now() WHERE id = $1`, [row.id]);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Nome de usuário/exibição — únicos campos de perfil "de identidade" que
+// faltavam autoatendimento (região e notificação já existiam).
+export async function updateProfile(
+  pool: Pool, userId: string, input: { handle?: string; displayName?: string },
+): Promise<void> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (input.handle !== undefined) { params.push(input.handle); sets.push(`handle = $${params.length}`); }
+  if (input.displayName !== undefined) { params.push(input.displayName); sets.push(`display_name = $${params.length}`); }
+  if (!sets.length) return;
+  params.push(userId);
+  try {
+    await pool.query(
+      `UPDATE users SET ${sets.join(", ")}, updated_at = now() WHERE id = $${params.length}`, params);
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505")
+      throw new AuthError("HANDLE_EM_USO", "Nome de usuário já em uso");
+    throw e;
+  }
+}
+
+// Apagar = anonimizar (ver 030_account_self_service.sql): preserva
+// comentários/previsões/cards de vindicação já públicos (transparência/
+// auditoria), só remove o que identifica a pessoa. Conta de equipe
+// (ADMIN/MODERATOR/RESOLVER) não sai por autoatendimento — só SPONSOR e USER.
+export async function deleteAccount(pool: Pool, userId: string, input: { password?: string }): Promise<void> {
+  const u = await pool.query(`SELECT email, password_hash, role FROM users WHERE id = $1`, [userId]);
+  if (!u.rowCount) throw new AuthError("USUARIO_INVALIDO", "Conta não encontrada");
+  const row = u.rows[0];
+  if (["ADMIN", "MODERATOR", "RESOLVER"].includes(row.role as string))
+    throw new AuthError("USUARIO_INVALIDO",
+      "Contas de equipe não podem ser removidas por autoatendimento — fale com outro admin.");
+  if (row.password_hash) {
+    if (!input.password) throw new AuthError("CREDENCIAIS_INVALIDAS", "Informe a senha pra confirmar");
+    const ok = await argonVerify(row.password_hash, input.password);
+    if (!ok) throw new AuthError("CREDENCIAIS_INVALIDAS", "Senha incorreta");
+  }
+  const originalEmail = row.email as string;
+  const anonHandle = `deleted_${userId.replace(/-/g, "").slice(0, 20)}`;
+  const anonEmail = `deleted-${userId}@ditofeito.invalid`;
+  await pool.query(
+    `UPDATE users SET handle = $2, display_name = 'Conta removida', email = $3,
+            password_hash = NULL, cpf = NULL, avatar_url = NULL, bio = NULL,
+            region_uf = NULL, region_city = NULL, share_location_on_trades = false,
+            deleted_at = now(), updated_at = now()
+      WHERE id = $1`,
+    [userId, anonHandle, anonEmail]);
+  await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+  await pool.query(`DELETE FROM oauth_identities WHERE user_id = $1`, [userId]);
+
+  await sendTransactionalEmail(pool, {
+    to: originalEmail,
+    subject: "Sua conta foi removida — DitoFeito",
+    html: `<p>Sua conta no DitoFeito foi removida a pedido. Comentários e previsões que você já fez
+           continuam públicos por transparência (mesma regra de auditoria da plataforma), mas sem
+           seu nome — aparecem como "Conta removida".</p>`,
+  }).catch((e) => console.error("[auth] envio de confirmação de remoção falhou", e));
+}

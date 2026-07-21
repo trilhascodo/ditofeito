@@ -7,7 +7,7 @@ export function createContextFactory(pool: Pool) {
   return async function createContext({ req }: CreateExpressContextOptions) {
     const token = req.cookies?.[AUTH_CONFIG.sessionCookieName] as string | undefined;
     const user: SessionUser | null = token ? await getSessionUser(pool, token) : null;
-    return { pool, user, ip: req.ip, userAgent: req.get("user-agent") };
+    return { pool, user, ip: req.ip, userAgent: req.get("user-agent"), sessionToken: token };
   };
 }
 
