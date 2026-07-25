@@ -21,6 +21,13 @@ INSERT INTO categories (slug, name, vertical, brand_safe) VALUES
   ('entretenimento', 'Entretenimento & Cultura Pop', 'ENTRETENIMENTO', true)
 ON CONFLICT (slug) DO NOTHING;
 
+-- Financeiro (jul/2026): sugestões de limiar de ação B3/câmbio geradas por
+-- generators/financeiro.ts nascem aqui, sempre em DRAFT pra revisão editorial.
+-- brand_safe=true, mesmo racional das outras verticais não-eleitorais acima.
+INSERT INTO categories (slug, name, vertical, brand_safe)
+VALUES ('economia', 'Economia & Mercado Financeiro', 'ECONOMIA', true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- "Menções": mercados de "expressão X foi dita em evento/discurso Y" —
 -- mecânica, não tema (mistura Oscar, política, figura pública). vertical
 -- OUTROS porque não é um assunto único; brand_safe=false porque a própria

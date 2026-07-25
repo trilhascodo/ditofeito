@@ -18,6 +18,7 @@
 // ============================================================================
 import type { Pool, PoolClient } from "pg";
 import { suggestB } from "@ditofeito/core";
+import { createMarketIdempotent } from "../domain/marketFactory.js";
 
 // ------------------------------ Calendário -----------------------------------
 // Datas oficiais do ciclo 2026 (ajustar por resolução TSE se mudarem)
@@ -111,21 +112,15 @@ async function criarBinario(c: PoolClient, p: {
   candidateId: string; regionUf: string | null; publicarDireto?: boolean;
 }): Promise<number> {
   const b = suggestB(2, GERADOR_CONFIG.depthBinario);
-  const r = await c.query(
-    `INSERT INTO markets (slug, title, category_id, type, liquidity_b, status,
-                          resolution_criteria, resolution_source, close_at,
-                          resolve_by, is_electoral, created_by, region_uf)
-     VALUES ($1,$2,$3,'BINARY',$4,$5,$6,$7,$8,$9,true,$10,$11)
-     ON CONFLICT (slug) DO NOTHING RETURNING id`,
-    [p.slug, p.titulo, p.categoriaId, b.toFixed(4),
-     (p.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
-     p.criterio, p.fonte, p.closeAt, p.resolveBy, p.criadoPor, p.regionUf]);
-  if (!r.rowCount) return 0; // já existia — idempotência
-  const mid = r.rows[0].id;
-  await c.query(
-    `INSERT INTO market_outcomes (market_id, label, candidate_id, display_order)
-     VALUES ($1,'SIM',$2,0), ($1,'NÃO',NULL,1)`, [mid, p.candidateId]);
-  return 1;
+  const { created } = await createMarketIdempotent(c, {
+    slug: p.slug, title: p.titulo, categoryId: p.categoriaId, type: "BINARY",
+    liquidityB: b, status: (p.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
+    resolutionCriteria: p.criterio, resolutionSource: p.fonte,
+    closeAt: p.closeAt, resolveBy: p.resolveBy, isElectoral: true,
+    createdBy: p.criadoPor, regionUf: p.regionUf,
+    outcomes: [{ label: "SIM", candidateId: p.candidateId }, { label: "NÃO" }],
+  });
+  return created ? 1 : 0;
 }
 
 // ============================================================================
@@ -172,38 +167,31 @@ export async function gerarDisputasMajoritarias(
       if (cands.rowCount! < 2) continue; // disputa sem massa crítica ainda
 
       const b = suggestB(cands.rowCount! + 1, GERADOR_CONFIG.depthMajoritaria);
-      const mkt = await c.query(
-        `INSERT INTO markets (slug, title, category_id, group_id, type, liquidity_b,
-                              status, resolution_criteria, resolution_source,
-                              close_at, resolve_by, is_electoral, created_by, region_uf)
-         VALUES ($1,$2,$3,$4,'MULTI',$5,$6,$7,$8,$9,$10,true,$11,$12)
-         ON CONFLICT (slug) DO NOTHING RETURNING id`,
-        [`quem-vence-${slugDisputa}`,
-         `Quem vence a eleição para ${cargoTxt}${local} em 2026?`,
-         opts.categoriaEleicoesId, groupId, b.toFixed(4),
-         (opts.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
-         `Resolve no candidato declarado eleito ${cargoTxt}${local} pela Justiça Eleitoral ` +
-         `(2º turno, se houver). Candidato não listado nominalmente resolve em "OUTROS". ` +
-         `Anulação da eleição pela Justiça Eleitoral antes da diplomação ANULA o mercado.`,
-         "TSE — resultado oficial / diplomação",
-         CALENDARIO_2026.segundoTurno, CALENDARIO_2026.prazoResolucaoEleito,
-         opts.sistemaUserId, d.uf]);
+      const slugMulti = `quem-vence-${slugDisputa}`;
+      const { created, marketId: novoMarketId } = await createMarketIdempotent(c, {
+        slug: slugMulti,
+        title: `Quem vence a eleição para ${cargoTxt}${local} em 2026?`,
+        categoryId: opts.categoriaEleicoesId, groupId, type: "MULTI", liquidityB: b,
+        status: (opts.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
+        resolutionCriteria:
+          `Resolve no candidato declarado eleito ${cargoTxt}${local} pela Justiça Eleitoral ` +
+          `(2º turno, se houver). Candidato não listado nominalmente resolve em "OUTROS". ` +
+          `Anulação da eleição pela Justiça Eleitoral antes da diplomação ANULA o mercado.`,
+        resolutionSource: "TSE — resultado oficial / diplomação",
+        closeAt: CALENDARIO_2026.segundoTurno, resolveBy: CALENDARIO_2026.prazoResolucaoEleito,
+        isElectoral: true, createdBy: opts.sistemaUserId, regionUf: d.uf,
+        // Outcomes iniciais: candidatos + OUTROS por último (display_order tratado no factory)
+        outcomes: [
+          ...cands.rows.map((cd) => ({ label: `${nomePublico(cd)} (${cd.party})`, candidateId: cd.id })),
+          { label: "OUTROS", isCatchall: true },
+        ],
+      });
 
       let marketId: string;
-      if (mkt.rowCount) {
-        marketId = mkt.rows[0].id;
+      if (created) {
+        marketId = novoMarketId;
         mercadosCriados++;
-        // Outcomes iniciais: candidatos + OUTROS por último
-        for (const [i, cd] of cands.rows.entries()) {
-          await c.query(
-            `INSERT INTO market_outcomes (market_id, label, candidate_id, display_order)
-             VALUES ($1,$2,$3,$4)`,
-            [marketId, `${nomePublico(cd)} (${cd.party})`, cd.id, i]);
-          outcomesAdicionados++;
-        }
-        await c.query(
-          `INSERT INTO market_outcomes (market_id, label, is_catchall, display_order)
-           VALUES ($1,'OUTROS',true,999)`, [marketId]);
+        outcomesAdicionados += cands.rowCount!;
       } else {
         // Mercado já existe: SINCRONIZAR — pré-candidato novo entra como outcome
         // com q inicial que preserva os preços atuais? Não: LMSR exige cuidado.
@@ -214,7 +202,7 @@ export async function gerarDisputasMajoritarias(
           `SELECT m.id AS market_id, min(o.q) AS qmin
              FROM markets m JOIN market_outcomes o ON o.market_id=m.id
             WHERE m.slug=$1 AND m.status IN ('DRAFT','OPEN')
-            GROUP BY m.id`, [`quem-vence-${slugDisputa}`]);
+            GROUP BY m.id`, [slugMulti]);
         if (!ex.rowCount) continue;
         marketId = ex.rows[0].market_id;
         for (const cd of cands.rows) {

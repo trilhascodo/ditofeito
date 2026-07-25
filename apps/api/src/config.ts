@@ -34,3 +34,22 @@ export const OAUTH_CONFIG = {
    *  do front e a rota de login social sempre falha (mesmo padrão do Turnstile). */
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
 } as const;
+
+export const SPORTS_CONFIG = {
+  /** Vazio (dev/local) = gerador de esporte não roda, só loga aviso (mesmo
+   *  padrão do TURNSTILE_SECRET_KEY/GOOGLE_CLIENT_ID: ausência de chave
+   *  desliga a feature, não derruba o processo). */
+  apiFootballKey: process.env.API_FOOTBALL_KEY ?? "",
+  /** "Football Prediction API" no RapidAPI (não é o api-sports.io direto —
+   *  mudou depois de testar contra a chave real assinada, jul/2026: exige
+   *  X-RapidAPI-Key + X-RapidAPI-Host, não x-apisports-key). */
+  footballPredictionBaseUrl: "https://football-prediction-api.p.rapidapi.com",
+  footballPredictionHost: "football-prediction-api.p.rapidapi.com",
+} as const;
+
+export const FINANCE_CONFIG = {
+  /** brapi.dev: cotações B3 exigem token no plano gratuito; câmbio não.
+   *  Vazio = gerador financeiro roda só com o que não exige token. */
+  brapiToken: process.env.BRAPI_API_KEY ?? "",
+  brapiBaseUrl: "https://brapi.dev/api",
+} as const;

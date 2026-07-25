@@ -3,6 +3,8 @@
 import cron from "node-cron";
 import type { Pool } from "pg";
 import { rodarGerador } from "./gerador.js";
+import { rodarGeradorEsporte } from "./generators/esporte.js";
+import { rodarGeradorFinanceiro } from "./generators/financeiro.js";
 import { verifyLedgerChain } from "../domain/trade.js";
 
 /** Roda verifyLedgerChain para todo usuário; loga qualquer cadeia quebrada
@@ -25,6 +27,28 @@ export function startJobs(pool: Pool) {
       console.log("[jobs] rodarGerador", r);
     } catch (e) {
       console.error("[jobs] rodarGerador falhou", e);
+    }
+  });
+
+  // Gerador de esporte diário: fixtures novos -> mercados 3-outcomes (idempotente).
+  // Roda depois do eleitoral (06:00) pra não competir pela mesma janela de I/O.
+  cron.schedule("30 6 * * *", async () => {
+    try {
+      const r = await rodarGeradorEsporte(pool);
+      console.log("[jobs] rodarGeradorEsporte", r);
+    } catch (e) {
+      console.error("[jobs] rodarGeradorEsporte falhou", e);
+    }
+  });
+
+  // Gerador financeiro semanal (não diário — sugestão de limiar não muda todo
+  // dia; cadência menor evita fadiga de fila de revisão no admin).
+  cron.schedule("0 7 * * 1", async () => {
+    try {
+      const r = await rodarGeradorFinanceiro(pool);
+      console.log("[jobs] rodarGeradorFinanceiro", r);
+    } catch (e) {
+      console.error("[jobs] rodarGeradorFinanceiro falhou", e);
     }
   });
 

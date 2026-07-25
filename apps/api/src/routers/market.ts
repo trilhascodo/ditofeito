@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { lmsrPrices, suggestB } from "@ditofeito/core";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
+import { createMarketIdempotent } from "../domain/marketFactory.js";
 
 const outcomeInput = z.object({ label: z.string().trim().min(1).max(120) });
 
@@ -56,37 +57,23 @@ export const marketRouter = router({
     const client = await ctx.pool.connect();
     try {
       await client.query("BEGIN");
-      const m = await client.query(
-        `INSERT INTO markets (slug, title, description, category_id, type, liquidity_b, status,
-                              resolution_criteria, resolution_source, close_at, resolve_by,
-                              is_electoral, created_by, region_uf)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-        [
-          input.slug, input.title, input.description ?? null, categoryId, input.type,
-          b.toFixed(4), input.publish ? "OPEN" : "DRAFT", input.resolutionCriteria, input.resolutionSource,
-          input.closeAt, input.resolveBy, input.isElectoral, ctx.user.id, input.regionUf ?? null,
+      const { created, marketId } = await createMarketIdempotent(client, {
+        slug: input.slug, title: input.title, description: input.description,
+        categoryId, type: input.type, liquidityB: b,
+        status: input.publish ? "OPEN" : "DRAFT",
+        resolutionCriteria: input.resolutionCriteria, resolutionSource: input.resolutionSource,
+        closeAt: input.closeAt, resolveBy: input.resolveBy, isElectoral: input.isElectoral,
+        createdBy: ctx.user.id, regionUf: input.regionUf,
+        outcomes: [
+          ...outcomes,
+          ...(input.type === "MULTI" && input.includeCatchall ? [{ label: "OUTROS", isCatchall: true }] : []),
         ],
-      );
-      const marketId = m.rows[0].id as string;
-      for (const [i, o] of outcomes.entries()) {
-        await client.query(
-          `INSERT INTO market_outcomes (market_id, label, display_order) VALUES ($1,$2,$3)`,
-          [marketId, o.label, i],
-        );
-      }
-      if (input.type === "MULTI" && input.includeCatchall) {
-        await client.query(
-          `INSERT INTO market_outcomes (market_id, label, is_catchall, display_order)
-           VALUES ($1,'OUTROS',true,999)`,
-          [marketId],
-        );
-      }
+      });
+      if (!created) throw new TRPCError({ code: "CONFLICT", message: "slug já existe" });
       await client.query("COMMIT");
       return { id: marketId, slug: input.slug };
     } catch (e) {
       await client.query("ROLLBACK");
-      if ((e as { code?: string }).code === "23505")
-        throw new TRPCError({ code: "CONFLICT", message: "slug já existe" });
       throw e;
     } finally {
       client.release();
