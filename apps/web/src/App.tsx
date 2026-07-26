@@ -30,6 +30,9 @@ import { AdminComments } from "./admin/AdminComments";
 import { SolicitarMercado } from "./pages/SolicitarMercado";
 import { AdminEmailSettings } from "./admin/AdminEmailSettings";
 import { AdminSuspicious } from "./admin/AdminSuspicious";
+import { Grupos } from "./pages/Grupos";
+import { GrupoDetalhe } from "./pages/GrupoDetalhe";
+import { BolaoDetalhe } from "./pages/BolaoDetalhe";
 
 const router = createBrowserRouter([
   {
@@ -50,6 +53,9 @@ const router = createBrowserRouter([
       { path: "/indices", element: <Indices /> },
       { path: "/indice/:slug", element: <Indice /> },
       { path: "/solicitar-mercado", element: <SolicitarMercado /> },
+      { path: "/grupos", element: <Grupos /> },
+      { path: "/grupos/:groupId", element: <GrupoDetalhe /> },
+      { path: "/grupos/:groupId/bolao/:bolaoId", element: <BolaoDetalhe /> },
       {
         path: "/admin",
         element: <AdminLayout />,

@@ -1,0 +1,153 @@
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { trpc } from "../lib/trpc";
+
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: "Aberto pra palpite",
+  AGUARDANDO_RESOLUCAO: "Aguardando resultado",
+  RESOLVIDO: "Resolvido",
+  VOID: "Anulado",
+};
+
+const GUESS_TYPE_LABEL: Record<string, string> = {
+  WINNER: "Quem ganha",
+  SCORE: "Placar exato",
+  NUMBER: "Número (ex.: diferença de votos)",
+};
+
+export function GrupoDetalhe() {
+  const { groupId } = useParams<{ groupId: string }>();
+  const utils = trpc.useUtils();
+  const { data: group, isLoading } = trpc.groups.detail.useQuery({ groupId: groupId! }, { enabled: !!groupId });
+
+  const [copiado, setCopiado] = useState(false);
+  const [showCriar, setShowCriar] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [marketId, setMarketId] = useState<string | null>(null);
+  const [marketTitle, setMarketTitle] = useState("");
+  const [guessType, setGuessType] = useState<"WINNER" | "SCORE" | "NUMBER">("WINNER");
+  const [criarErr, setCriarErr] = useState<string | null>(null);
+
+  const { data: mercados } = trpc.market.list.useQuery(
+    { q: busca, status: "OPEN" },
+    { enabled: busca.trim().length >= 2 },
+  );
+  const createBolaoMut = trpc.groups.bolao.create.useMutation();
+
+  function onCopyInvite() {
+    if (!group) return;
+    navigator.clipboard?.writeText(group.inviteCode);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
+  }
+
+  async function onCriarBolao() {
+    if (!groupId || !marketId) return;
+    setCriarErr(null);
+    try {
+      await createBolaoMut.mutateAsync({ groupId, marketId, guessType });
+      setShowCriar(false);
+      setMarketId(null);
+      setMarketTitle("");
+      setBusca("");
+      await utils.groups.detail.invalidate({ groupId });
+    } catch (err) {
+      setCriarErr(err instanceof Error ? err.message : "Erro ao criar bolão");
+    }
+  }
+
+  if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
+  if (!group) return <main className="page"><p className="hint-text">Grupo não encontrado.</p></main>;
+
+  return (
+    <main className="page">
+      <Link to="/grupos" className="hint-text">← Meus grupos</Link>
+      <h1 style={{ fontFamily: "var(--serif)", fontSize: 24, margin: "8px 0 16px" }}>{group.name}</h1>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Membros ({group.members.length})</h2>
+        {group.members.map((m) => (
+          <div key={m.handle} className="out">
+            <span className="nome">{m.displayName} <span className="hint-text">@{m.handle}</span></span>
+          </div>
+        ))}
+        <hr style={{ border: "none", borderTop: "1px solid var(--linha)", margin: "16px 0" }} />
+        <p className="hint-text" style={{ marginBottom: 8 }}>Convide gente com este código:</p>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <code className="mono" style={{ padding: "6px 10px", background: "var(--fundo-alt, #f4f4f4)", borderRadius: 6 }}>
+            {group.inviteCode}
+          </code>
+          <button type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px" }} onClick={onCopyInvite}>
+            {copiado ? "Copiado!" : "Copiar"}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: 0 }}>Bolões</h2>
+          <button type="button" className="btn-outline" style={{ width: "auto", padding: "8px 14px" }} onClick={() => setShowCriar((v) => !v)}>
+            {showCriar ? "Cancelar" : "Criar bolão"}
+          </button>
+        </div>
+
+        {showCriar && (
+          <div style={{ marginBottom: 20, padding: 14, border: "1px solid var(--linha)", borderRadius: 8 }}>
+            <div className="field">
+              <label className="label" htmlFor="bolao-busca">Buscar mercado (aberto)</label>
+              <input
+                className="input" id="bolao-busca" placeholder="ex.: Flamengo, Tarcísio, Braide..."
+                value={busca}
+                onChange={(e) => { setBusca(e.target.value); setMarketId(null); }}
+              />
+            </div>
+            {marketId ? (
+              <p className="hint-text">Selecionado: <strong>{marketTitle}</strong> — <button type="button" className="link-btn" onClick={() => setMarketId(null)}>trocar</button></p>
+            ) : (
+              mercados && mercados.length > 0 && (
+                <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
+                  {mercados.map((m) => (
+                    <div
+                      key={m.id} className="out" style={{ cursor: "pointer" }}
+                      onClick={() => { setMarketId(m.id); setMarketTitle(m.title); }}
+                    >
+                      <span className="nome">{m.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+            <div className="field">
+              <label className="label" htmlFor="bolao-tipo">Tipo de palpite</label>
+              <select id="bolao-tipo" value={guessType} onChange={(e) => setGuessType(e.target.value as typeof guessType)}>
+                {Object.entries(GUESS_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {criarErr && <p className="error-text">{criarErr}</p>}
+            <button
+              className="btn-outline" style={{ width: "auto", padding: "10px 18px" }}
+              disabled={!marketId || createBolaoMut.isPending}
+              onClick={onCriarBolao}
+            >
+              {createBolaoMut.isPending ? "Criando…" : "Criar bolão"}
+            </button>
+          </div>
+        )}
+
+        {group.boloes.length === 0 ? (
+          <p className="hint-text">Nenhum bolão ainda.</p>
+        ) : (
+          group.boloes.map((b) => (
+            <div key={b.id} className="out">
+              <span className="nome">
+                <Link to={`/grupos/${groupId}/bolao/${b.id}`}>{b.marketTitle}</Link>
+                <br /><span className="hint-text">{GUESS_TYPE_LABEL[b.guessType]} · {b.palpiteCount} palpite(s)</span>
+              </span>
+              <span className="badge">{STATUS_LABEL[b.status] ?? b.status}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </main>
+  );
+}

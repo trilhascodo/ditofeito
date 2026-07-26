@@ -61,6 +61,9 @@ export function Layout() {
           <nav className="site-nav">
             <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>Mercados</NavLink>
             <NavLink to="/ranking" className={({ isActive }) => (isActive ? "active" : "")}>Ranking</NavLink>
+            {user && (
+              <NavLink to="/grupos" className={({ isActive }) => (isActive ? "active" : "")}>Grupos</NavLink>
+            )}
             {user && STAFF_ROLES.has(user.role) && (
               <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : "")}>Admin</NavLink>
             )}
