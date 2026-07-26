@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+
+const dataFmt = (d: string | Date) =>
+  new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "Aberto pra palpite",
@@ -33,6 +36,28 @@ export function GrupoDetalhe() {
     { enabled: busca.trim().length >= 2 },
   );
   const createBolaoMut = trpc.groups.bolao.create.useMutation();
+
+  const { data: posts, isLoading: postsLoading } = trpc.groups.posts.list.useQuery(
+    { groupId: groupId! }, { enabled: !!groupId },
+  );
+  const createPostMut = trpc.groups.posts.create.useMutation();
+  const [postBody, setPostBody] = useState("");
+  const [postErr, setPostErr] = useState<string | null>(null);
+
+  async function onPost(e: FormEvent) {
+    e.preventDefault();
+    if (!groupId) return;
+    setPostErr(null);
+    const body = postBody.trim();
+    if (!body) return;
+    try {
+      await createPostMut.mutateAsync({ groupId, body });
+      setPostBody("");
+      await utils.groups.posts.list.invalidate({ groupId });
+    } catch (err) {
+      setPostErr(err instanceof Error ? err.message : "Erro ao postar");
+    }
+  }
 
   function onCopyInvite() {
     if (!group) return;
@@ -81,6 +106,36 @@ export function GrupoDetalhe() {
             {copiado ? "Copiado!" : "Copiar"}
           </button>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Mural</h2>
+        <form onSubmit={onPost} style={{ marginBottom: 16 }}>
+          <div className="field" style={{ marginBottom: 8 }}>
+            <textarea
+              className="input" rows={2} placeholder="Combina os detalhes do bolão, avisa a galera…"
+              value={postBody} onChange={(e) => setPostBody(e.target.value)}
+            />
+          </div>
+          {postErr && <p className="error-text">{postErr}</p>}
+          <button className="btn-outline" style={{ width: "auto", padding: "8px 16px" }} disabled={createPostMut.isPending || !postBody.trim()}>
+            {createPostMut.isPending ? "Postando…" : "Postar"}
+          </button>
+        </form>
+        {postsLoading ? (
+          <p className="hint-text">Carregando…</p>
+        ) : !posts || posts.length === 0 ? (
+          <p className="hint-text">Nenhum recado ainda — comece a conversa.</p>
+        ) : (
+          posts.map((p) => (
+            <div key={p.id} className="out">
+              <span className="nome">
+                {p.displayName} <span className="hint-text">@{p.handle} · {dataFmt(p.createdAt)}</span>
+                <br />{p.body}
+              </span>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="card">

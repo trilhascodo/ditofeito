@@ -11,6 +11,12 @@ import { TRPCError } from "@trpc/server";
 import type { Pool } from "pg";
 import { router, protectedProcedure } from "../trpc/trpc.js";
 import { calcularVencedores, statusBolao, type GuessType } from "../domain/bolao.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
+
+// Mesmo teto de comments.ts (COMMENT_RATE_LIMIT) — mural de grupo é bem
+// menor em volume (poucos membros vs. mercado público), mas o risco de
+// spam/script é o mesmo tipo de mutation.
+const POST_RATE_LIMIT = { max: 5, windowMs: 60_000 };
 
 async function assertMember(pool: Pool, groupId: string, userId: string): Promise<void> {
   const r = await pool.query(
@@ -130,6 +136,43 @@ const groupsSubRouter = router({
         })),
       };
     }),
+
+  posts: router({
+    list: protectedProcedure
+      .input(z.object({ groupId: z.string().uuid() }))
+      .query(async ({ ctx, input }) => {
+        await assertMember(ctx.pool, input.groupId, ctx.user.id);
+        const r = await ctx.pool.query(
+          `SELECT p.id, p.body, p.created_at, u.handle, u.display_name, u.avatar_url
+             FROM group_posts p JOIN users u ON u.id = p.user_id
+            WHERE p.group_id = $1
+            ORDER BY p.created_at DESC
+            LIMIT 200`,
+          [input.groupId],
+        );
+        return r.rows.map((row) => ({
+          id: row.id as string,
+          body: row.body as string,
+          createdAt: row.created_at as Date,
+          handle: row.handle as string,
+          displayName: row.display_name as string,
+          avatarUrl: row.avatar_url as string | null,
+        }));
+      }),
+
+    create: protectedProcedure
+      .input(z.object({ groupId: z.string().uuid(), body: z.string().trim().min(1).max(2000) }))
+      .mutation(async ({ ctx, input }) => {
+        await assertMember(ctx.pool, input.groupId, ctx.user.id);
+        if (!checkRateLimit(`group-post:${ctx.user.id}`, POST_RATE_LIMIT.max, POST_RATE_LIMIT.windowMs))
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Devagar — espera um minuto antes de postar de novo." });
+        await ctx.pool.query(
+          `INSERT INTO group_posts (group_id, user_id, body) VALUES ($1,$2,$3)`,
+          [input.groupId, ctx.user.id, input.body],
+        );
+        return { ok: true };
+      }),
+  }),
 
   bolao: router({
     create: protectedProcedure
