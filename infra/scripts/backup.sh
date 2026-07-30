@@ -20,7 +20,16 @@ OUT="/tmp/ditofeito_${STAMP}.dump"
 docker compose -f infra/docker-compose.yml exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" postgres \
   pg_dump -h localhost -U ditofeito -d ditofeito --format=custom > "$OUT"
 
-rclone copy "$OUT" "$BACKUP_BUCKET" --progress
+# Subpasta "postgres/" (não a raiz do bucket) -- a raiz também tem
+# vps-nginx-letsencrypt/ (backup do nginx da VPS, infra/README ou pergunte),
+# e restore-test.sh usa `rclone lsf | sort | tail -n1` pra achar o mais
+# recente; misturado na raiz, "vps-..." vem depois de "ditofeito_..." em
+# ordem alfabética e o script acharia a pasta errada.
+rclone copy "$OUT" "$BACKUP_BUCKET/postgres" --progress
 rm -f "$OUT"
 
-echo "backup ${STAMP} enviado para ${BACKUP_BUCKET}"
+# Retenção: mantém só os últimos 90 dias no R2 (dumps são pequenos, mas sem
+# poda acumula pra sempre).
+rclone delete --min-age 90d "$BACKUP_BUCKET/postgres"
+
+echo "backup ${STAMP} enviado para ${BACKUP_BUCKET}/postgres"

@@ -9,11 +9,11 @@ cd "$(dirname "$0")/../.."
 BACKUP_BUCKET="${BACKUP_BUCKET:-$(grep -m1 '^BACKUP_BUCKET=' infra/.env 2>/dev/null | cut -d= -f2-)}"
 : "${BACKUP_BUCKET:?defina BACKUP_BUCKET no ambiente ou em infra/.env}"
 
-LATEST=$(rclone lsf "$BACKUP_BUCKET" | sort | tail -n1)
-[ -n "$LATEST" ] || { echo "nenhum backup encontrado em $BACKUP_BUCKET"; exit 1; }
+LATEST=$(rclone lsf "$BACKUP_BUCKET/postgres" | sort | tail -n1)
+[ -n "$LATEST" ] || { echo "nenhum backup encontrado em $BACKUP_BUCKET/postgres"; exit 1; }
 
 TMP="/tmp/${LATEST}"
-rclone copy "${BACKUP_BUCKET}/${LATEST}" /tmp/
+rclone copy "${BACKUP_BUCKET}/postgres/${LATEST}" /tmp/
 
 CONTAINER="ditofeito-restore-test-$$"
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; rm -f "$TMP"; }
