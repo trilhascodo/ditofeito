@@ -166,7 +166,7 @@ export function Metodologia() {
         Todo card e widget compartilhável (imagem, iframe) já leva o aviso
         "agregado de opiniões de participantes, não é pesquisa eleitoral"
         quando o mercado é eleitoral — não precisa reescrever, só manter.
-        Dúvida específica de enquadramento: <b>contato@ditofeito.com.br</b>.
+        Dúvida específica de enquadramento: <b>contato@ditofeito.com</b>.
       </p>
     </main>
   );
