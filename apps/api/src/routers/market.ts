@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { lmsrPrices, suggestB } from "@ditofeito/core";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { createMarketIdempotent } from "../domain/marketFactory.js";
+import { visitorHash } from "../lib/visitorHash.js";
+import { checkRateLimit } from "../lib/rateLimit.js";
 
 const outcomeInput = z.object({ label: z.string().trim().min(1).max(120) });
 
@@ -351,6 +353,75 @@ export const marketRouter = router({
       slug: row.slug as string, title: row.title as string, categoryName: row.category_name as string,
     }));
   }),
+
+  // "Mais acessados" (coluna lateral da home) — sem tabela nova: agrega
+  // page_views (006_page_views.sql) casando o path exato que o front grava
+  // a cada visita de /m/:slug. Janela de 7 dias (não all-time) pelo mesmo
+  // motivo de trending usar delta de 24h — reflete "em alta" agora, não
+  // acúmulo histórico que nunca desceria do topo.
+  mostViewed: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `SELECT m.slug, m.title, c.name AS category_name, count(*)::int AS views
+           FROM page_views pv
+           JOIN markets m ON pv.path = '/m/' || m.slug
+           JOIN categories c ON c.id = m.category_id
+          WHERE m.status = 'OPEN' AND pv.created_at > now() - interval '7 days'
+            AND ($1::text IS NULL OR m.region_uf = $1 OR m.region_uf IS NULL)
+          GROUP BY m.id, c.name
+          ORDER BY views DESC, m.created_at DESC
+          LIMIT 5`,
+        [input?.uf ?? null],
+      );
+      return r.rows.map((row) => ({
+        slug: row.slug as string, title: row.title as string,
+        categoryName: row.category_name as string, views: row.views as number,
+      }));
+    }),
+
+  // "Mais compartilhados" — lê market_share_events (038_market_shares.sql),
+  // alimentado pelo botão de compartilhar de MarketPage.tsx (trackShare
+  // abaixo). Mesma janela de 7 dias de mostViewed.
+  mostShared: publicProcedure
+    .input(z.object({ uf: z.string().length(2).toUpperCase().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const r = await ctx.pool.query(
+        `SELECT m.slug, m.title, c.name AS category_name, count(*)::int AS shares
+           FROM market_share_events se
+           JOIN markets m ON m.id = se.market_id
+           JOIN categories c ON c.id = m.category_id
+          WHERE m.status = 'OPEN' AND se.created_at > now() - interval '7 days'
+            AND ($1::text IS NULL OR m.region_uf = $1 OR m.region_uf IS NULL)
+          GROUP BY m.id, c.name
+          ORDER BY shares DESC, m.created_at DESC
+          LIMIT 5`,
+        [input?.uf ?? null],
+      );
+      return r.rows.map((row) => ({
+        slug: row.slug as string, title: row.title as string,
+        categoryName: row.category_name as string, shares: row.shares as number,
+      }));
+    }),
+
+  // Clique em qualquer botão de "compartilhar" de MarketPage.tsx — sem
+  // bloquear o compartilhamento em si (fire-and-forget no front), só
+  // alimenta mostShared acima. Mesmo padrão de pageViews.track/
+  // adEvents.trackImpression: hash de visitante, rate-limited, sem PII.
+  trackShare: publicProcedure
+    .input(z.object({
+      marketId: z.string().uuid(),
+      channel: z.enum(["WHATSAPP", "TELEGRAM", "FACEBOOK", "COPY_LINK", "NATIVE"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const hash = visitorHash(ctx.ip, ctx.userAgent);
+      if (!checkRateLimit(`marketshare:${hash}`, 20, 60_000)) return { ok: true };
+      await ctx.pool.query(
+        `INSERT INTO market_share_events (market_id, channel, visitor_hash) VALUES ($1,$2,$3)`,
+        [input.marketId, input.channel, hash],
+      );
+      return { ok: true };
+    }),
 
   publish: adminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
     const r = await ctx.pool.query(

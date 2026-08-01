@@ -159,6 +159,8 @@ interface TrendingItem {
 }
 interface MostVotedItem { slug: string; title: string; categoryName: string; voters: number }
 interface NewestItem { slug: string; title: string; categoryName: string }
+interface MostViewedItem { slug: string; title: string; categoryName: string; views: number }
+interface MostSharedItem { slug: string; title: string; categoryName: string; shares: number }
 
 // Painel genérico de ranking na coluna lateral (tendências, mais votados,
 // novos mercados) — mesma estrutura de card+lista, só muda o cabeçalho e o
@@ -322,6 +324,8 @@ export function Home() {
   const { data: trending } = trpc.market.trending.useQuery({ uf: uf || undefined });
   const { data: mostVoted } = trpc.market.mostVoted.useQuery({ uf: uf || undefined });
   const { data: newest } = trpc.market.newest.useQuery({ uf: uf || undefined });
+  const { data: mostViewed } = trpc.market.mostViewed.useQuery({ uf: uf || undefined });
+  const { data: mostShared } = trpc.market.mostShared.useQuery({ uf: uf || undefined });
   const { data: homeLinks } = trpc.homeLinks.list.useQuery();
   const trackImpression = trpc.adEvents.trackImpression.useMutation();
 
@@ -493,7 +497,7 @@ export function Home() {
 
   const hasSidebarAds = !!home && home.sidebar.length > 0;
   const hasSideContent = hasSidebarAds || !!trending?.length || !!mostVoted?.length
-    || !!newest?.length || !!homeLinks?.length;
+    || !!newest?.length || !!mostViewed?.length || !!mostShared?.length || !!homeLinks?.length;
 
   // Intercala os anúncios (plano Premium, até 5) entre os painéis de
   // conteúdo da lateral no desktop, em vez de empilhar todos juntos no topo —
@@ -535,6 +539,14 @@ export function Home() {
               badge={(it) => <span className="badge">{it.categoryName}</span>}
             />
             <AdBucket items={adBuckets[3]} />
+            <SidePanelList<MostViewedItem>
+              heading="Mais acessados" items={mostViewed ?? []}
+              badge={(it) => <span className="badge">{it.views} acesso{it.views === 1 ? "" : "s"}</span>}
+            />
+            <SidePanelList<MostSharedItem>
+              heading="Mais compartilhados" items={mostShared ?? []}
+              badge={(it) => <span className="badge">{it.shares} compart.</span>}
+            />
             <HomeLinks items={homeLinks ?? []} />
           </div>
         </div>
