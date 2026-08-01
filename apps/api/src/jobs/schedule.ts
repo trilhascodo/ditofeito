@@ -6,6 +6,7 @@ import { rodarGerador } from "./gerador.js";
 import { rodarGeradorEsporte } from "./generators/esporte.js";
 import { rodarGeradorFinanceiro } from "./generators/financeiro.js";
 import { verifyLedgerChain } from "../domain/trade.js";
+import { sendBolaoClosingReminders } from "./bolaoReminder.js";
 
 /** Roda verifyLedgerChain para todo usuário; loga qualquer cadeia quebrada
  *  (não deve acontecer — é alarme de integridade, não fluxo esperado). */
@@ -57,6 +58,18 @@ export function startJobs(pool: Pool) {
     const r = await verifyAllLedgers(pool);
     if (r.broken.length) console.error("[jobs] LEDGER QUEBRADO", r.broken);
     else console.log(`[jobs] verifyAllLedgers OK (${r.checked} usuários)`);
+  });
+
+  // Lembrete de bolão fechando — de hora em hora (cadência bem mais curta que
+  // os outros jobs, todos diários/semanais; a dedupe fica na própria query,
+  // ver bolaoReminder.ts).
+  cron.schedule("0 * * * *", async () => {
+    try {
+      const r = await sendBolaoClosingReminders(pool);
+      console.log("[jobs] sendBolaoClosingReminders", r);
+    } catch (e) {
+      console.error("[jobs] sendBolaoClosingReminders falhou", e);
+    }
   });
 
   // runMatcher NÃO entra no cron: roda sob demanda a cada republicação do TSE

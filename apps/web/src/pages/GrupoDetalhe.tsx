@@ -92,10 +92,24 @@ export function GrupoDetalhe() {
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
   if (!group) return <main className="page"><p className="hint-text">Grupo não encontrado.</p></main>;
 
+  const bolaoPendente = group.boloes.find((b) => b.status === "OPEN" && !b.hasMyGuess);
+
   return (
     <main className="page">
       <Link to="/grupos" className="hint-text">← Meus grupos</Link>
       <h1 style={{ fontFamily: "var(--serif)", fontSize: 24, margin: "8px 0 16px" }}>{group.name}</h1>
+
+      {bolaoPendente && (
+        <div className="card" style={{ marginBottom: 20, borderColor: "var(--violeta)" }}>
+          <p className="hint-text" style={{ margin: "0 0 8px" }}>Tem bolão esperando seu palpite:</p>
+          <Link
+            to={`/grupos/${groupId}/bolao/${bolaoPendente.id}`}
+            className="btn" style={{ display: "inline-block", width: "auto", padding: "10px 18px" }}
+          >
+            Dar meu palpite: {bolaoPendente.marketTitle}
+          </Link>
+        </div>
+      )}
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Membros ({group.members.length})</h2>

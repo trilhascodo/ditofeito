@@ -22,6 +22,8 @@ const REASON_LABEL: Record<string, string> = {
   RESOLUTION_PAYOUT: "Pagamento de resolução",
   MARKET_VOIDED: "Mercado anulado",
   ADMIN_ADJUST: "Ajuste administrativo",
+  REFERRAL_BONUS: "Alguém entrou no seu grupo",
+  GROUP_JOIN_BONUS: "Entrou em um grupo por convite",
 };
 
 const MARKET_STATUS_LABEL: Record<string, string> = {

@@ -11,7 +11,7 @@ export const notificationsRouter = router({
     .input(z.object({ limit: z.number().int().min(1).max(100).default(30) }).optional())
     .query(async ({ ctx, input }) => {
       const r = await ctx.pool.query(
-        `SELECT n.id, n.kind, n.body, n.read_at, n.created_at, m.slug AS market_slug
+        `SELECT n.id, n.kind, n.body, n.read_at, n.created_at, m.slug AS market_slug, n.group_id
            FROM notifications n
            LEFT JOIN markets m ON m.id = n.market_id
           WHERE n.user_id = $1
@@ -21,6 +21,7 @@ export const notificationsRouter = router({
       return r.rows.map((row) => ({
         id: row.id as string, kind: row.kind as string, body: row.body as string,
         marketSlug: row.market_slug as string | null,
+        groupId: row.group_id as string | null,
         readAt: row.read_at as string | null, createdAt: row.created_at as string,
       }));
     }),

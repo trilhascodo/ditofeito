@@ -4,6 +4,7 @@ import { trpc } from "../lib/trpc";
 
 const KIND_ICON: Record<string, string> = {
   MARKET_RESOLVED: "✓", MARKET_VOIDED: "↺", NEW_COMMENT: "💬",
+  BOLAO_CLOSING_SOON: "⏰", GROUP_JOINED: "👋",
 };
 
 const timeFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -49,9 +50,14 @@ export function NotificationBell() {
                   <span className="notif-item-time">{timeFmt.format(new Date(n.createdAt))}</span>
                 </>
               );
-              return n.marketSlug ? (
+              // groupId primeiro: BOLAO_CLOSING_SOON seta os dois (marketId
+              // só pra dedupe do job em bolaoReminder.ts) mas a ação de
+              // palpitar mora no grupo (/grupos/:id), não no mercado
+              // (/m/:slug, página de negociação LMSR — destino errado aqui).
+              const to = n.groupId ? `/grupos/${n.groupId}` : n.marketSlug ? `/m/${n.marketSlug}` : null;
+              return to ? (
                 <Link
-                  key={n.id} to={`/m/${n.marketSlug}`} onClick={() => setOpen(false)}
+                  key={n.id} to={to} onClick={() => setOpen(false)}
                   className={`notif-item ${n.readAt ? "" : "unread"}`}
                 >
                   {body}

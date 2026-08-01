@@ -12,11 +12,18 @@ import type { Pool } from "pg";
 import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
 import { calcularVencedores, statusBolao, type GuessType } from "../domain/bolao.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
+import { appendLedger } from "../domain/trade.js";
+import { notify } from "../domain/notify.js";
+import { sendTransactionalEmail } from "../lib/email.js";
 
 // Mesmo teto de comments.ts (COMMENT_RATE_LIMIT) — mural de grupo é bem
 // menor em volume (poucos membros vs. mercado público), mas o risco de
 // spam/script é o mesmo tipo de mutation.
 const POST_RATE_LIMIT = { max: 5, windowMs: 60_000 };
+
+// Pontos não-conversíveis (mesma moeda do SIGNUP_BONUS) — modestos de
+// propósito, é reputação, não incentivo financeiro.
+const REFERRAL_BONUS = { referrerPoints: 100, joineePoints: 50 };
 
 async function assertMember(pool: Pool, groupId: string, userId: string): Promise<void> {
   const r = await pool.query(
@@ -58,14 +65,73 @@ const groupsSubRouter = router({
   joinByCode: protectedProcedure
     .input(z.object({ code: z.string().trim().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const g = await ctx.pool.query(`SELECT id, name FROM groups WHERE invite_code = $1`, [input.code]);
-      if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
-      const groupId = g.rows[0].id as string;
-      await ctx.pool.query(
-        `INSERT INTO group_members (group_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-        [groupId, ctx.user.id],
-      );
-      return { id: groupId, name: g.rows[0].name as string };
+      const client = await ctx.pool.connect();
+      let queuedEmail: { to: string; subject: string; html: string } | null = null;
+      let result: { id: string; name: string };
+      try {
+        await client.query("BEGIN");
+        const g = await client.query(
+          `SELECT id, name, created_by FROM groups WHERE invite_code = $1 FOR UPDATE`,
+          [input.code],
+        );
+        if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
+        const groupId = g.rows[0].id as string;
+        const groupName = g.rows[0].name as string;
+        const ownerId = g.rows[0].created_by as string;
+
+        // ON CONFLICT DO NOTHING + RETURNING: rowCount 0 = já era membro
+        // (reabriu o link de convite) — nesse caso não dá bônus de novo nem
+        // notifica o dono outra vez.
+        const ins = await client.query(
+          `INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)
+           ON CONFLICT DO NOTHING RETURNING user_id`,
+          [groupId, ctx.user.id],
+        );
+
+        if (ins.rowCount && ownerId !== ctx.user.id) {
+          // Lock em ordem estável (menor id primeiro) nos dois usuários
+          // envolvidos — appendLedger pressupõe lock já tomado (ver
+          // comentário em domain/trade.ts), e aqui são dois usuários já
+          // existentes (ordem fixa evita deadlock com outra transação que
+          // toque os mesmos dois em ordem inversa).
+          const ids = [ownerId, ctx.user.id].sort();
+          const users = await client.query(
+            `SELECT id, email, email_notifications FROM users WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`,
+            [ids],
+          );
+          const owner = users.rows.find((u) => u.id === ownerId);
+
+          await appendLedger(client, ownerId, REFERRAL_BONUS.referrerPoints, "REFERRAL_BONUS", "group", groupId);
+          await appendLedger(client, ctx.user.id, REFERRAL_BONUS.joineePoints, "GROUP_JOIN_BONUS", "group", groupId);
+
+          const body = `${ctx.user.displayName} entrou no seu grupo "${groupName}" pelo seu convite — +${REFERRAL_BONUS.referrerPoints} pontos.`;
+          await notify(client, ownerId, "GROUP_JOINED", body, { groupId });
+
+          if (owner?.email_notifications) {
+            queuedEmail = {
+              to: owner.email as string,
+              subject: "Alguém entrou no seu grupo — DitoFeito",
+              html: `<p>${body}</p>`,
+            };
+          }
+        }
+
+        await client.query("COMMIT");
+        result = { id: groupId, name: groupName };
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
+      // E-mail só depois do COMMIT + client liberado (nunca dentro da
+      // transação — chamada de rede não pode segurar lock de linha), mesmo
+      // princípio de flushEmailQueue em domain/trade.ts.
+      if (queuedEmail) {
+        sendTransactionalEmail(ctx.pool, queuedEmail)
+          .catch((e) => console.error("[grupos] envio de e-mail de indicação falhou", e));
+      }
+      return result;
     }),
 
   // Pública — alimenta a página de convite (/grupos/entrar/:code) e o card OG
@@ -133,11 +199,14 @@ const groupsSubRouter = router({
       const boloes = await ctx.pool.query(
         `SELECT b.id, b.guess_type, b.resolved_at,
                 m.id AS market_id, m.title AS market_title, m.status AS market_status, m.close_at,
-                (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count
+                (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count,
+                EXISTS(
+                  SELECT 1 FROM bolao_palpites bp2 WHERE bp2.bolao_id = b.id AND bp2.user_id = $2
+                ) AS has_my_guess
            FROM boloes b JOIN markets m ON m.id = b.market_id
           WHERE b.group_id = $1
           ORDER BY b.created_at DESC`,
-        [input.groupId],
+        [input.groupId, ctx.user.id],
       );
 
       return {
@@ -159,6 +228,7 @@ const groupsSubRouter = router({
           marketStatus: b.market_status as string,
           closeAt: b.close_at as Date,
           palpiteCount: Number(b.palpite_count),
+          hasMyGuess: b.has_my_guess as boolean,
         })),
       };
     }),
