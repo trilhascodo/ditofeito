@@ -20,7 +20,7 @@ import type { GuessType } from "../domain/bolao.js";
 export interface BolaoVindicationData {
   displayName: string; handle: string;
   groupName: string;
-  marketTitle: string; marketSlug: string;
+  marketTitle: string; marketSlug: string | null; // null = bolão de evento próprio do grupo
   guessType: GuessType;
   guessLabel: string; // já formatado: label do outcome, "2 x 1" ou o número
 }
@@ -41,15 +41,17 @@ export async function getBolaoVindicationData(pool: Pool, token: string): Promis
   if (!isUuid(token)) return null;
   const r = await pool.query(
     `SELECT u.display_name, u.handle, g.name AS group_name,
-            m.title AS market_title, m.slug AS market_slug, b.guess_type,
-            mo.label AS outcome_label, bp.guess_home_score, bp.guess_away_score, bp.guess_number
+            COALESCE(m.title, b.custom_title) AS market_title, m.slug AS market_slug, b.guess_type,
+            COALESCE(mo.label, co.label) AS outcome_label,
+            bp.guess_home_score, bp.guess_away_score, bp.guess_number
        FROM bolao_vindication_cards bvc
        JOIN boloes b ON b.id = bvc.bolao_id
        JOIN groups g ON g.id = b.group_id
-       JOIN markets m ON m.id = b.market_id
+       LEFT JOIN markets m ON m.id = b.market_id
        JOIN users u ON u.id = bvc.user_id
        JOIN bolao_palpites bp ON bp.bolao_id = bvc.bolao_id AND bp.user_id = bvc.user_id
        LEFT JOIN market_outcomes mo ON mo.id = bp.guess_outcome_id
+       LEFT JOIN bolao_custom_outcomes co ON co.id = bp.guess_outcome_id
       WHERE bvc.share_token = $1`,
     [token],
   );
@@ -59,7 +61,7 @@ export async function getBolaoVindicationData(pool: Pool, token: string): Promis
   return {
     displayName: row.display_name as string, handle: row.handle as string,
     groupName: row.group_name as string,
-    marketTitle: row.market_title as string, marketSlug: row.market_slug as string,
+    marketTitle: row.market_title as string, marketSlug: row.market_slug as string | null,
     guessType,
     guessLabel: formatGuessLabel(
       guessType, row.outcome_label as string | null,
@@ -106,7 +108,7 @@ export function renderBolaoVindicationPng(d: BolaoVindicationData): Buffer {
 }
 
 export function renderBolaoVindicationHtml(d: BolaoVindicationData, token: string): string {
-  const marketUrl = `${EMBED_CONFIG.baseUrl}/m/${d.marketSlug}`;
+  const marketUrl = d.marketSlug ? `${EMBED_CONFIG.baseUrl}/m/${d.marketSlug}` : EMBED_CONFIG.baseUrl;
   const shareUrl = `${EMBED_CONFIG.baseUrl}/bolao-vindicacao/${token}`;
   const cardUrl = `${EMBED_CONFIG.baseUrl}/card/bolao-vindicacao/${token}.png`;
   const desc = `${d.displayName} acertou "${d.guessLabel}" no bolão do grupo "${d.groupName}" — ${d.marketTitle}.`;
@@ -136,7 +138,7 @@ export function renderBolaoVindicationHtml(d: BolaoVindicationData, token: strin
 </style></head><body>
 <img src="${cardUrl}" alt="${esc(desc)}">
 <p>${esc(desc)}</p>
-<a class="btn" href="${marketUrl}">Ver o mercado no DitoFeito</a>
+<a class="btn" href="${marketUrl}">${d.marketSlug ? "Ver o mercado no DitoFeito" : "Conhecer o DitoFeito"}</a>
 </body></html>`;
 }
 

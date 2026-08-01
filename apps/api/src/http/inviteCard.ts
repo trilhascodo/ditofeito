@@ -29,8 +29,10 @@ export async function getInviteCardData(pool: Pool, code: string): Promise<Invit
     `SELECT g.name, u.display_name AS creator_name,
             (SELECT count(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
             (SELECT count(*) FROM boloes b
-               JOIN markets m ON m.id = b.market_id
-              WHERE b.group_id = g.id AND m.status = 'OPEN') AS active_boloes_count
+               LEFT JOIN markets m ON m.id = b.market_id
+              WHERE b.group_id = g.id
+                AND (m.status = 'OPEN' OR (b.market_id IS NULL AND b.custom_close_at > now()))
+             ) AS active_boloes_count
        FROM groups g JOIN users u ON u.id = g.created_by
       WHERE g.invite_code = $1`,
     [code],

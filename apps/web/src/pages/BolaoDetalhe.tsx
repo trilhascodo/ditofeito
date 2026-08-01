@@ -26,6 +26,7 @@ export function BolaoDetalhe() {
   const [realHome, setRealHome] = useState("");
   const [realAway, setRealAway] = useState("");
   const [realNumber, setRealNumber] = useState("");
+  const [realOutcomeId, setRealOutcomeId] = useState("");
   const [resolveErr, setResolveErr] = useState<string | null>(null);
 
   const [vindCopied, setVindCopied] = useState(false);
@@ -66,6 +67,7 @@ export function BolaoDetalhe() {
         homeScore: bolao.guessType === "SCORE" ? Number(realHome) : undefined,
         awayScore: bolao.guessType === "SCORE" ? Number(realAway) : undefined,
         number: bolao.guessType === "NUMBER" ? Number(realNumber) : undefined,
+        customOutcomeId: bolao.guessType === "WINNER" ? realOutcomeId : undefined,
       });
       await utils.groups.bolao.detail.invalidate({ bolaoId });
     } catch (err) {
@@ -80,8 +82,11 @@ export function BolaoDetalhe() {
     <main className="page">
       <Link to={`/grupos/${groupId}`} className="hint-text">← Voltar ao grupo</Link>
       <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "8px 0 4px" }}>
-        <Link to={`/m/${bolao.marketSlug}`}>{bolao.marketTitle}</Link>
+        {bolao.marketSlug ? <Link to={`/m/${bolao.marketSlug}`}>{bolao.marketTitle}</Link> : bolao.marketTitle}
       </h1>
+      {bolao.isCustom && bolao.criteria && (
+        <p className="hint-text" style={{ marginBottom: 4 }}>Critério: {bolao.criteria}</p>
+      )}
       <p className="hint-text" style={{ marginBottom: 16 }}>
         <span className="badge">{STATUS_LABEL[bolao.status] ?? bolao.status}</span>
         {" · encerra em "}{new Date(bolao.closeAt).toLocaleString("pt-BR")}
@@ -180,9 +185,23 @@ export function BolaoDetalhe() {
         <div className="card" style={{ marginBottom: 20 }}>
           <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Registrar resultado real</h2>
           <p className="hint-text" style={{ marginBottom: 12 }}>
-            O mercado já foi resolvido — falta só você confirmar o valor exato pra fechar o bolão.
+            {bolao.isCustom
+              ? "O prazo encerrou — confirme o resultado pra fechar o bolão."
+              : "O mercado já foi resolvido — falta só você confirmar o valor exato pra fechar o bolão."}
           </p>
           <form onSubmit={onResolveExtra}>
+            {bolao.isCustom && bolao.guessType === "WINNER" && (
+              <div className="field">
+                <label className="label" htmlFor="real-outcome">Resultado</label>
+                <select
+                  id="real-outcome" required
+                  value={realOutcomeId} onChange={(e) => setRealOutcomeId(e.target.value)}
+                >
+                  <option value="" disabled>escolha…</option>
+                  {bolao.outcomes.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
             {bolao.guessType === "SCORE" && (
               <div style={{ display: "flex", gap: 10 }}>
                 <div className="field" style={{ flex: 1 }}>

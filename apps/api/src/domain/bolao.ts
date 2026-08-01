@@ -1,6 +1,8 @@
 // ============================================================================
-// bolao.ts — palpite privado de grupo sobre um mercado já existente.
-// Não é LMSR: cada membro só marca um palpite, sem comprar/vender share.
+// bolao.ts — palpite privado de grupo, sobre um mercado já existente OU
+// sobre um evento que o próprio grupo definiu (bolão "custom", ver
+// migrations/036_bolao_custom.sql). Não é LMSR: cada membro só marca um
+// palpite, sem comprar/vender share.
 // Vencedor = quem acerta em cheio; 2+ acertadores dividem (co-vencedores,
 // sem payout de pontos); ninguém acerta = ninguém venceu (nunca cai pra
 // "mais perto ganha" — ver migrations/031_boloes.sql).
@@ -42,12 +44,21 @@ export function calcularVencedores(palpites: Palpite[], tipo: GuessType, real: R
 }
 
 /** Status derivado, nunca guardado em coluna — evita desincronizar do
- *  status do mercado subjacente (fonte única de verdade). */
+ *  status do mercado subjacente (fonte única de verdade). `marketStatus`
+ *  null = bolão de evento próprio do grupo (sem mercado curado por trás,
+ *  ver migrations/036_bolao_custom.sql): status vem do prazo que o próprio
+ *  grupo definiu (`customCloseAt`), e TODO guessType (inclusive WINNER)
+ *  precisa de resolução manual — sem mercado, nada resolve sozinho. */
 export function statusBolao(
-  marketStatus: string,
+  marketStatus: string | null,
   guessType: GuessType,
   resolvedAt: string | Date | null,
+  customCloseAt?: string | Date,
 ): BolaoStatus {
+  if (marketStatus === null) {
+    if (customCloseAt && new Date(customCloseAt) > new Date()) return "OPEN";
+    return resolvedAt ? "RESOLVIDO" : "AGUARDANDO_RESOLUCAO";
+  }
   if (marketStatus === "VOIDED") return "VOID";
   if (marketStatus !== "RESOLVED") return "OPEN";
   if (guessType === "WINNER") return "RESOLVIDO";

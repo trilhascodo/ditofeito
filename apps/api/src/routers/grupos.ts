@@ -35,6 +35,26 @@ async function assertMember(pool: Pool, groupId: string, userId: string): Promis
 
 const guessTypeSchema = z.enum(["WINNER", "SCORE", "NUMBER"]);
 
+// Bolão sobre mercado curado (comportamento original) OU sobre evento
+// próprio do grupo (custom, sem mercado por trás — ver
+// migrations/036_bolao_custom.sql). outcomes só é usado/exigido quando
+// guessType === "WINNER" — checado no corpo da mutation, não dá pra
+// expressar isso no discriminatedUnion sem duplicar o schema por guessType.
+const bolaoCreateSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("MARKET"),
+    groupId: z.string().uuid(), marketId: z.string().uuid(), guessType: guessTypeSchema,
+  }),
+  z.object({
+    kind: z.literal("CUSTOM"),
+    groupId: z.string().uuid(), guessType: guessTypeSchema,
+    title: z.string().trim().min(1).max(200),
+    criteria: z.string().trim().min(1).max(1000),
+    closeAt: z.string().datetime(),
+    outcomes: z.array(z.string().trim().min(1).max(80)).min(2).max(10).optional(),
+  }),
+]);
+
 const groupsSubRouter = router({
   create: protectedProcedure
     .input(z.object({ name: z.string().trim().min(1).max(80) }))
@@ -144,8 +164,10 @@ const groupsSubRouter = router({
         `SELECT g.name, u.display_name AS creator_name,
                 (SELECT count(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
                 (SELECT count(*) FROM boloes b
-                   JOIN markets m ON m.id = b.market_id
-                  WHERE b.group_id = g.id AND m.status = 'OPEN') AS active_boloes_count
+                   LEFT JOIN markets m ON m.id = b.market_id
+                  WHERE b.group_id = g.id
+                    AND (m.status = 'OPEN' OR (b.market_id IS NULL AND b.custom_close_at > now()))
+                 ) AS active_boloes_count
            FROM groups g JOIN users u ON u.id = g.created_by
           WHERE g.invite_code = $1`,
         [input.code],
@@ -197,13 +219,14 @@ const groupsSubRouter = router({
       );
 
       const boloes = await ctx.pool.query(
-        `SELECT b.id, b.guess_type, b.resolved_at,
-                m.id AS market_id, m.title AS market_title, m.status AS market_status, m.close_at,
+        `SELECT b.id, b.guess_type, b.resolved_at, b.market_id,
+                b.custom_title, b.custom_close_at,
+                m.title AS market_title, m.status AS market_status, m.close_at,
                 (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count,
                 EXISTS(
                   SELECT 1 FROM bolao_palpites bp2 WHERE bp2.bolao_id = b.id AND bp2.user_id = $2
                 ) AS has_my_guess
-           FROM boloes b JOIN markets m ON m.id = b.market_id
+           FROM boloes b LEFT JOIN markets m ON m.id = b.market_id
           WHERE b.group_id = $1
           ORDER BY b.created_at DESC`,
         [input.groupId, ctx.user.id],
@@ -219,17 +242,23 @@ const groupsSubRouter = router({
           displayName: m.display_name as string,
           avatarUrl: m.avatar_url as string | null,
         })),
-        boloes: boloes.rows.map((b) => ({
-          id: b.id as string,
-          guessType: b.guess_type as GuessType,
-          status: statusBolao(b.market_status as string, b.guess_type as GuessType, b.resolved_at as Date | null),
-          marketId: b.market_id as string,
-          marketTitle: b.market_title as string,
-          marketStatus: b.market_status as string,
-          closeAt: b.close_at as Date,
-          palpiteCount: Number(b.palpite_count),
-          hasMyGuess: b.has_my_guess as boolean,
-        })),
+        boloes: boloes.rows.map((b) => {
+          const isCustom = b.market_id === null;
+          return {
+            id: b.id as string,
+            guessType: b.guess_type as GuessType,
+            status: statusBolao(
+              isCustom ? null : (b.market_status as string), b.guess_type as GuessType,
+              b.resolved_at as Date | null, isCustom ? (b.custom_close_at as Date) : undefined,
+            ),
+            marketId: b.market_id as string | null,
+            marketTitle: (isCustom ? b.custom_title : b.market_title) as string,
+            marketStatus: isCustom ? null : (b.market_status as string),
+            closeAt: (isCustom ? b.custom_close_at : b.close_at) as Date,
+            palpiteCount: Number(b.palpite_count),
+            hasMyGuess: b.has_my_guess as boolean,
+          };
+        }),
       };
     }),
 
@@ -272,29 +301,63 @@ const groupsSubRouter = router({
 
   bolao: router({
     create: protectedProcedure
-      .input(z.object({
-        groupId: z.string().uuid(), marketId: z.string().uuid(), guessType: guessTypeSchema,
-      }))
+      .input(bolaoCreateSchema)
       .mutation(async ({ ctx, input }) => {
         await assertMember(ctx.pool, input.groupId, ctx.user.id);
-        const mkt = await ctx.pool.query(`SELECT status FROM markets WHERE id = $1`, [input.marketId]);
-        if (!mkt.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
-        if (mkt.rows[0].status !== "OPEN")
-          throw new TRPCError({ code: "BAD_REQUEST", message: "só dá pra criar bolão em mercado aberto" });
+
+        if (input.kind === "MARKET") {
+          const mkt = await ctx.pool.query(`SELECT status FROM markets WHERE id = $1`, [input.marketId]);
+          if (!mkt.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
+          if (mkt.rows[0].status !== "OPEN")
+            throw new TRPCError({ code: "BAD_REQUEST", message: "só dá pra criar bolão em mercado aberto" });
+          try {
+            const r = await ctx.pool.query(
+              `INSERT INTO boloes (group_id, market_id, created_by, guess_type)
+               VALUES ($1,$2,$3,$4) RETURNING id`,
+              [input.groupId, input.marketId, ctx.user.id, input.guessType],
+            );
+            return { id: r.rows[0].id as string };
+          } catch (e) {
+            if ((e as { code?: string }).code === "23505")
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: "já existe um bolão desse tipo pra esse mercado neste grupo",
+              });
+            throw e;
+          }
+        }
+
+        // kind === "CUSTOM" — evento que o próprio grupo definiu, sem
+        // mercado curado por trás (ver migrations/036_bolao_custom.sql).
+        if (new Date(input.closeAt) <= new Date())
+          throw new TRPCError({ code: "BAD_REQUEST", message: "o prazo precisa ser no futuro" });
+        if (input.guessType === "WINNER" && (!input.outcomes || input.outcomes.length < 2))
+          throw new TRPCError({ code: "BAD_REQUEST", message: "informe pelo menos 2 opções" });
+
+        const client = await ctx.pool.connect();
         try {
-          const r = await ctx.pool.query(
-            `INSERT INTO boloes (group_id, market_id, created_by, guess_type)
-             VALUES ($1,$2,$3,$4) RETURNING id`,
-            [input.groupId, input.marketId, ctx.user.id, input.guessType],
+          await client.query("BEGIN");
+          const r = await client.query(
+            `INSERT INTO boloes (group_id, created_by, guess_type, custom_title, custom_criteria, custom_close_at)
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+            [input.groupId, ctx.user.id, input.guessType, input.title, input.criteria, input.closeAt],
           );
-          return { id: r.rows[0].id as string };
+          const bolaoId = r.rows[0].id as string;
+          if (input.guessType === "WINNER") {
+            for (const [i, label] of input.outcomes!.entries()) {
+              await client.query(
+                `INSERT INTO bolao_custom_outcomes (bolao_id, label, display_order) VALUES ($1,$2,$3)`,
+                [bolaoId, label, i],
+              );
+            }
+          }
+          await client.query("COMMIT");
+          return { id: bolaoId };
         } catch (e) {
-          if ((e as { code?: string }).code === "23505")
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "já existe um bolão desse tipo pra esse mercado neste grupo",
-            });
+          await client.query("ROLLBACK");
           throw e;
+        } finally {
+          client.release();
         }
       }),
 
@@ -308,20 +371,39 @@ const groupsSubRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const b = await ctx.pool.query(
-          `SELECT b.group_id, b.guess_type, m.status AS market_status, m.close_at
-             FROM boloes b JOIN markets m ON m.id = b.market_id
+          `SELECT b.group_id, b.guess_type, b.market_id, b.custom_close_at,
+                  m.status AS market_status, m.close_at
+             FROM boloes b LEFT JOIN markets m ON m.id = b.market_id
             WHERE b.id = $1`,
           [input.bolaoId],
         );
         if (!b.rowCount) throw new TRPCError({ code: "NOT_FOUND" });
         const row = b.rows[0];
         await assertMember(ctx.pool, row.group_id as string, ctx.user.id);
-        if (row.market_status !== "OPEN" || new Date(row.close_at as Date) <= new Date())
-          throw new TRPCError({ code: "BAD_REQUEST", message: "prazo de palpite encerrado" });
+
+        const isCustom = row.market_id === null;
+        const isOpen = isCustom
+          ? new Date(row.custom_close_at as Date) > new Date()
+          : row.market_status === "OPEN" && new Date(row.close_at as Date) > new Date();
+        if (!isOpen) throw new TRPCError({ code: "BAD_REQUEST", message: "prazo de palpite encerrado" });
 
         const guessType = row.guess_type as GuessType;
-        if (guessType === "WINNER" && !input.guessOutcomeId)
-          throw new TRPCError({ code: "BAD_REQUEST", message: "escolha um resultado" });
+        if (guessType === "WINNER") {
+          if (!input.guessOutcomeId) throw new TRPCError({ code: "BAD_REQUEST", message: "escolha um resultado" });
+          // Sem FK única cobrindo os dois casos (ver migrations/036_bolao_custom.sql),
+          // valida na aplicação que o outcome pertence ao conjunto certo.
+          const validOutcome = isCustom
+            ? await ctx.pool.query(
+                `SELECT 1 FROM bolao_custom_outcomes WHERE id = $1 AND bolao_id = $2`,
+                [input.guessOutcomeId, input.bolaoId],
+              )
+            : await ctx.pool.query(
+                `SELECT 1 FROM market_outcomes WHERE id = $1 AND market_id = $2`,
+                [input.guessOutcomeId, row.market_id],
+              );
+          if (!validOutcome.rowCount)
+            throw new TRPCError({ code: "BAD_REQUEST", message: "resultado inválido pra esse bolão" });
+        }
         if (guessType === "SCORE" && (input.guessHomeScore == null || input.guessAwayScore == null))
           throw new TRPCError({ code: "BAD_REQUEST", message: "informe o placar completo" });
         if (guessType === "NUMBER" && input.guessNumber == null)
@@ -351,11 +433,13 @@ const groupsSubRouter = router({
         const b = await ctx.pool.query(
           `SELECT b.id, b.group_id, b.guess_type, b.created_by,
                   b.resolved_home_score, b.resolved_away_score, b.resolved_number, b.resolved_at,
-                  m.id AS market_id, m.slug AS market_slug, m.title AS market_title,
+                  b.market_id, b.custom_title, b.custom_criteria, b.custom_close_at,
+                  b.resolved_custom_outcome_id,
+                  m.slug AS market_slug, m.title AS market_title,
                   m.status AS market_status, m.close_at,
                   r.resolved_outcome_id
              FROM boloes b
-             JOIN markets m ON m.id = b.market_id
+             LEFT JOIN markets m ON m.id = b.market_id
              LEFT JOIN resolutions r ON r.market_id = m.id
             WHERE b.id = $1`,
           [input.bolaoId],
@@ -364,14 +448,25 @@ const groupsSubRouter = router({
         const row = b.rows[0];
         await assertMember(ctx.pool, row.group_id as string, ctx.user.id);
 
+        const isCustom = row.market_id === null;
         const guessType = row.guess_type as GuessType;
-        const status = statusBolao(row.market_status as string, guessType, row.resolved_at as Date | null);
-        const closeAtPassed = new Date(row.close_at as Date) <= new Date();
-
-        const outcomes = await ctx.pool.query(
-          `SELECT id, label FROM market_outcomes WHERE market_id = $1 ORDER BY display_order`,
-          [row.market_id],
+        const effectiveTitle = isCustom ? (row.custom_title as string) : (row.market_title as string);
+        const effectiveCloseAt = isCustom ? (row.custom_close_at as Date) : (row.close_at as Date);
+        const status = statusBolao(
+          isCustom ? null : (row.market_status as string), guessType, row.resolved_at as Date | null,
+          isCustom ? (row.custom_close_at as Date) : undefined,
         );
+        const closeAtPassed = new Date(effectiveCloseAt) <= new Date();
+
+        const outcomes = isCustom
+          ? await ctx.pool.query(
+              `SELECT id, label FROM bolao_custom_outcomes WHERE bolao_id = $1 ORDER BY display_order`,
+              [input.bolaoId],
+            )
+          : await ctx.pool.query(
+              `SELECT id, label FROM market_outcomes WHERE market_id = $1 ORDER BY display_order`,
+              [row.market_id],
+            );
         const minhaLinha = await ctx.pool.query(
           `SELECT guess_outcome_id, guess_home_score, guess_away_score, guess_number
              FROM bolao_palpites WHERE bolao_id = $1 AND user_id = $2`,
@@ -382,11 +477,13 @@ const groupsSubRouter = router({
           id: row.id as string,
           groupId: row.group_id as string,
           guessType,
-          marketId: row.market_id as string,
-          marketSlug: row.market_slug as string,
-          marketTitle: row.market_title as string,
-          marketStatus: row.market_status as string,
-          closeAt: row.close_at as Date,
+          isCustom,
+          criteria: isCustom ? (row.custom_criteria as string) : null,
+          marketId: row.market_id as string | null,
+          marketSlug: isCustom ? null : (row.market_slug as string),
+          marketTitle: effectiveTitle,
+          marketStatus: isCustom ? null : (row.market_status as string),
+          closeAt: effectiveCloseAt,
           status,
           isCreator: row.created_by === ctx.user.id,
           outcomes: outcomes.rows.map((o) => ({ id: o.id as string, label: o.label as string })),
@@ -441,7 +538,7 @@ const groupsSubRouter = router({
                 })),
                 guessType,
                 {
-                  outcomeId: row.resolved_outcome_id as string | null,
+                  outcomeId: (isCustom ? row.resolved_custom_outcome_id : row.resolved_outcome_id) as string | null,
                   homeScore: row.resolved_home_score as number | null,
                   awayScore: row.resolved_away_score as number | null,
                   number: row.resolved_number !== null ? Number(row.resolved_number) : null,
@@ -479,11 +576,12 @@ const groupsSubRouter = router({
         homeScore: z.number().int().optional(),
         awayScore: z.number().int().optional(),
         number: z.number().optional(),
+        customOutcomeId: z.string().uuid().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const b = await ctx.pool.query(
-          `SELECT b.created_by, b.guess_type, m.status AS market_status
-             FROM boloes b JOIN markets m ON m.id = b.market_id
+          `SELECT b.created_by, b.guess_type, b.market_id, b.custom_close_at, m.status AS market_status
+             FROM boloes b LEFT JOIN markets m ON m.id = b.market_id
             WHERE b.id = $1`,
           [input.bolaoId],
         );
@@ -491,10 +589,42 @@ const groupsSubRouter = router({
         const row = b.rows[0];
         if (row.created_by !== ctx.user.id)
           throw new TRPCError({ code: "FORBIDDEN", message: "só quem criou o bolão resolve" });
-        if (row.market_status !== "RESOLVED")
-          throw new TRPCError({ code: "BAD_REQUEST", message: "o mercado ainda não foi resolvido" });
 
         const guessType = row.guess_type as GuessType;
+        const isCustom = row.market_id === null;
+
+        if (isCustom) {
+          // Sem mercado por trás, TODO guessType (inclusive WINNER) precisa
+          // de resolução manual — nada resolve sozinho.
+          if (new Date(row.custom_close_at as Date) > new Date())
+            throw new TRPCError({ code: "BAD_REQUEST", message: "o prazo de palpite ainda não encerrou" });
+          if (guessType === "WINNER") {
+            if (!input.customOutcomeId)
+              throw new TRPCError({ code: "BAD_REQUEST", message: "escolha um resultado" });
+            const valid = await ctx.pool.query(
+              `SELECT 1 FROM bolao_custom_outcomes WHERE id = $1 AND bolao_id = $2`,
+              [input.customOutcomeId, input.bolaoId],
+            );
+            if (!valid.rowCount) throw new TRPCError({ code: "BAD_REQUEST", message: "resultado inválido" });
+          }
+          if (guessType === "SCORE" && (input.homeScore == null || input.awayScore == null))
+            throw new TRPCError({ code: "BAD_REQUEST", message: "informe o placar completo" });
+          if (guessType === "NUMBER" && input.number == null)
+            throw new TRPCError({ code: "BAD_REQUEST", message: "informe um número" });
+
+          await ctx.pool.query(
+            `UPDATE boloes
+                SET resolved_home_score = $2, resolved_away_score = $3, resolved_number = $4,
+                    resolved_custom_outcome_id = $5, resolved_at = now()
+              WHERE id = $1`,
+            [input.bolaoId, input.homeScore ?? null, input.awayScore ?? null, input.number ?? null,
+              input.customOutcomeId ?? null],
+          );
+          return { ok: true };
+        }
+
+        if (row.market_status !== "RESOLVED")
+          throw new TRPCError({ code: "BAD_REQUEST", message: "o mercado ainda não foi resolvido" });
         if (guessType === "WINNER")
           throw new TRPCError({ code: "BAD_REQUEST", message: "bolão de 'quem ganha' resolve sozinho" });
         if (guessType === "SCORE" && (input.homeScore == null || input.awayScore == null))

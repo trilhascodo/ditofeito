@@ -25,11 +25,18 @@ export function GrupoDetalhe() {
 
   const [copiado, setCopiado] = useState(false);
   const [showCriar, setShowCriar] = useState(false);
+  const [bolaoKind, setBolaoKind] = useState<"MARKET" | "CUSTOM">("MARKET");
   const [busca, setBusca] = useState("");
   const [marketId, setMarketId] = useState<string | null>(null);
   const [marketTitle, setMarketTitle] = useState("");
   const [guessType, setGuessType] = useState<"WINNER" | "SCORE" | "NUMBER">("WINNER");
   const [criarErr, setCriarErr] = useState<string | null>(null);
+
+  // Bolão de evento próprio do grupo (sem mercado curado por trás).
+  const [customTitle, setCustomTitle] = useState("");
+  const [customCriteria, setCustomCriteria] = useState("");
+  const [customCloseAt, setCustomCloseAt] = useState("");
+  const [customOutcomes, setCustomOutcomes] = useState(["", ""]);
 
   const { data: mercados } = trpc.market.list.useQuery(
     { q: busca, status: "OPEN" },
@@ -75,18 +82,42 @@ export function GrupoDetalhe() {
   }
 
   async function onCriarBolao() {
-    if (!groupId || !marketId) return;
+    if (!groupId) return;
     setCriarErr(null);
     try {
-      await createBolaoMut.mutateAsync({ groupId, marketId, guessType });
+      if (bolaoKind === "MARKET") {
+        if (!marketId) return;
+        await createBolaoMut.mutateAsync({ kind: "MARKET", groupId, marketId, guessType });
+        setMarketId(null);
+        setMarketTitle("");
+        setBusca("");
+      } else {
+        await createBolaoMut.mutateAsync({
+          kind: "CUSTOM", groupId, guessType,
+          title: customTitle, criteria: customCriteria,
+          closeAt: new Date(customCloseAt).toISOString(),
+          outcomes: guessType === "WINNER" ? customOutcomes.map((o) => o.trim()).filter(Boolean) : undefined,
+        });
+        setCustomTitle("");
+        setCustomCriteria("");
+        setCustomCloseAt("");
+        setCustomOutcomes(["", ""]);
+      }
       setShowCriar(false);
-      setMarketId(null);
-      setMarketTitle("");
-      setBusca("");
       await utils.groups.detail.invalidate({ groupId });
     } catch (err) {
       setCriarErr(err instanceof Error ? err.message : "Erro ao criar bolão");
     }
+  }
+
+  function onUpdateOutcome(i: number, value: string) {
+    setCustomOutcomes((prev) => prev.map((o, idx) => (idx === i ? value : o)));
+  }
+  function onAddOutcome() {
+    setCustomOutcomes((prev) => [...prev, ""]);
+  }
+  function onRemoveOutcome(i: number) {
+    setCustomOutcomes((prev) => (prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev));
   }
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
@@ -199,40 +230,113 @@ export function GrupoDetalhe() {
 
         {showCriar && (
           <div style={{ marginBottom: 20, padding: 14, border: "1px solid var(--linha)", borderRadius: 8 }}>
-            <div className="field">
-              <label className="label" htmlFor="bolao-busca">Buscar mercado (aberto)</label>
-              <input
-                className="input" id="bolao-busca" placeholder="ex.: Flamengo, Tarcísio, Braide..."
-                value={busca}
-                onChange={(e) => { setBusca(e.target.value); setMarketId(null); }}
-              />
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <button
+                type="button" className={bolaoKind === "MARKET" ? "btn" : "btn-outline"}
+                style={{ width: "auto", padding: "6px 14px" }}
+                onClick={() => setBolaoKind("MARKET")}
+              >
+                Mercado existente
+              </button>
+              <button
+                type="button" className={bolaoKind === "CUSTOM" ? "btn" : "btn-outline"}
+                style={{ width: "auto", padding: "6px 14px" }}
+                onClick={() => setBolaoKind("CUSTOM")}
+              >
+                Evento do grupo
+              </button>
             </div>
-            {marketId ? (
-              <p className="hint-text">Selecionado: <strong>{marketTitle}</strong> — <button type="button" className="link-btn" onClick={() => setMarketId(null)}>trocar</button></p>
-            ) : (
-              mercados && mercados.length > 0 && (
-                <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
-                  {mercados.map((m) => (
-                    <div
-                      key={m.id} className="out" style={{ cursor: "pointer" }}
-                      onClick={() => { setMarketId(m.id); setMarketTitle(m.title); }}
-                    >
-                      <span className="nome">{m.title}</span>
-                    </div>
-                  ))}
+
+            {bolaoKind === "MARKET" ? (
+              <>
+                <div className="field">
+                  <label className="label" htmlFor="bolao-busca">Buscar mercado (aberto)</label>
+                  <input
+                    className="input" id="bolao-busca" placeholder="ex.: Flamengo, Tarcísio, Braide..."
+                    value={busca}
+                    onChange={(e) => { setBusca(e.target.value); setMarketId(null); }}
+                  />
                 </div>
-              )
+                {marketId ? (
+                  <p className="hint-text">Selecionado: <strong>{marketTitle}</strong> — <button type="button" className="link-btn" onClick={() => setMarketId(null)}>trocar</button></p>
+                ) : (
+                  mercados && mercados.length > 0 && (
+                    <div style={{ maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
+                      {mercados.map((m) => (
+                        <div
+                          key={m.id} className="out" style={{ cursor: "pointer" }}
+                          onClick={() => { setMarketId(m.id); setMarketTitle(m.title); }}
+                        >
+                          <span className="nome">{m.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </>
+            ) : (
+              <>
+                <p className="hint-text" style={{ marginBottom: 12 }}>
+                  Um evento que só interessa ao grupo — sem depender de mercado nenhum do catálogo.
+                  Você mesmo confirma o resultado depois que o prazo encerrar.
+                </p>
+                <div className="field">
+                  <label className="label" htmlFor="custom-title">Título</label>
+                  <input
+                    className="input" id="custom-title" placeholder="ex.: Quem ganha o campeonato de sinuca do escritório"
+                    value={customTitle} onChange={(e) => setCustomTitle(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="custom-criteria">Critério de resolução</label>
+                  <textarea
+                    className="input" id="custom-criteria" rows={2}
+                    placeholder="O que define o resultado — pra não ter dúvida na hora de fechar"
+                    value={customCriteria} onChange={(e) => setCustomCriteria(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="custom-close">Prazo pra palpitar</label>
+                  <input
+                    className="input" id="custom-close" type="datetime-local"
+                    value={customCloseAt} onChange={(e) => setCustomCloseAt(e.target.value)}
+                  />
+                </div>
+              </>
             )}
+
             <div className="field">
               <label className="label" htmlFor="bolao-tipo">Tipo de palpite</label>
               <select id="bolao-tipo" value={guessType} onChange={(e) => setGuessType(e.target.value as typeof guessType)}>
                 {Object.entries(GUESS_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
+
+            {bolaoKind === "CUSTOM" && guessType === "WINNER" && (
+              <div className="field">
+                <label className="label">Opções</label>
+                {customOutcomes.map((o, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                    <input
+                      className="input" placeholder={`Opção ${i + 1}`}
+                      value={o} onChange={(e) => onUpdateOutcome(i, e.target.value)}
+                    />
+                    {customOutcomes.length > 2 && (
+                      <button type="button" className="link-btn" onClick={() => onRemoveOutcome(i)}>remover</button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" className="link-btn" onClick={onAddOutcome}>+ adicionar opção</button>
+              </div>
+            )}
+
             {criarErr && <p className="error-text">{criarErr}</p>}
             <button
               className="btn-outline" style={{ width: "auto", padding: "10px 18px" }}
-              disabled={!marketId || createBolaoMut.isPending}
+              disabled={
+                createBolaoMut.isPending
+                || (bolaoKind === "MARKET" ? !marketId : !customTitle.trim() || !customCriteria.trim() || !customCloseAt)
+              }
               onClick={onCriarBolao}
             >
               {createBolaoMut.isPending ? "Criando…" : "Criar bolão"}

@@ -50,11 +50,15 @@ export function NotificationBell() {
                   <span className="notif-item-time">{timeFmt.format(new Date(n.createdAt))}</span>
                 </>
               );
-              // groupId primeiro: BOLAO_CLOSING_SOON seta os dois (marketId
-              // só pra dedupe do job em bolaoReminder.ts) mas a ação de
-              // palpitar mora no grupo (/grupos/:id), não no mercado
-              // (/m/:slug, página de negociação LMSR — destino errado aqui).
-              const to = n.groupId ? `/grupos/${n.groupId}` : n.marketSlug ? `/m/${n.marketSlug}` : null;
+              // bolaoId+groupId primeiro (link direto pro bolão certo),
+              // depois groupId sozinho (GROUP_JOINED não tem bolão), depois
+              // marketSlug (kinds antigas) — nunca marketSlug antes de
+              // groupId: a ação de palpitar mora no grupo (/grupos/:id/
+              // bolao/:id), não no mercado (/m/:slug, página de negociação
+              // LMSR — destino errado pro lembrete de bolão).
+              const to = n.bolaoId && n.groupId ? `/grupos/${n.groupId}/bolao/${n.bolaoId}`
+                : n.groupId ? `/grupos/${n.groupId}`
+                : n.marketSlug ? `/m/${n.marketSlug}` : null;
               return to ? (
                 <Link
                   key={n.id} to={to} onClick={() => setOpen(false)}

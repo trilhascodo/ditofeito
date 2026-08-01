@@ -60,4 +60,23 @@ describe("statusBolao", () => {
     expect(statusBolao("RESOLVED", "SCORE", null)).toBe("AGUARDANDO_RESOLUCAO");
     expect(statusBolao("RESOLVED", "SCORE", new Date())).toBe("RESOLVIDO");
   });
+
+  describe("bolão de evento próprio (marketStatus null)", () => {
+    const futuro = new Date(Date.now() + 3600_000);
+    const passado = new Date(Date.now() - 3600_000);
+
+    it("prazo no futuro -> OPEN, mesmo WINNER (não resolve sozinho sem mercado)", () => {
+      expect(statusBolao(null, "WINNER", null, futuro)).toBe("OPEN");
+      expect(statusBolao(null, "SCORE", null, futuro)).toBe("OPEN");
+    });
+
+    it("prazo passou sem resolução manual -> AGUARDANDO_RESOLUCAO, todo guessType", () => {
+      expect(statusBolao(null, "WINNER", null, passado)).toBe("AGUARDANDO_RESOLUCAO");
+      expect(statusBolao(null, "NUMBER", null, passado)).toBe("AGUARDANDO_RESOLUCAO");
+    });
+
+    it("prazo passou e já resolvido manualmente -> RESOLVIDO", () => {
+      expect(statusBolao(null, "WINNER", new Date(), passado)).toBe("RESOLVIDO");
+    });
+  });
 });
