@@ -59,11 +59,19 @@ export function GrupoDetalhe() {
     }
   }
 
+  const inviteUrl = group ? `${window.location.origin}/convite/${group.inviteCode}` : "";
+  const inviteText = group ? `Bora participar do grupo "${group.name}" comigo no Dito!` : "";
+
   function onCopyInvite() {
     if (!group) return;
-    navigator.clipboard?.writeText(group.inviteCode);
+    navigator.clipboard?.writeText(inviteUrl);
     setCopiado(true);
     setTimeout(() => setCopiado(false), 1500);
+  }
+
+  function onShareNative() {
+    if (!group) return;
+    navigator.share?.({ title: inviteText, url: inviteUrl }).catch(() => {});
   }
 
   async function onCriarBolao() {
@@ -97,15 +105,44 @@ export function GrupoDetalhe() {
           </div>
         ))}
         <hr style={{ border: "none", borderTop: "1px solid var(--linha)", margin: "16px 0" }} />
-        <p className="hint-text" style={{ marginBottom: 8 }}>Convide gente com este código:</p>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <code className="mono" style={{ padding: "6px 10px", background: "var(--fundo-alt, #f4f4f4)", borderRadius: 6 }}>
-            {group.inviteCode}
-          </code>
-          <button type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px" }} onClick={onCopyInvite}>
-            {copiado ? "Copiado!" : "Copiar"}
+        <p className="hint-text" style={{ marginBottom: 8 }}>Convide gente pro grupo — não precisa ter conta ainda:</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <a
+            className="btn-outline" style={{ width: "auto" }}
+            href={`https://wa.me/?text=${encodeURIComponent(`${inviteText} ${inviteUrl}`)}`}
+            target="_blank" rel="noopener noreferrer"
+          >
+            WhatsApp
+          </a>
+          <a
+            className="btn-outline" style={{ width: "auto" }}
+            href={`https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(inviteText)}`}
+            target="_blank" rel="noopener noreferrer"
+          >
+            Telegram
+          </a>
+          <a
+            className="btn-outline" style={{ width: "auto" }}
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(inviteUrl)}`}
+            target="_blank" rel="noopener noreferrer"
+          >
+            Facebook
+          </a>
+          {typeof navigator !== "undefined" && !!navigator.share && (
+            <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onShareNative}>
+              Compartilhar…
+            </button>
+          )}
+          <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyInvite}>
+            {copiado ? "Copiado!" : "Copiar link"}
           </button>
         </div>
+        <p className="hint-text" style={{ marginBottom: 4 }}>
+          Ou passe o código pra quem já tem conta:{" "}
+          <code className="mono" style={{ padding: "3px 8px", background: "var(--fundo-alt, #f4f4f4)", borderRadius: 6 }}>
+            {group.inviteCode}
+          </code>
+        </p>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>

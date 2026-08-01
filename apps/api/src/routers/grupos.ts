@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import type { Pool } from "pg";
-import { router, protectedProcedure } from "../trpc/trpc.js";
+import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
 import { calcularVencedores, statusBolao, type GuessType } from "../domain/bolao.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 
@@ -66,6 +66,32 @@ const groupsSubRouter = router({
         [groupId, ctx.user.id],
       );
       return { id: groupId, name: g.rows[0].name as string };
+    }),
+
+  // Pública — alimenta a página de convite (/grupos/entrar/:code) e o card OG
+  // (http/inviteCard.ts) pra quem ainda nem tem conta. Só expõe o que já é
+  // visível pra qualquer um que tenha o link: nada de lista de membros aqui.
+  previewByCode: publicProcedure
+    .input(z.object({ code: z.string().trim().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const g = await ctx.pool.query(
+        `SELECT g.name, u.display_name AS creator_name,
+                (SELECT count(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
+                (SELECT count(*) FROM boloes b
+                   JOIN markets m ON m.id = b.market_id
+                  WHERE b.group_id = g.id AND m.status = 'OPEN') AS active_boloes_count
+           FROM groups g JOIN users u ON u.id = g.created_by
+          WHERE g.invite_code = $1`,
+        [input.code],
+      );
+      if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
+      const row = g.rows[0];
+      return {
+        name: row.name as string,
+        creatorDisplayName: row.creator_name as string,
+        memberCount: Number(row.member_count),
+        activeBoloesCount: Number(row.active_boloes_count),
+      };
     }),
 
   myGroups: protectedProcedure.query(async ({ ctx }) => {

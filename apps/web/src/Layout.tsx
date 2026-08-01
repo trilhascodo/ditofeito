@@ -4,6 +4,7 @@ import { logout } from "./lib/auth";
 import { useAuth } from "./lib/useAuth";
 import { trpc } from "./lib/trpc";
 import { NotificationBell } from "./components/NotificationBell";
+import { PENDING_INVITE_KEY } from "./pages/EntrarGrupo";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
 
@@ -27,11 +28,31 @@ function usePageViewTracking() {
   }, [location.pathname]);
 }
 
+// Convite de grupo pra quem ainda não tinha conta (EntrarGrupo.tsx grava o
+// código antes de mandar pro /cadastro): cadastro exige confirmar e-mail
+// antes de logar, então a pessoa não necessariamente volta pra
+// /grupos/entrar/:code — este efeito roda em toda a SPA e consome o convite
+// pendente assim que a sessão vira autenticada, não importa por onde entrou
+// (usuário/senha, Google, ou confirmação de e-mail).
+function usePendingInviteAutoJoin(userId: string | undefined) {
+  const navigate = useNavigate();
+  const joinMut = trpc.groups.joinByCode.useMutation();
+  useEffect(() => {
+    if (!userId) return;
+    const code = localStorage.getItem(PENDING_INVITE_KEY);
+    if (!code) return;
+    localStorage.removeItem(PENDING_INVITE_KEY);
+    joinMut.mutateAsync({ code }).then((g) => navigate(`/grupos/${g.id}`)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+}
+
 export function Layout() {
   const { user, isLoading, refresh } = useAuth();
   const navigate = useNavigate();
   const [busca, setBusca] = useState("");
   usePageViewTracking();
+  usePendingInviteAutoJoin(user?.id);
 
   async function onLogout() {
     await logout();
