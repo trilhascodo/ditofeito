@@ -28,6 +28,14 @@ export function BolaoDetalhe() {
   const [realNumber, setRealNumber] = useState("");
   const [resolveErr, setResolveErr] = useState<string | null>(null);
 
+  const [vindCopied, setVindCopied] = useState(false);
+  async function onCopyVindicationLink() {
+    if (!bolao?.myVindicationToken) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/bolao-vindicacao/${bolao.myVindicationToken}`);
+    setVindCopied(true);
+    setTimeout(() => setVindCopied(false), 1500);
+  }
+
   async function onSubmitPalpite(e: FormEvent) {
     e.preventDefault();
     if (!bolaoId || !bolao) return;
@@ -78,6 +86,38 @@ export function BolaoDetalhe() {
         <span className="badge">{STATUS_LABEL[bolao.status] ?? bolao.status}</span>
         {" · encerra em "}{new Date(bolao.closeAt).toLocaleString("pt-BR")}
       </p>
+
+      {bolao.myVindicationToken && (
+        <div className="card vindication-card">
+          <div className="vindication-card-body">
+            <img
+              src={`${window.location.origin}/card/bolao-vindicacao/${bolao.myVindicationToken}.png`}
+              alt="Seu card de vindicação do bolão"
+            />
+            <div>
+              <span className="eyebrow">Você acertou o bolão</span>
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "6px 0 10px" }}>
+                Compartilhe sua previsão
+              </h2>
+              <p className="hint-text" style={{ marginBottom: 14 }}>
+                Prova pública de que você tinha razão — antes de todo mundo saber.
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <a
+                  className="btn-outline" style={{ width: "auto" }}
+                  href={`https://wa.me/?text=${encodeURIComponent(`Eu disse! ${window.location.origin}/bolao-vindicacao/${bolao.myVindicationToken}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                >
+                  Compartilhar no WhatsApp
+                </a>
+                <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyVindicationLink}>
+                  {vindCopied ? "Copiado!" : "Copiar link"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {bolao.status === "OPEN" && (
         <div className="card" style={{ marginBottom: 20 }}>

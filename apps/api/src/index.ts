@@ -8,6 +8,7 @@ import { mountEmbed } from "./http/embed.js";
 import { mountTermometro } from "./http/termometro.js";
 import { mountVindication } from "./http/vindication.js";
 import { mountInviteCard } from "./http/inviteCard.js";
+import { mountBolaoVindication } from "./http/bolaoVindication.js";
 import { mountAdClick } from "./http/adClick.js";
 import { mountAuth } from "./http/auth.js";
 import { startJobs } from "./jobs/schedule.js";
@@ -30,6 +31,7 @@ mountEmbed(app, pool);
 mountTermometro(app, pool);
 mountVindication(app, pool);
 mountInviteCard(app, pool);
+mountBolaoVindication(app, pool);
 mountAdClick(app, pool);
 
 app.use(express.json());

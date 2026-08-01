@@ -339,6 +339,7 @@ const groupsSubRouter = router({
           return {
             ...base, palpitesVisiveis: false,
             palpiteCount: Number(count.rows[0].count), palpites: [], vencedores: [],
+            myVindicationToken: null as string | null,
           };
         }
 
@@ -378,9 +379,27 @@ const groupsSubRouter = router({
               )
             : [];
 
+        // Card de vindicação de bolão: ao contrário do de mercado (criado
+        // dentro da transação de trade.ts::resolveMarket), WINNER não tem
+        // nenhuma mutation de "resolver" própria — o status vem só de
+        // markets.status (ver domain/bolao.ts::statusBolao). Então em vez de
+        // achar um ponto de escrita único, gera sob demanda aqui: idempotente
+        // (ON CONFLICT), só pro usuário logado, só se ele venceu.
+        let myVindicationToken: string | null = null;
+        if (status === "RESOLVIDO" && vencedores.includes(ctx.user.id)) {
+          const card = await ctx.pool.query(
+            `INSERT INTO bolao_vindication_cards (bolao_id, user_id) VALUES ($1,$2)
+             ON CONFLICT (bolao_id, user_id) DO UPDATE SET user_id = EXCLUDED.user_id
+             RETURNING share_token`,
+            [input.bolaoId, ctx.user.id],
+          );
+          myVindicationToken = card.rows[0].share_token as string;
+        }
+
         return {
           ...base, palpitesVisiveis: true,
           palpiteCount: palpitesMapeados.length, palpites: palpitesMapeados, vencedores,
+          myVindicationToken,
         };
       }),
 
