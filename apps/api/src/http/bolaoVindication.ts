@@ -14,7 +14,7 @@
 //                                            link de volta pro bolão
 // ============================================================================
 import type { Pool } from "pg";
-import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng } from "./embed.js";
+import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng, isUuid } from "./embed.js";
 import type { GuessType } from "../domain/bolao.js";
 
 export interface BolaoVindicationData {
@@ -38,6 +38,7 @@ function formatGuessLabel(
 }
 
 export async function getBolaoVindicationData(pool: Pool, token: string): Promise<BolaoVindicationData | null> {
+  if (!isUuid(token)) return null;
   const r = await pool.query(
     `SELECT u.display_name, u.handle, g.name AS group_name,
             m.title AS market_title, m.slug AS market_slug, b.guess_type,

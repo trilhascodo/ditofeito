@@ -125,6 +125,13 @@ export const esc = (s: string) =>
    .replace(/"/g, "&quot;");
 export const pct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
 
+// Guarda de forma antes de consultar colunas `uuid` com o token de um :param
+// de rota — sem isso, Postgres rejeita texto não-UUID com erro de tipo
+// (22P02) em vez de simplesmente não achar a linha, e um link/bot mandando
+// lixo na URL vira 500 em vez de 404.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (s: string) => UUID_RE.test(s);
+
 function sparklinePath(pts: [number, number][], w: number, h: number): string {
   if (pts.length < 2) return "";
   return pts.map(([t, p], i) =>

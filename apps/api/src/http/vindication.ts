@@ -14,7 +14,7 @@
 //                                      compartilhado é canal de aquisição)
 // ============================================================================
 import type { Pool } from "pg";
-import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng } from "./embed.js";
+import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng, isUuid } from "./embed.js";
 
 const cardPct = (p: number) => `${(p * 100).toFixed(p >= 0.995 ? 1 : 0)}%`;
 
@@ -29,6 +29,7 @@ export interface VindicationData {
 }
 
 export async function getVindicationData(pool: Pool, token: string): Promise<VindicationData | null> {
+  if (!isUuid(token)) return null;
   const r = await pool.query(
     `SELECT u.display_name, u.handle, m.title AS market_title, m.slug AS market_slug,
             mo.label AS winning_label, p.shares, p.cost_basis, re.skill_delta, ur.streak_current
