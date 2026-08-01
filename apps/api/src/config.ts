@@ -1,3 +1,5 @@
+import { MIN_SIGNUP_AGE } from "@ditofeito/core";
+
 export const APP_CONFIG = {
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
   appBaseUrl: process.env.APP_BASE_URL ?? "http://localhost:3000",
@@ -6,6 +8,12 @@ export const APP_CONFIG = {
 
 export const AUTH_CONFIG = {
   signupBonusPoints: 1000,
+  /** Idade mínima pra se cadastrar — @ditofeito/core::MIN_SIGNUP_AGE, mesmo
+   *  valor que apps/web usa na validação client-side (não duplicar o número
+   *  dos dois lados). Checado via data de nascimento, não é o mecanismo
+   *  anti-fraude (isso é papel do CPF, pedido só no primeiro palpite — ver
+   *  domain/trade.ts). */
+  minAgeYears: MIN_SIGNUP_AGE,
   sessionTtlDays: 30,
   emailVerificationTtlHours: 48,
   /** Mais curto que a verificação de e-mail — token de reset é mais sensível

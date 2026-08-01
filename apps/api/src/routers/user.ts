@@ -8,8 +8,9 @@ import { z } from "zod";
 import { lmsrPrices } from "@ditofeito/core";
 import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
 import {
-  changePassword, requestEmailChange, updateProfile, deleteAccount,
+  changePassword, requestEmailChange, updateProfile, deleteAccount, submitCpf,
 } from "../domain/auth.js";
+import { submitCpfSchema } from "../domain/auth.schemas.js";
 import { throwAsTRPC } from "../trpc/errors.js";
 
 // Mínimo de previsões resolvidas pra entrar no ranking público — sem isso,
@@ -126,6 +127,18 @@ export const userRouter = router({
     .mutation(async ({ ctx, input }) => {
       try {
         await updateProfile(ctx.pool, ctx.user.id, input);
+      } catch (e) { throwAsTRPC(e); }
+      return { ok: true };
+    }),
+
+  // Passo tardio de "1 conta por pessoa" — chamado quando o usuário confirma
+  // o CPF depois de esbarrar em CPF_PENDENTE no primeiro palpite (ver
+  // domain/trade.ts). Não faz parte do cadastro (ver auth.schemas.ts).
+  submitCpf: protectedProcedure
+    .input(submitCpfSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await submitCpf(ctx.pool, ctx.user.id, input.cpf);
       } catch (e) { throwAsTRPC(e); }
       return { ok: true };
     }),

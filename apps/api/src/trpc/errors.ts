@@ -15,6 +15,9 @@ const CODE_MAP: Record<string, TRPCErrorCode> = {
   SHARES_INSUFICIENTES: "BAD_REQUEST",
   SALDO_INSUFICIENTE: "BAD_REQUEST",
   LIMITE_EXPOSICAO: "BAD_REQUEST",
+  // Código distinto de propósito — não é "erro genérico", é "ação
+  // disponível: complete seu CPF" (ver domain/trade.ts, CpfPrompt.tsx).
+  CPF_PENDENTE: "PRECONDITION_FAILED",
   EMAIL_EM_USO: "CONFLICT",
   HANDLE_EM_USO: "CONFLICT",
   CPF_EM_USO: "CONFLICT",

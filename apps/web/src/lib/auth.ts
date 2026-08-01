@@ -6,6 +6,7 @@ export interface AuthUser {
   displayName: string;
   role: string;
   emailVerified: boolean;
+  cpfVerified: boolean;
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -21,7 +22,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function signup(input: {
   handle: string; displayName: string; email: string; password: string;
-  cpf: string; captchaToken: string; regionUf?: string; regionCity?: string;
+  birthDate: string; captchaToken: string; regionUf?: string; regionCity?: string;
 }) {
   return call<{ userId: string }>("/auth/signup", { method: "POST", body: JSON.stringify(input) });
 }
@@ -44,7 +45,7 @@ export function oauthGoogleLogin(credential: string) {
 }
 
 export function oauthGoogleComplete(input: {
-  credential: string; handle: string; displayName: string; cpf: string; captchaToken: string;
+  credential: string; handle: string; displayName: string; birthDate: string; captchaToken: string;
   regionUf?: string; regionCity?: string;
 }) {
   return call<{ user: AuthUser }>("/auth/oauth/google/complete", { method: "POST", body: JSON.stringify(input) });

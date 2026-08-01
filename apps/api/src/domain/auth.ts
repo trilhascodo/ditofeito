@@ -27,6 +27,9 @@ export interface SessionUser {
   role: string;
   emailVerified: boolean;
   sponsorId: string | null;
+  /** CPF preenchido = já pode negociar (ver TradeError CPF_PENDENTE em
+   *  domain/trade.ts) — não é pedido no cadastro, só no 1º palpite. */
+  cpfVerified: boolean;
 }
 
 // ------------------------------ Tokens ---------------------------------------
@@ -54,22 +57,21 @@ export async function signup(
     await client.query("BEGIN");
 
     const dup = await client.query(
-      `SELECT handle, email, cpf FROM users WHERE handle=$1 OR email=$2 OR cpf=$3`,
-      [input.handle, input.email, input.cpf]);
+      `SELECT handle, email FROM users WHERE handle=$1 OR email=$2`,
+      [input.handle, input.email]);
     if (dup.rowCount) {
       const row = dup.rows[0];
-      const code = row.email === input.email ? "EMAIL_EM_USO"
-        : row.cpf === input.cpf ? "CPF_EM_USO" : "HANDLE_EM_USO";
-      const message = { EMAIL_EM_USO: "E-mail já cadastrado", CPF_EM_USO: "CPF já cadastrado",
+      const code = row.email === input.email ? "EMAIL_EM_USO" : "HANDLE_EM_USO";
+      const message = { EMAIL_EM_USO: "E-mail já cadastrado",
         HANDLE_EM_USO: "Nome de usuário já em uso" }[code];
       throw new AuthError(code, message);
     }
 
     const u = await client.query(
-      `INSERT INTO users (handle, display_name, email, password_hash, cpf, signup_ip, signup_user_agent,
-                          region_uf, region_city)
+      `INSERT INTO users (handle, display_name, email, password_hash, birth_date, signup_ip,
+                          signup_user_agent, region_uf, region_city)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-      [input.handle, input.displayName, input.email, passwordHash, input.cpf,
+      [input.handle, input.displayName, input.email, passwordHash, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
         input.regionUf ?? null, input.regionCity?.trim() || null]);
     userId = u.rows[0].id;
@@ -119,12 +121,13 @@ async function issueSession(
 interface UserRow {
   id: string; handle: string; display_name: string; role: string;
   is_banned: boolean; email_verified_at: string | null; sponsor_id: string | null;
+  cpf_verified: boolean;
 }
 function toSessionUser(row: UserRow): SessionUser {
   return {
     id: row.id, handle: row.handle, displayName: row.display_name,
     role: row.role, emailVerified: row.email_verified_at !== null,
-    sponsorId: row.sponsor_id,
+    sponsorId: row.sponsor_id, cpfVerified: row.cpf_verified,
   };
 }
 
@@ -133,7 +136,8 @@ export async function login(
   pool: Pool, input: LoginInput, meta: { userAgent?: string; ip?: string },
 ): Promise<{ token: string; expiresAt: Date; user: SessionUser }> {
   const u = await pool.query(
-    `SELECT id, handle, display_name, role, password_hash, is_banned, email_verified_at, sponsor_id
+    `SELECT id, handle, display_name, role, password_hash, is_banned, email_verified_at, sponsor_id,
+            (cpf IS NOT NULL) AS cpf_verified
        FROM users WHERE email = $1`, [input.email]);
   const invalid = () => new AuthError("CREDENCIAIS_INVALIDAS", "E-mail ou senha incorretos");
   if (!u.rowCount) throw invalid();
@@ -152,11 +156,12 @@ export async function login(
 }
 
 // ---------------------------- Login com Google ------------------------------------
-// Duas etapas porque CPF continua obrigatório (login social não resolve "1
-// conta por pessoa"): 1ª chamada (oauthGoogleLogin) resolve se já existe
-// conta pra logar; se for gente nova, front pede handle+CPF e chama
+// Duas etapas porque falta handle+data de nascimento mesmo com Google
+// confirmando e-mail: 1ª chamada (oauthGoogleLogin) resolve se já existe
+// conta pra logar; se for gente nova, front pede handle+nascimento e chama
 // oauthGoogleComplete com o MESMO credential (reverificado — nunca confia em
-// claim que já passou pelo cliente sem novo check de assinatura).
+// claim que já passou pelo cliente sem novo check de assinatura). CPF não
+// entra aqui — só no 1º palpite (submitCpf, TradeError CPF_PENDENTE).
 export type OauthGoogleResult =
   | { status: "LOGGED_IN"; token: string; expiresAt: Date; user: SessionUser }
   | { status: "NEEDS_PROFILE"; email: string; name: string };
@@ -167,7 +172,8 @@ export async function oauthGoogleLogin(
   const identity = await verifyGoogleCredential(credential);
 
   const existing = await pool.query(
-    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id
+    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id,
+            (u.cpf IS NOT NULL) AS cpf_verified
        FROM oauth_identities oi JOIN users u ON u.id = oi.user_id
       WHERE oi.provider = 'GOOGLE' AND oi.provider_user_id = $1`,
     [identity.sub]);
@@ -184,7 +190,8 @@ export async function oauthGoogleLogin(
   // verificada pra fundir com conta de outra pessoa.
   if (identity.emailVerified) {
     const byEmail = await pool.query(
-      `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id
+      `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id,
+              (cpf IS NOT NULL) AS cpf_verified
          FROM users WHERE email = $1`, [identity.email]);
     if (byEmail.rowCount) {
       const row = byEmail.rows[0] as UserRow;
@@ -223,22 +230,21 @@ export async function oauthGoogleComplete(
       throw new AuthError("EMAIL_EM_USO", "Essa conta Google já está vinculada a um cadastro");
 
     const dup = await client.query(
-      `SELECT handle, email, cpf FROM users WHERE handle=$1 OR email=$2 OR cpf=$3`,
-      [input.handle, identity.email, input.cpf]);
+      `SELECT handle, email FROM users WHERE handle=$1 OR email=$2`,
+      [input.handle, identity.email]);
     if (dup.rowCount) {
       const row = dup.rows[0];
-      const code = row.email === identity.email ? "EMAIL_EM_USO"
-        : row.cpf === input.cpf ? "CPF_EM_USO" : "HANDLE_EM_USO";
-      const message = { EMAIL_EM_USO: "E-mail já cadastrado", CPF_EM_USO: "CPF já cadastrado",
+      const code = row.email === identity.email ? "EMAIL_EM_USO" : "HANDLE_EM_USO";
+      const message = { EMAIL_EM_USO: "E-mail já cadastrado",
         HANDLE_EM_USO: "Nome de usuário já em uso" }[code];
       throw new AuthError(code, message);
     }
 
     const u = await client.query(
-      `INSERT INTO users (handle, display_name, email, cpf, signup_ip, signup_user_agent,
+      `INSERT INTO users (handle, display_name, email, birth_date, signup_ip, signup_user_agent,
                           region_uf, region_city, email_verified_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-      [input.handle, input.displayName, identity.email, input.cpf,
+      [input.handle, input.displayName, identity.email, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
         input.regionUf ?? null, input.regionCity?.trim() || null,
         identity.emailVerified ? new Date() : null]);
@@ -261,7 +267,8 @@ export async function oauthGoogleComplete(
 
   const { token, expiresAt } = await issueSession(pool, userId, meta);
   const row = (await pool.query(
-    `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id
+    `SELECT id, handle, display_name, role, is_banned, email_verified_at, sponsor_id,
+            (cpf IS NOT NULL) AS cpf_verified
        FROM users WHERE id = $1`, [userId])).rows[0] as UserRow;
   return { token, expiresAt, user: toSessionUser(row) };
 }
@@ -273,7 +280,8 @@ export async function logout(pool: Pool, rawToken: string): Promise<void> {
 export async function getSessionUser(pool: Pool, rawToken: string | undefined): Promise<SessionUser | null> {
   if (!rawToken) return null;
   const { rows, rowCount } = await pool.query(
-    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id
+    `SELECT u.id, u.handle, u.display_name, u.role, u.is_banned, u.email_verified_at, u.sponsor_id,
+            (u.cpf IS NOT NULL) AS cpf_verified
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [hashToken(rawToken)]);
@@ -282,7 +290,7 @@ export async function getSessionUser(pool: Pool, rawToken: string | undefined): 
   return {
     id: row.id, handle: row.handle, displayName: row.display_name,
     role: row.role, emailVerified: row.email_verified_at !== null,
-    sponsorId: row.sponsor_id,
+    sponsorId: row.sponsor_id, cpfVerified: row.cpf_verified,
   };
 }
 
@@ -484,6 +492,19 @@ export async function updateProfile(
   } catch (e) {
     if ((e as { code?: string }).code === "23505")
       throw new AuthError("HANDLE_EM_USO", "Nome de usuário já em uso");
+    throw e;
+  }
+}
+
+// Passo tardio de "1 conta por pessoa" — disparado só quando o usuário vai
+// fazer o primeiro palpite pago com pontos (ver TradeError CPF_PENDENTE em
+// domain/trade.ts), não no cadastro (ver auth.schemas.ts pro porquê).
+export async function submitCpf(pool: Pool, userId: string, cpf: string): Promise<void> {
+  try {
+    await pool.query(`UPDATE users SET cpf = $1, updated_at = now() WHERE id = $2`, [cpf, userId]);
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505")
+      throw new AuthError("CPF_EM_USO", "CPF já cadastrado em outra conta");
     throw e;
   }
 }

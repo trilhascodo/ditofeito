@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
+import { hasMinAge, MIN_SIGNUP_AGE } from "@ditofeito/core";
 import { oauthGoogleComplete, type AuthUser } from "../lib/auth";
 import { Turnstile } from "./Turnstile";
 import { UFS } from "../lib/ufs";
@@ -18,7 +18,7 @@ export function GoogleCompleteProfileForm({
 }) {
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState(suggestedName);
-  const [cpf, setCpf] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [regionUf, setRegionUf] = useState("");
   const [regionCity, setRegionCity] = useState("");
   const [captchaToken, setCaptchaToken] = useState(CAPTCHA_REQUIRED ? "" : "dev");
@@ -33,8 +33,8 @@ export function GoogleCompleteProfileForm({
       setError("Nome de usuário: 3–30 caracteres, letras minúsculas, números e _");
       return;
     }
-    if (!isValidCpf(cpf)) {
-      setError("CPF inválido");
+    if (!birthDate || !hasMinAge(birthDate, MIN_SIGNUP_AGE)) {
+      setError(`Idade mínima: ${MIN_SIGNUP_AGE} anos`);
       return;
     }
     if (!captchaToken) {
@@ -44,7 +44,7 @@ export function GoogleCompleteProfileForm({
     setLoading(true);
     try {
       const { user } = await oauthGoogleComplete({
-        credential, handle, displayName, cpf: onlyDigits(cpf), captchaToken,
+        credential, handle, displayName, birthDate, captchaToken,
         regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined,
       });
       onDone(user);
@@ -58,8 +58,8 @@ export function GoogleCompleteProfileForm({
   return (
     <form onSubmit={onSubmit}>
       <p className="hint-text" style={{ marginBottom: 16 }}>
-        Sua conta Google já confirmou o e-mail — falta só um nome de usuário e o CPF
-        (garante 1 conta por pessoa, nunca é público).
+        Sua conta Google já confirmou o e-mail — falta só um nome de usuário e a data de
+        nascimento (mínimo {MIN_SIGNUP_AGE} anos).
       </p>
       <div className="field">
         <label className="label" htmlFor="g-handle">Nome de usuário</label>
@@ -76,10 +76,10 @@ export function GoogleCompleteProfileForm({
         />
       </div>
       <div className="field">
-        <label className="label" htmlFor="g-cpf">CPF</label>
+        <label className="label" htmlFor="g-birthDate">Data de nascimento</label>
         <input
-          className="input" id="g-cpf" inputMode="numeric" placeholder="000.000.000-00" required
-          value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))}
+          className="input" id="g-birthDate" type="date" required
+          value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
         />
       </div>
       <div className="field">

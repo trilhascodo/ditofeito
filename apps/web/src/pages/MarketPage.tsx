@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { TRPCClientError } from "@trpc/client";
 import { sharesForPoints, tradeCost } from "@ditofeito/core";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
@@ -7,6 +8,7 @@ import { fmtPoints, pct, relativeClose, dataFmt } from "../lib/format";
 import { pathFromSeries } from "../lib/chart";
 import { SocialLinks } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
+import { CpfPrompt } from "../components/CpfPrompt";
 import { getCurrentUf } from "../lib/useUfGeolocation";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
@@ -166,6 +168,7 @@ export function MarketPage() {
   const [points, setPoints] = useState(50);
   const [showStamp, setShowStamp] = useState(false);
   const [tradeError, setTradeError] = useState<string | null>(null);
+  const [needsCpf, setNeedsCpf] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
   const [vindCopied, setVindCopied] = useState(false);
@@ -206,6 +209,7 @@ export function MarketPage() {
   async function onRegistrar() {
     if (!selected || points < 1) return;
     setTradeError(null);
+    setNeedsCpf(false);
     try {
       const regionUf = me?.shareLocationOnTrades ? (await getCurrentUf()) ?? undefined : undefined;
       await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId: selected, side: "BUY", amount: points, regionUf });
@@ -217,7 +221,14 @@ export function MarketPage() {
       setShowStamp(true);
       setTimeout(() => setShowStamp(false), 1400);
     } catch (err) {
-      setTradeError(err instanceof Error ? err.message : "Não foi possível registrar a previsão");
+      // CPF_PENDENTE (ver domain/trade.ts) vira PRECONDITION_FAILED — não é
+      // erro genérico, é "falta confirmar o CPF" (1ª previsão paga com
+      // pontos, CpfPrompt.tsx). Qualquer outro erro segue como mensagem simples.
+      if (err instanceof TRPCClientError && err.data?.code === "PRECONDITION_FAILED") {
+        setNeedsCpf(true);
+      } else {
+        setTradeError(err instanceof Error ? err.message : "Não foi possível registrar a previsão");
+      }
     }
   }
 
@@ -455,12 +466,16 @@ export function MarketPage() {
                   </div>
                 )}
                 {tradeError && <p className="error-text" aria-live="polite">{tradeError}</p>}
-                <button
-                  className="btn" disabled={!preview || tradeMutation.isPending}
-                  onClick={onRegistrar}
-                >
-                  {tradeMutation.isPending ? "Registrando…" : "Registrar previsão"}
-                </button>
+                {needsCpf ? (
+                  <CpfPrompt onDone={() => { setNeedsCpf(false); onRegistrar(); }} />
+                ) : (
+                  <button
+                    className="btn" disabled={!preview || tradeMutation.isPending}
+                    onClick={onRegistrar}
+                  >
+                    {tradeMutation.isPending ? "Registrando…" : "Registrar previsão"}
+                  </button>
+                )}
                 {myPosition && (
                   <div className="posicao">
                     <div className="row"><span>Sua posição</span><b>{myPosition.outcomeLabel}</b></div>

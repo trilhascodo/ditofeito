@@ -125,9 +125,16 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
 
     // LOCK 2: usuário — serializa o ledger deste usuário
     const usr = await c.query(
-      `SELECT id, is_banned FROM users WHERE id = $1 FOR UPDATE`, [input.userId]);
+      `SELECT id, is_banned, cpf FROM users WHERE id = $1 FOR UPDATE`, [input.userId]);
     if (!usr.rowCount || usr.rows[0].is_banned)
       throw new TradeError("USUARIO_INVALIDO", "Usuário inexistente ou suspenso");
+    // CPF não é pedido no cadastro (ver domain/auth.schemas.ts) — só aqui,
+    // no primeiro palpite pago com pontos, que é o que de fato alimenta
+    // ranking/reputação e por isso precisa da garantia de "1 conta por
+    // pessoa". Front captura esse código e mostra um formulário de CPF
+    // (ver trpc/errors.ts CPF_PENDENTE -> PRECONDITION_FAILED).
+    if (!usr.rows[0].cpf)
+      throw new TradeError("CPF_PENDENTE", "Confirme seu CPF pra confirmar essa previsão — é rápido e nunca é público.");
 
     // Estado LMSR (ordem estável por display_order p/ índice do vetor q)
     const out = await c.query(

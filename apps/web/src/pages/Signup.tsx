@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { formatCpf, isValidCpf, onlyDigits } from "@ditofeito/core";
+import { hasMinAge, MIN_SIGNUP_AGE } from "@ditofeito/core";
 import { signup, oauthGoogleLogin } from "../lib/auth";
 import { Turnstile } from "../components/Turnstile";
 import { UFS } from "../lib/ufs";
@@ -20,7 +20,7 @@ export function Signup() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [regionUf, setRegionUf] = useState("");
   const [regionCity, setRegionCity] = useState("");
   const [captchaToken, setCaptchaToken] = useState(CAPTCHA_REQUIRED ? "" : "dev");
@@ -55,8 +55,8 @@ export function Signup() {
       setError("Nome de usuário: 3–30 caracteres, letras minúsculas, números e _");
       return;
     }
-    if (!isValidCpf(cpf)) {
-      setError("CPF inválido");
+    if (!birthDate || !hasMinAge(birthDate, MIN_SIGNUP_AGE)) {
+      setError(`Idade mínima: ${MIN_SIGNUP_AGE} anos`);
       return;
     }
     if (!captchaToken) {
@@ -66,7 +66,7 @@ export function Signup() {
     setLoading(true);
     try {
       await signup({
-        handle, displayName, email, password, cpf: onlyDigits(cpf), captchaToken,
+        handle, displayName, email, password, birthDate, captchaToken,
         regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined,
       });
       setDone(true);
@@ -147,14 +147,13 @@ export function Signup() {
             />
           </div>
           <div className="field">
-            <label className="label" htmlFor="cpf">CPF</label>
+            <label className="label" htmlFor="birthDate">Data de nascimento</label>
             <input
-              className="input" id="cpf" inputMode="numeric" placeholder="000.000.000-00" required
-              value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))}
+              className="input" id="birthDate" type="date" required
+              value={birthDate} onChange={(e) => setBirthDate(e.target.value)}
             />
             <p className="hint-text">
-              Usado só pra garantir 1 conta por pessoa — não é público. Detalhes na{" "}
-              <Link to="/termos#privacidade">política de privacidade</Link>.
+              Precisa ter pelo menos {MIN_SIGNUP_AGE} anos — nunca é público.
             </p>
           </div>
           <div className="field">

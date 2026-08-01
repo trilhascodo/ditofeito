@@ -5,6 +5,7 @@ import { useAuth } from "../lib/useAuth";
 import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
 import { logout } from "../lib/auth";
+import { CpfPrompt } from "../components/CpfPrompt";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 
@@ -213,6 +214,13 @@ export function Profile() {
           <p className="hint-text" style={{ margin: 0 }}>saldo</p>
         </div>
       </div>
+
+      {!user.cpfVerified && (
+        <div className="card" style={{ marginTop: 20, borderColor: "var(--violeta)" }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Confirme seu CPF</h2>
+          <CpfPrompt onDone={refresh} />
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Conta</h2>
