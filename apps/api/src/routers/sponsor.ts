@@ -731,7 +731,15 @@ export const sponsorRouter = router({
       }
 
       const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [ctx.user.id]);
-      const payer = { email: u.rows[0].email as string, taxId: s.rows[0].tax_id as string | null };
+      // Boleto registrado exige first_name/last_name do pagador (Pix não,
+      // mas não custa mandar) — usa o nome de quem está logado, não o nome
+      // da marca do sponsor (sponsors.name), que costuma não ser "nome
+      // sobrenome".
+      const nameParts = ctx.user.displayName.trim().split(/\s+/);
+      const payer = {
+        email: u.rows[0].email as string, taxId: s.rows[0].tax_id as string | null,
+        firstName: nameParts[0], lastName: nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0],
+      };
 
       try {
         if (input.method === "PIX") {

@@ -26,13 +26,19 @@ interface PayerInput {
   /** CPF (11 dígitos) ou CNPJ (14 dígitos) só-números — sponsors.tax_id,
    *  opcional; omitido quando o sponsor ainda não preencheu. */
   taxId?: string | null;
+  /** Nome/sobrenome de quem tá pagando — boleto registrado exige os dois
+   *  ("payer.first_name , payer.last_name: Offline API Error" se faltar),
+   *  Pix funciona sem. Opcional aqui pra não quebrar chamador que não tem
+   *  essa info; quem chama decide a fonte (ver routers/sponsor.ts). */
+  firstName?: string;
+  lastName?: string;
 }
 
 function payerPayload(payer: PayerInput) {
-  if (!payer.taxId) return { email: payer.email };
   return {
     email: payer.email,
-    identification: { type: payer.taxId.length === 11 ? "CPF" : "CNPJ", number: payer.taxId },
+    ...(payer.taxId ? { identification: { type: payer.taxId.length === 11 ? "CPF" : "CNPJ", number: payer.taxId } } : {}),
+    ...(payer.firstName && payer.lastName ? { first_name: payer.firstName, last_name: payer.lastName } : {}),
   };
 }
 
