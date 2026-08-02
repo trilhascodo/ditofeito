@@ -1,7 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { useAuth } from "../lib/useAuth";
 import { ShareRow } from "../components/ShareRow";
+
+function initials(name: string): string {
+  return name.trim().slice(0, 2).toUpperCase();
+}
 
 const dataFmt = (d: string | Date) =>
   new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -20,9 +25,11 @@ const GUESS_TYPE_LABEL: Record<string, string> = {
 };
 
 export function GrupoDetalhe() {
+  const { user } = useAuth();
   const { groupId } = useParams<{ groupId: string }>();
   const utils = trpc.useUtils();
   const { data: group, isLoading } = trpc.groups.detail.useQuery({ groupId: groupId! }, { enabled: !!groupId });
+  const { data: ranking } = trpc.groups.leaderboard.useQuery({ groupId: groupId! }, { enabled: !!groupId });
 
   const [showCriar, setShowCriar] = useState(false);
   const [bolaoKind, setBolaoKind] = useState<"MARKET" | "CUSTOM">("MARKET");
@@ -129,6 +136,36 @@ export function GrupoDetalhe() {
           </Link>
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Ranking do grupo</h2>
+        {!ranking || ranking.resolvedCount === 0 ? (
+          <p className="hint-text">Ninguém resolveu bolão ainda — o primeiro a vencer aparece aqui.</p>
+        ) : (
+          <div className="ranking-list">
+            {ranking.rows.map((r, i) => (
+              <div key={r.handle} className={`ranking-row${user?.handle === r.handle ? " ranking-row-mine" : ""}`}>
+                <span className="ranking-pos">{i + 1}</span>
+                <span className="ranking-avatar">
+                  {r.avatarUrl ? <img src={r.avatarUrl} alt="" /> : initials(r.displayName)}
+                </span>
+                <span className="ranking-nome">
+                  {r.displayName}
+                  <br /><span className="hint-text">@{r.handle}</span>
+                </span>
+                <span className="ranking-stat">
+                  <b className="mono">{r.wins}</b>
+                  <span className="hint-text">vitórias</span>
+                </span>
+                <span className="ranking-stat">
+                  <b className="mono">{r.participated}</b>
+                  <span className="hint-text">bolões</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Membros ({group.members.length})</h2>

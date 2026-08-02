@@ -224,6 +224,45 @@ export function Profile() {
         </div>
       )}
 
+      {me?.reputation && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Reputação</h2>
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+            {me.reputation.rank !== null && (
+              <div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: "var(--violeta)" }}>
+                  #{me.reputation.rank}
+                </div>
+                <p className="hint-text" style={{ margin: 0 }}>posição no ranking</p>
+              </div>
+            )}
+            <div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.resolvedCount}</div>
+              <p className="hint-text" style={{ margin: 0 }}>previsões resolvidas</p>
+            </div>
+            {me.reputation.brierMean !== null && (
+              <div>
+                <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.brierMean.toFixed(3)}</div>
+                <p className="hint-text" style={{ margin: 0 }}>Brier médio (menor = melhor)</p>
+              </div>
+            )}
+            <div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: me.reputation.skillScore >= 0 ? "var(--conferido)" : "var(--carimbo)" }}>
+                {me.reputation.skillScore >= 0 ? "+" : ""}{me.reputation.skillScore.toFixed(3)}
+              </div>
+              <p className="hint-text" style={{ margin: 0 }}>skill vs. mercado</p>
+            </div>
+            <div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.streakCurrent}</div>
+              <p className="hint-text" style={{ margin: 0 }}>sequência atual (melhor: {me.reputation.streakBest})</p>
+            </div>
+          </div>
+          <Link to="/ranking" className="hint-text" style={{ display: "inline-block", marginTop: 12 }}>
+            ver ranking completo →
+          </Link>
+        </div>
+      )}
+
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Conta</h2>
 
@@ -308,34 +347,6 @@ export function Profile() {
           </button>
         </form>
       </div>
-
-      {me?.reputation && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Reputação</h2>
-          <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-            <div>
-              <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.resolvedCount}</div>
-              <p className="hint-text" style={{ margin: 0 }}>previsões resolvidas</p>
-            </div>
-            {me.reputation.brierMean !== null && (
-              <div>
-                <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.brierMean.toFixed(3)}</div>
-                <p className="hint-text" style={{ margin: 0 }}>Brier médio (menor = melhor)</p>
-              </div>
-            )}
-            <div>
-              <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: me.reputation.skillScore >= 0 ? "var(--conferido)" : "var(--carimbo)" }}>
-                {me.reputation.skillScore >= 0 ? "+" : ""}{me.reputation.skillScore.toFixed(3)}
-              </div>
-              <p className="hint-text" style={{ margin: 0 }}>skill vs. mercado</p>
-            </div>
-            <div>
-              <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{me.reputation.streakCurrent}</div>
-              <p className="hint-text" style={{ margin: 0 }}>sequência atual (melhor: {me.reputation.streakBest})</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Notificações</h2>

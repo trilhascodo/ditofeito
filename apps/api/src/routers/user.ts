@@ -46,6 +46,17 @@ export const userRouter = router({
          FROM user_reputation WHERE user_id = $1`,
       [ctx.user.id],
     );
+    // Mesma subquery de rank do leaderboard abaixo — null se ainda não
+    // qualificar (LEADERBOARD_MIN_RESOLVED) ou estiver banido.
+    const rankRow = await ctx.pool.query(
+      `SELECT rank FROM (
+         SELECT r.user_id, RANK() OVER (ORDER BY r.skill_score DESC) AS rank
+           FROM user_reputation r JOIN users u ON u.id = r.user_id
+          WHERE r.resolved_count >= $2 AND u.is_banned = false
+       ) t WHERE user_id = $1`,
+      [ctx.user.id, LEADERBOARD_MIN_RESOLVED],
+    );
+    const myRank = rankRow.rowCount ? Number(rankRow.rows[0].rank) : null;
     const pref = await ctx.pool.query(
       `SELECT email, email_notifications, region_uf, region_city, share_location_on_trades,
               (password_hash IS NOT NULL) AS has_password
@@ -67,6 +78,7 @@ export const userRouter = router({
             skillScore: Number(rep.rows[0].skill_score),
             streakCurrent: rep.rows[0].streak_current as number,
             streakBest: rep.rows[0].streak_best as number,
+            rank: myRank,
           }
         : null,
     };

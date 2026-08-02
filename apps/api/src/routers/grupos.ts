@@ -262,6 +262,93 @@ const groupsSubRouter = router({
       };
     }),
 
+  // "Quem tá ganhando" dentro do grupo — competir com amigos motiva muito
+  // mais que o ranking global (a maioria nunca chega perto do topo dele).
+  // Reaproveita calcularVencedores (domain/bolao.ts, mesma função que
+  // bolao.detail usa pra um bolão só) pra cada bolão já resolvido do grupo,
+  // sem duplicar a regra de "quem acertou" nem guardar vitória em coluna —
+  // é tudo derivado, igual ao status do bolão (statusBolao).
+  leaderboard: protectedProcedure
+    .input(z.object({ groupId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      await assertMember(ctx.pool, input.groupId, ctx.user.id);
+
+      const boloes = await ctx.pool.query(
+        `SELECT b.id, b.guess_type, b.market_id, b.custom_close_at,
+                b.resolved_home_score, b.resolved_away_score, b.resolved_number, b.resolved_at,
+                b.resolved_custom_outcome_id,
+                m.status AS market_status, r.resolved_outcome_id
+           FROM boloes b
+           LEFT JOIN markets m ON m.id = b.market_id
+           LEFT JOIN resolutions r ON r.market_id = m.id
+          WHERE b.group_id = $1`,
+        [input.groupId],
+      );
+
+      const resolvidos = boloes.rows.filter((b) => {
+        const isCustom = b.market_id === null;
+        return statusBolao(
+          isCustom ? null : (b.market_status as string), b.guess_type as GuessType,
+          b.resolved_at as Date | null, isCustom ? (b.custom_close_at as Date) : undefined,
+        ) === "RESOLVIDO";
+      });
+
+      const wins = new Map<string, number>();
+      const participated = new Map<string, number>();
+
+      if (resolvidos.length) {
+        const palpites = await ctx.pool.query(
+          `SELECT bolao_id, user_id, guess_outcome_id, guess_home_score, guess_away_score, guess_number
+             FROM bolao_palpites WHERE bolao_id = ANY($1::uuid[])`,
+          [resolvidos.map((b) => b.id)],
+        );
+        const porBolao = new Map<string, typeof palpites.rows>();
+        for (const p of palpites.rows) {
+          const arr = porBolao.get(p.bolao_id as string) ?? [];
+          arr.push(p);
+          porBolao.set(p.bolao_id as string, arr);
+        }
+
+        for (const b of resolvidos) {
+          const isCustom = b.market_id === null;
+          const ps = porBolao.get(b.id as string) ?? [];
+          for (const p of ps) participated.set(p.user_id, (participated.get(p.user_id) ?? 0) + 1);
+
+          const vencedores = calcularVencedores(
+            ps.map((p) => ({
+              userId: p.user_id as string, guessOutcomeId: p.guess_outcome_id as string | null,
+              guessHomeScore: p.guess_home_score as number | null, guessAwayScore: p.guess_away_score as number | null,
+              guessNumber: p.guess_number !== null ? Number(p.guess_number) : null,
+            })),
+            b.guess_type as GuessType,
+            {
+              outcomeId: (isCustom ? b.resolved_custom_outcome_id : b.resolved_outcome_id) as string | null,
+              homeScore: b.resolved_home_score as number | null,
+              awayScore: b.resolved_away_score as number | null,
+              number: b.resolved_number !== null ? Number(b.resolved_number) : null,
+            },
+          );
+          for (const userId of vencedores) wins.set(userId, (wins.get(userId) ?? 0) + 1);
+        }
+      }
+
+      const members = await ctx.pool.query(
+        `SELECT u.id, u.handle, u.display_name, u.avatar_url
+           FROM group_members gm JOIN users u ON u.id = gm.user_id
+          WHERE gm.group_id = $1`,
+        [input.groupId],
+      );
+
+      const rows = members.rows
+        .map((m) => ({
+          handle: m.handle as string, displayName: m.display_name as string, avatarUrl: m.avatar_url as string | null,
+          wins: wins.get(m.id as string) ?? 0, participated: participated.get(m.id as string) ?? 0,
+        }))
+        .sort((a, b) => b.wins - a.wins || b.participated - a.participated);
+
+      return { resolvedCount: resolvidos.length, rows };
+    }),
+
   posts: router({
     list: protectedProcedure
       .input(z.object({ groupId: z.string().uuid() }))
