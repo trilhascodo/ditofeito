@@ -61,3 +61,14 @@ export const FINANCE_CONFIG = {
   brapiToken: process.env.BRAPI_API_KEY ?? "",
   brapiBaseUrl: "https://brapi.dev/api",
 } as const;
+
+export const MERCADOPAGO_CONFIG = {
+  /** Vazio (dev/local) = recarga de saldo desligada no front, mesmo padrão
+   *  de TURNSTILE_SECRET_KEY/GOOGLE_CLIENT_ID — ausência de chave desliga a
+   *  feature, não derruba o processo. Token de produção: alguém precisa
+   *  criar a aplicação no Mercado Pago e colar o Access Token em
+   *  infra/.env na VPS — não é algo que se gera por código. */
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN ?? "",
+  webhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET ?? "",
+  apiBaseUrl: "https://api.mercadopago.com",
+} as const;

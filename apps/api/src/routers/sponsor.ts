@@ -2,6 +2,7 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure, adminProcedure, sponsorProcedure } from "../trpc/trpc.js";
 import { notify } from "../domain/notify.js";
 import { sendTransactionalEmail } from "../lib/email.js";
+import { createPixPayment, createBoletoPayment, MercadoPagoError } from "../lib/mercadoPago.js";
 
 // ----------------------------------------------------------------------------
 // Patrocínio nativo (identidade-ditofeito.md — card "Apresentado por", nunca
@@ -125,6 +126,42 @@ const PLAN_ALLOWED_PLACEMENTS: Record<string, readonly (typeof HOME_PLACEMENTS)[
   PROFISSIONAL: ["BANNER", "GRID"],
   PREMIUM: ["BANNER", "GRID", "SIDEBAR"],
 };
+
+// Preço por mês, em centavos — mesmo valor de /anuncie e do mídia kit
+// (R$300/650/1.200). Fica em código, não em coluna: plano é enum fixo,
+// preço muda raramente e nunca pelo próprio sponsor (ver 040_sponsor_billing.sql).
+// approveSponsorship converte pra preço do período pedido (proporcional aos
+// dias, não travado em "1 mês exato" — campanha pode durar qualquer período).
+const PLAN_PRICE_CENTS: Record<string, number> = {
+  BASICO: 30_000, PROFISSIONAL: 65_000, PREMIUM: 120_000,
+};
+
+function priceForPeriodCents(plan: string, startsAt: Date, endsAt: Date): number {
+  const days = Math.max(1, (endsAt.getTime() - startsAt.getTime()) / 86_400_000);
+  const monthly = PLAN_PRICE_CENTS[plan] ?? PLAN_PRICE_CENTS.BASICO;
+  return Math.round((monthly / 30) * days);
+}
+
+// Movimento CONFIRMADO de saldo (migrations/040_sponsor_billing.sql) — mesmo
+// formato de appendLedger (domain/trade.ts), sem hash-chain: aquilo é prova
+// pública pro usuário, isso é registro interno de negócio. PRESSUPÕE lock
+// FOR UPDATE já tomado em sponsors (mesma convenção de appendLedger).
+async function appendSponsorLedger(
+  c: import("pg").PoolClient, sponsorId: string, deltaCents: number,
+  reason: "TOPUP" | "CAMPAIGN_CHARGE" | "REFUND" | "ADMIN_ADJUST",
+  refs: { sponsorshipId?: string; paymentId?: string } = {},
+): Promise<{ newBalanceCents: number }> {
+  const cur = await c.query(`SELECT balance_cents FROM sponsors WHERE id = $1`, [sponsorId]);
+  const newBalance = Number(cur.rows[0].balance_cents) + deltaCents;
+  if (newBalance < 0) throw new Error("Saldo insuficiente");
+  await c.query(`UPDATE sponsors SET balance_cents = $2 WHERE id = $1`, [sponsorId, newBalance]);
+  await c.query(
+    `INSERT INTO sponsor_ledger (sponsor_id, delta_cents, balance_after_cents, reason, sponsorship_id, payment_id)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [sponsorId, deltaCents, newBalance, reason, refs.sponsorshipId ?? null, refs.paymentId ?? null],
+  );
+  return { newBalanceCents: newBalance };
+}
 
 // Valida a posição da home contra o plano do sponsor (cumulativo, ver
 // PLAN_ALLOWED_PLACEMENTS acima). Usada tanto na criação quanto na edição —
@@ -410,15 +447,51 @@ export const sponsorRouter = router({
     }));
   }),
 
+  // Aprovar cobra o saldo pré-pago pelo período pedido, atômico com a
+  // aprovação em si (migrations/040_sponsor_billing.sql) — nunca cobra sem
+  // aprovar, nunca aprova sem cobrar. Só se aplica a essa procedure porque
+  // só ela mexe em sponsorship PENDING: createSponsorship (admin cria
+  // direto) já nasce APPROVED, fora do saldo pré-pago — deal negociado
+  // manualmente, mesmo tratamento "sob consulta" de sempre.
   approveSponsorship: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const r = await ctx.pool.query(
-        `UPDATE sponsorships SET approval_status = 'APPROVED'
-           WHERE id = $1 AND approval_status = 'PENDING' RETURNING sponsor_id`, [input.id]);
-      if (!r.rowCount) throw new Error("Patrocínio não encontrado ou já decidido");
+      const client = await ctx.pool.connect();
+      let sponsorId: string;
+      try {
+        await client.query("BEGIN");
+        const sp = await client.query(
+          `SELECT sponsor_id, starts_at, ends_at FROM sponsorships
+            WHERE id = $1 AND approval_status = 'PENDING' FOR UPDATE`,
+          [input.id],
+        );
+        if (!sp.rowCount) throw new Error("Patrocínio não encontrado ou já decidido");
+        sponsorId = sp.rows[0].sponsor_id as string;
+
+        const s = await client.query(
+          `SELECT plan, balance_cents FROM sponsors WHERE id = $1 FOR UPDATE`, [sponsorId]);
+        const price = priceForPeriodCents(
+          s.rows[0].plan as string, sp.rows[0].starts_at as Date, sp.rows[0].ends_at as Date,
+        );
+        const balance = Number(s.rows[0].balance_cents);
+        if (balance < price) {
+          throw new Error(
+            `Saldo insuficiente: precisa de R$ ${(price / 100).toFixed(2)}, `
+            + `tem R$ ${(balance / 100).toFixed(2)} — peça pro patrocinador recarregar antes de aprovar.`,
+          );
+        }
+
+        await appendSponsorLedger(client, sponsorId, -price, "CAMPAIGN_CHARGE", { sponsorshipId: input.id });
+        await client.query(`UPDATE sponsorships SET approval_status = 'APPROVED' WHERE id = $1`, [input.id]);
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
       await notifySponsorUsers(
-        ctx.pool, r.rows[0].sponsor_id as string, "SPONSOR_REVIEW_APPROVED",
+        ctx.pool, sponsorId, "SPONSOR_REVIEW_APPROVED",
         "Seu patrocínio foi aprovado e já está no ar.",
         { subject: "Patrocínio aprovado — DitoFeito", html: "<p>Seu patrocínio foi aprovado e já está no ar.</p>" },
       );
@@ -478,7 +551,7 @@ export const sponsorRouter = router({
   getMine: sponsorProcedure.query(async ({ ctx }) => {
     const s = await ctx.pool.query(
       `SELECT name, logo_url, site_url, creative_url, pending_creative_url,
-              creative_review_status, creative_admin_note, plan
+              creative_review_status, creative_admin_note, plan, balance_cents, tax_id
          FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
     if (!s.rowCount) throw new Error("Patrocinador não encontrado");
     const links = await socialLinksBySponsor(ctx.pool, [ctx.sponsorId]);
@@ -492,6 +565,7 @@ export const sponsorRouter = router({
       plan: row.plan as string,
       socialLinksMax: PLAN_LIMITS[row.plan] ?? 1,
       socialLinks: links.get(ctx.sponsorId) ?? [],
+      balanceCents: Number(row.balance_cents), taxId: row.tax_id as string | null,
     };
   }),
 
@@ -505,6 +579,11 @@ export const sponsorRouter = router({
       logoUrl: z.string().trim().url().optional(),
       siteUrl: z.string().trim().url().optional(),
       creativeUrl: z.string().trim().url().optional(),
+      // CPF/CNPJ só-números, opcional — usado como payer.identification na
+      // recarga via Mercado Pago (createTopup abaixo); alguns métodos de
+      // pagamento exigem, outros não, por isso fica opcional aqui e só
+      // reclama na hora de criar a cobrança se o Mercado Pago recusar sem ele.
+      taxId: z.string().trim().regex(/^\d{11}$|^\d{14}$/, "CPF (11 dígitos) ou CNPJ (14)").optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const current = await ctx.pool.query(`SELECT creative_url FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
@@ -513,21 +592,90 @@ export const sponsorRouter = router({
       if (input.creativeUrl === undefined) {
         await ctx.pool.query(
           `UPDATE sponsors SET logo_url = $2, site_url = $3, creative_url = NULL,
-                  pending_creative_url = NULL, creative_review_status = 'NONE'
+                  pending_creative_url = NULL, creative_review_status = 'NONE', tax_id = $4
             WHERE id = $1`,
-          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null]);
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.taxId ?? null]);
       } else if (input.creativeUrl === liveCreative) {
         await ctx.pool.query(
-          `UPDATE sponsors SET logo_url = $2, site_url = $3 WHERE id = $1`,
-          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null]);
+          `UPDATE sponsors SET logo_url = $2, site_url = $3, tax_id = $4 WHERE id = $1`,
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.taxId ?? null]);
       } else {
         await ctx.pool.query(
-          `UPDATE sponsors SET logo_url = $2, site_url = $3,
+          `UPDATE sponsors SET logo_url = $2, site_url = $3, tax_id = $5,
                   pending_creative_url = $4, creative_review_status = 'PENDING'
             WHERE id = $1`,
-          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl]);
+          [ctx.sponsorId, input.logoUrl ?? null, input.siteUrl ?? null, input.creativeUrl, input.taxId ?? null]);
       }
       return { ok: true };
+    }),
+
+  // ---- AUTOATENDIMENTO: saldo pré-pago (migrations/040_sponsor_billing.sql) --
+  // Saldo atual + extrato + pagamentos em aberto (pro front reabrir o QR
+  // code se a pessoa navegar pra outra aba antes de pagar).
+  myBalance: sponsorProcedure.query(async ({ ctx }) => {
+    const s = await ctx.pool.query(`SELECT balance_cents FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
+    const ledger = await ctx.pool.query(
+      `SELECT id, delta_cents, balance_after_cents, reason, created_at
+         FROM sponsor_ledger WHERE sponsor_id = $1 ORDER BY id DESC LIMIT 30`,
+      [ctx.sponsorId],
+    );
+    const pending = await ctx.pool.query(
+      `SELECT id, mp_payment_id, method, amount_cents, qr_code, boleto_url, created_at
+         FROM sponsor_payments WHERE sponsor_id = $1 AND status = 'PENDING'
+        ORDER BY created_at DESC`,
+      [ctx.sponsorId],
+    );
+    return {
+      balanceCents: Number(s.rows[0]?.balance_cents ?? 0),
+      ledger: ledger.rows.map((r) => ({
+        id: String(r.id), deltaCents: Number(r.delta_cents), balanceAfterCents: Number(r.balance_after_cents),
+        reason: r.reason as string, createdAt: r.created_at as string,
+      })),
+      pendingPayments: pending.rows.map((r) => ({
+        id: r.id as string, method: r.method as "PIX" | "BOLETO", amountCents: Number(r.amount_cents),
+        qrCode: r.qr_code as string | null, boletoUrl: r.boleto_url as string | null,
+        createdAt: r.created_at as string,
+      })),
+    };
+  }),
+
+  // Gera uma cobrança nova no Mercado Pago e guarda a tentativa — só vira
+  // saldo de verdade quando o webhook confirmar (getPayment como fonte de
+  // verdade, nunca o corpo do POST — ver http/mercadoPagoWebhook.ts).
+  createTopup: sponsorProcedure
+    .input(z.object({
+      amountCents: z.number().int().min(5_000, "mínimo R$ 50").max(5_000_000, "máximo R$ 50.000"),
+      method: z.enum(["PIX", "BOLETO"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const s = await ctx.pool.query(`SELECT name, tax_id FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
+      if (!s.rowCount) throw new Error("Patrocinador não encontrado");
+      const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [ctx.user.id]);
+      const payer = { email: u.rows[0].email as string, taxId: s.rows[0].tax_id as string | null };
+      const description = `Recarga de saldo DitoFeito — ${s.rows[0].name as string}`;
+
+      try {
+        if (input.method === "PIX") {
+          const r = await createPixPayment({ amountCents: input.amountCents, description, payer });
+          await ctx.pool.query(
+            `INSERT INTO sponsor_payments (sponsor_id, mp_payment_id, method, amount_cents, status, qr_code)
+             VALUES ($1,$2,'PIX',$3,'PENDING',$4)`,
+            [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.qrCode],
+          );
+          return { qrCode: r.qrCode, qrCodeBase64: r.qrCodeBase64, boletoUrl: null };
+        }
+        const r = await createBoletoPayment({ amountCents: input.amountCents, description, payer });
+        await ctx.pool.query(
+          `INSERT INTO sponsor_payments (sponsor_id, mp_payment_id, method, amount_cents, status, boleto_url)
+           VALUES ($1,$2,'BOLETO',$3,'PENDING',$4)`,
+          [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.boletoUrl],
+        );
+        return { qrCode: null, qrCodeBase64: null, boletoUrl: r.boletoUrl };
+      } catch (e) {
+        if (e instanceof MercadoPagoError)
+          throw new Error(`Não foi possível gerar a cobrança: ${e.message}`);
+        throw e;
+      }
     }),
 
   // ---- AUTOATENDIMENTO: campanhas (sponsorships) da própria conta ---------

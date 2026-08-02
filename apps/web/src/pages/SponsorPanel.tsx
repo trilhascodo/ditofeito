@@ -29,6 +29,24 @@ const APPROVAL_LABEL: Record<string, string> = {
   PENDING: "Em análise", APPROVED: "Aprovado", REJECTED: "Rejeitado",
 };
 
+// Mesmo valor de sponsor.ts (backend valida de novo) — só pra estimar o
+// preço do período antes de pedir aprovação, não é fonte de verdade.
+const PLAN_PRICE_CENTS: Record<string, number> = {
+  BASICO: 30_000, PROFISSIONAL: 65_000, PREMIUM: 120_000,
+};
+function estimatePriceCents(plan: string, startsAt: string, endsAt: string): number | null {
+  if (!startsAt || !endsAt) return null;
+  const days = (new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 86_400_000;
+  if (!(days > 0)) return null;
+  return Math.round(((PLAN_PRICE_CENTS[plan] ?? PLAN_PRICE_CENTS.BASICO) / 30) * days);
+}
+
+const fmtBRL = (cents: number) => `R$ ${(cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
+
+const LEDGER_REASON_LABEL: Record<string, string> = {
+  TOPUP: "Recarga", CAMPAIGN_CHARGE: "Cobrança de campanha", REFUND: "Estorno", ADMIN_ADJUST: "Ajuste manual",
+};
+
 function dtLocal(iso: string | Date): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -72,6 +90,118 @@ function Desempenho() {
             </div>
           );
         })
+      )}
+    </div>
+  );
+}
+
+function Saldo() {
+  const utils = trpc.useUtils();
+  const { data: balance } = trpc.sponsor.myBalance.useQuery(undefined, {
+    // Enquanto tiver Pix/boleto em aberto, atualiza sozinho — quando o
+    // webhook confirmar o pagamento, a tela reflete sem precisar F5.
+    refetchInterval: (query) => (query.state.data?.pendingPayments.length ? 5_000 : false),
+  });
+  const createTopup = trpc.sponsor.createTopup.useMutation();
+
+  const [amount, setAmount] = useState("100");
+  const [method, setMethod] = useState<"PIX" | "BOLETO">("PIX");
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [lastResult, setLastResult] = useState<{ qrCode: string | null; qrCodeBase64: string | null; boletoUrl: string | null } | null>(null);
+
+  async function onTopup(e: FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    const amountCents = Math.round(Number(amount.replace(",", ".")) * 100);
+    if (!(amountCents >= 5_000)) { setErr("Valor mínimo: R$ 50,00"); return; }
+    try {
+      const r = await createTopup.mutateAsync({ amountCents, method });
+      setLastResult(r);
+      await utils.sponsor.myBalance.invalidate();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Erro ao gerar cobrança");
+    }
+  }
+
+  async function onCopyQr(code: string) {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Saldo</h2>
+      <p className="hint-text" style={{ marginBottom: 12 }}>
+        Recarregue via Pix ou boleto — a campanha só é aprovada quando o saldo cobre o período pedido.
+      </p>
+      <div className="mono" style={{ fontSize: 28, fontWeight: 600, color: "var(--violeta)", marginBottom: 16 }}>
+        {fmtBRL(balance?.balanceCents ?? 0)}
+      </div>
+
+      {balance?.pendingPayments.map((p) => (
+        <div key={p.id} className="admin-row" style={{ marginBottom: 10 }}>
+          <span className="titulo">
+            {p.method === "PIX" ? "Pix" : "Boleto"} aguardando pagamento
+            <div className="meta">{fmtBRL(p.amountCents)}</div>
+          </span>
+          {p.method === "PIX" && p.qrCode && (
+            <button type="button" className="btn-outline" style={{ width: "auto", padding: "8px 14px" }} onClick={() => onCopyQr(p.qrCode!)}>
+              {copied ? "Copiado!" : "Copiar código Pix"}
+            </button>
+          )}
+          {p.method === "BOLETO" && p.boletoUrl && (
+            <a className="btn-outline" style={{ width: "auto", padding: "8px 14px" }} href={p.boletoUrl} target="_blank" rel="noopener noreferrer">
+              Ver boleto
+            </a>
+          )}
+        </div>
+      ))}
+
+      {lastResult?.qrCodeBase64 && (
+        <div style={{ textAlign: "center", margin: "12px 0" }}>
+          <img
+            src={`data:image/png;base64,${lastResult.qrCodeBase64}`} alt="QR code Pix"
+            style={{ width: 200, height: 200 }}
+          />
+        </div>
+      )}
+
+      <form onSubmit={onTopup} style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div className="field" style={{ flex: "0 1 160px", marginBottom: 0 }}>
+          <label className="label" htmlFor="topup-amount">Valor (R$)</label>
+          <input className="input" id="topup-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: "0 1 160px", marginBottom: 0 }}>
+          <label className="label" htmlFor="topup-method">Forma</label>
+          <select id="topup-method" value={method} onChange={(e) => setMethod(e.target.value as "PIX" | "BOLETO")}>
+            <option value="PIX">Pix</option>
+            <option value="BOLETO">Boleto</option>
+          </select>
+        </div>
+        <button className="btn-outline" style={{ width: "auto", padding: "10px 18px" }} disabled={createTopup.isPending}>
+          {createTopup.isPending ? "Gerando…" : "Recarregar"}
+        </button>
+      </form>
+      {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
+
+      {balance && balance.ledger.length > 0 && (
+        <>
+          <h3 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "20px 0 12px" }}>Extrato</h3>
+          {balance.ledger.map((l) => (
+            <div key={l.id} className="out">
+              <span className="nome">
+                {LEDGER_REASON_LABEL[l.reason] ?? l.reason}
+                <br /><span className="hint-text">{dtDisplay.format(new Date(l.createdAt))}</span>
+              </span>
+              <span className={`mono ${l.deltaCents >= 0 ? "up" : "down"}`} style={{ textAlign: "right" }}>
+                {l.deltaCents >= 0 ? "+" : ""}{fmtBRL(l.deltaCents)}
+                <br /><span className="hint-text">saldo {fmtBRL(l.balanceAfterCents)}</span>
+              </span>
+            </div>
+          ))}
+        </>
       )}
     </div>
   );
@@ -254,6 +384,15 @@ function MinhasCampanhas({ plan }: { plan: string }) {
           <input className="input" id="my-sp-ends" type="datetime-local" value={endsAt}
                  onChange={(e) => setEndsAt(e.target.value)} required />
         </div>
+        {(() => {
+          const price = estimatePriceCents(plan, startsAt, endsAt);
+          return price != null && (
+            <p className="hint-text" style={{ marginBottom: 12 }}>
+              Custo estimado do período: <strong>{fmtBRL(price)}</strong> — debitado do seu
+              saldo só quando um admin aprovar o pedido.
+            </p>
+          );
+        })()}
         {err && <p className="error-text">{err}</p>}
         {ok && <p className="hint-text" style={{ color: "var(--conferido)" }}>Pedido enviado — em análise.</p>}
         <button className="btn" style={{ width: "auto" }} disabled={requestSponsorship.isPending}>
@@ -275,6 +414,7 @@ export function SponsorPanel() {
   const [logoUrl, setLogoUrl] = useState("");
   const [siteUrl, setSiteUrl] = useState("");
   const [creativeUrl, setCreativeUrl] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [profileErr, setProfileErr] = useState<string | null>(null);
 
@@ -287,7 +427,8 @@ export function SponsorPanel() {
     setLogoUrl(mine.logoUrl ?? "");
     setSiteUrl(mine.siteUrl ?? "");
     setCreativeUrl(mine.creativeUrl ?? "");
-  }, [mine?.logoUrl, mine?.siteUrl, mine?.creativeUrl]);
+    setTaxId(mine.taxId ?? "");
+  }, [mine?.logoUrl, mine?.siteUrl, mine?.creativeUrl, mine?.taxId]);
 
   async function refresh() {
     await utils.sponsor.getMine.invalidate();
@@ -300,6 +441,7 @@ export function SponsorPanel() {
       await updateMine.mutateAsync({
         logoUrl: logoUrl.trim() || undefined, siteUrl: siteUrl.trim() || undefined,
         creativeUrl: creativeUrl.trim() || undefined,
+        taxId: taxId.replace(/\D/g, "") || undefined,
       });
       setProfileMsg("Salvo.");
       await refresh();
@@ -385,6 +527,15 @@ export function SponsorPanel() {
               </p>
             )}
           </div>
+          <div className="field">
+            <label className="label" htmlFor="sponsor-tax-id">CPF ou CNPJ (opcional)</label>
+            <input className="input" id="sponsor-tax-id" placeholder="Só números"
+                   value={taxId} onChange={(e) => setTaxId(e.target.value)} />
+            <p className="hint-text" style={{ marginTop: 4 }}>
+              Exigido pelo Mercado Pago pra gerar Pix/boleto de recarga acima de certo valor —
+              pode preencher só quando for recarregar.
+            </p>
+          </div>
           {profileMsg && <p className="hint-text" style={{ color: "var(--conferido)" }}>{profileMsg}</p>}
           {profileErr && <p className="error-text">{profileErr}</p>}
           <button className="btn" style={{ width: "auto" }} disabled={updateMine.isPending}>
@@ -431,6 +582,7 @@ export function SponsorPanel() {
         {linkErr && <p className="error-text" style={{ marginTop: 8 }}>{linkErr}</p>}
       </div>
 
+      <Saldo />
       <Desempenho />
       <MinhasCampanhas plan={mine.plan} />
     </main>

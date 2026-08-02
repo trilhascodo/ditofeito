@@ -11,6 +11,7 @@ import { mountInviteCard } from "./http/inviteCard.js";
 import { mountBolaoVindication } from "./http/bolaoVindication.js";
 import { mountAdClick } from "./http/adClick.js";
 import { mountAuth } from "./http/auth.js";
+import { mountMercadoPagoWebhook } from "./http/mercadoPagoWebhook.js";
 import { startJobs } from "./jobs/schedule.js";
 import { APP_CONFIG } from "./config.js";
 import { appRouter } from "./routers/_app.js";
@@ -38,6 +39,10 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(cors({ origin: APP_CONFIG.webOrigin, credentials: true }));
 mountAuth(app, pool);
+// Depois de express.json() de propósito (diferente dos mounts acima): a
+// assinatura do Mercado Pago não depende do corpo cru, só de headers/query,
+// então não tem conflito em usar req.body já parseado.
+mountMercadoPagoWebhook(app, pool);
 
 app.use(
   "/trpc",
