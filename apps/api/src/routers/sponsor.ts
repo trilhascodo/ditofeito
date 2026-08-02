@@ -553,6 +553,36 @@ export const sponsorRouter = router({
     }));
   }),
 
+  // Desempenho dos próprios patrocínios vigentes (últimos 30 dias) — mesma
+  // query de adEvents.stats (admin), escopada pro sponsor logado. Anuncie.tsx
+  // promete "relatório de desempenho... medido direto no portal" incluso em
+  // qualquer plano; até aqui só o admin via esse número (adEvents.stats é
+  // adminProcedure), o patrocinador nunca via a própria campanha performar.
+  myStats: sponsorProcedure.query(async ({ ctx }) => {
+    const r = await ctx.pool.query(
+      `SELECT sp.id AS sponsorship_id, sp.label, sp.is_home, sp.home_placement,
+              m.title AS market_title,
+              count(*) FILTER (WHERE ae.kind = 'IMPRESSION') AS impressions,
+              count(DISTINCT ae.visitor_hash) FILTER (WHERE ae.kind = 'IMPRESSION') AS unique_impressions,
+              count(*) FILTER (WHERE ae.kind = 'CLICK') AS clicks
+         FROM sponsorships sp
+         LEFT JOIN markets m ON m.id = sp.market_id
+         LEFT JOIN ad_events ae ON ae.sponsorship_id = sp.id
+                                AND ae.created_at > now() - interval '30 days'
+        WHERE sp.sponsor_id = $1 AND sp.approval_status = 'APPROVED' AND now() < sp.ends_at
+        GROUP BY sp.id, sp.label, sp.is_home, sp.home_placement, m.title
+        ORDER BY impressions DESC`,
+      [ctx.sponsorId],
+    );
+    return r.rows.map((row) => ({
+      sponsorshipId: row.sponsorship_id as string, label: row.label as string,
+      isHome: row.is_home as boolean, homePlacement: row.home_placement as string | null,
+      marketTitle: row.market_title as string | null,
+      impressions: Number(row.impressions), uniqueImpressions: Number(row.unique_impressions),
+      clicks: Number(row.clicks),
+    }));
+  }),
+
   requestSponsorship: sponsorProcedure.input(selfSponsorshipInput).mutation(async ({ ctx, input }) => {
     const full = { ...input, sponsorId: ctx.sponsorId };
     const homePlacement = await resolveHomePlacement(ctx.pool, full);

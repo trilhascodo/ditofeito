@@ -619,11 +619,15 @@ export const marketRouter = router({
       }
 
       // Patrocínio ativo agora, por mercado — mesma regra de sponsor.getActiveForMarket,
-      // batelada aqui pra não disparar 1 query por card no grid da home.
+      // batelada aqui pra não disparar 1 query por card no grid da home. approval_status
+      // é obrigatório aqui: sem isso, campanha ainda pendente de revisão (inclusive a
+      // checagem manual de neutralidade eleitoral, Metodologia §7) vazava como tag
+      // visível na home antes de passar pela aprovação.
       const spRes = await ctx.pool.query(
         `SELECT sp.market_id, sp.label, s.name, s.logo_url
            FROM sponsorships sp JOIN sponsors s ON s.id = sp.sponsor_id
           WHERE sp.market_id = ANY($1) AND s.is_active = true
+            AND sp.approval_status = 'APPROVED'
             AND now() BETWEEN sp.starts_at AND sp.ends_at`,
         [marketIds],
       );

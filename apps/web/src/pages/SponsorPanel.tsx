@@ -39,6 +39,44 @@ function fmtPeriod(iso: string | Date): string {
   return dtDisplay.format(new Date(iso));
 }
 
+const fmtInt = (n: number) => n.toLocaleString("pt-BR");
+
+function Desempenho() {
+  const { data: stats } = trpc.sponsor.myStats.useQuery();
+
+  return (
+    <div className="card" style={{ marginTop: 20 }}>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Desempenho</h2>
+      <p className="hint-text" style={{ marginBottom: 12 }}>
+        Impressões (card renderizado) e cliques nos últimos 30 dias, por patrocínio vigente.
+      </p>
+      {!stats || stats.length === 0 ? (
+        <p className="hint-text">
+          Sem dados ainda — só aparece aqui depois que um patrocínio for aprovado e começar a rodar.
+        </p>
+      ) : (
+        stats.map((row) => {
+          const ctr = row.impressions > 0 ? (row.clicks / row.impressions) * 100 : 0;
+          return (
+            <div key={row.sponsorshipId} className="admin-row">
+              <span className="titulo">
+                {row.isHome
+                  ? `Espaço da home (${PLACEMENT_LABEL[row.homePlacement ?? ""] ?? row.homePlacement})`
+                  : row.marketTitle ?? "mercado removido"}
+                {row.label && <div className="meta">"{row.label}"</div>}
+              </span>
+              <span className="mono hint-text">{fmtInt(row.impressions)} impr.</span>
+              <span className="mono hint-text">{fmtInt(row.uniqueImpressions)} únicas</span>
+              <span className="mono hint-text">{fmtInt(row.clicks)} cliques</span>
+              <span className="badge">CTR {ctr.toFixed(1)}%</span>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function MinhasCampanhas({ plan }: { plan: string }) {
   const utils = trpc.useUtils();
   const { data: sponsorships } = trpc.sponsor.listMySponsorships.useQuery();
@@ -393,6 +431,7 @@ export function SponsorPanel() {
         {linkErr && <p className="error-text" style={{ marginTop: 8 }}>{linkErr}</p>}
       </div>
 
+      <Desempenho />
       <MinhasCampanhas plan={mine.plan} />
     </main>
   );
