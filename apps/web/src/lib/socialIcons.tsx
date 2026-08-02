@@ -1,7 +1,9 @@
 // Glifos monocromáticos simples, não logos coloridos de marca — mesmo
 // princípio do CATEGORY_EMOJI em Home.tsx: "consistência de marca >
 // variedade". currentColor deixa o CSS (.social-link) controlar a cor.
-const ICON_PATHS: Record<string, string> = {
+// Exportado pra ShareRow.tsx reaproveitar os 4 glifos em comum (WhatsApp/
+// Instagram/X/Facebook) em vez de duplicar a definição do path.
+export const ICON_PATHS: Record<string, string> = {
   INSTAGRAM: "M5 3h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm3.3-1.8h.01",
   X: "M3 3l10 10M13 3 3 13",
   TIKTOK: "M9 2v7.5a2.5 2.5 0 1 1-2-2.45V9.2a4.2 4.2 0 1 0 3.7 4.17V6.3a3.6 3.6 0 0 0 2.5 1V5.4A3.6 3.6 0 0 1 9 2Z",

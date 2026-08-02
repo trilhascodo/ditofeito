@@ -387,6 +387,7 @@ a { color: var(--violeta); text-decoration: none; }
 .social-link {
   display: flex; align-items: center; justify-content: center; flex: none;
   width: 24px; height: 24px; border-radius: 99px; background: var(--violeta-2); color: var(--violeta);
+  border: none; cursor: pointer; font: 600 12px var(--sans); padding: 0;
 }
 .social-link:hover { background: var(--violeta); color: #fff; }
 
