@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { ShareRow } from "../components/ShareRow";
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "Aberto pra palpite",
@@ -28,14 +29,6 @@ export function BolaoDetalhe() {
   const [realNumber, setRealNumber] = useState("");
   const [realOutcomeId, setRealOutcomeId] = useState("");
   const [resolveErr, setResolveErr] = useState<string | null>(null);
-
-  const [vindCopied, setVindCopied] = useState(false);
-  async function onCopyVindicationLink() {
-    if (!bolao?.myVindicationToken) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/bolao-vindicacao/${bolao.myVindicationToken}`);
-    setVindCopied(true);
-    setTimeout(() => setVindCopied(false), 1500);
-  }
 
   async function onSubmitPalpite(e: FormEvent) {
     e.preventDefault();
@@ -107,18 +100,12 @@ export function BolaoDetalhe() {
               <p className="hint-text" style={{ marginBottom: 14 }}>
                 Prova pública de que você tinha razão — antes de todo mundo saber.
               </p>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <a
-                  className="btn-outline" style={{ width: "auto" }}
-                  href={`https://wa.me/?text=${encodeURIComponent(`Eu disse! ${window.location.origin}/bolao-vindicacao/${bolao.myVindicationToken}`)}`}
-                  target="_blank" rel="noopener noreferrer"
-                >
-                  Compartilhar no WhatsApp
-                </a>
-                <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyVindicationLink}>
-                  {vindCopied ? "Copiado!" : "Copiar link"}
-                </button>
-              </div>
+              <ShareRow
+                url={`${window.location.origin}/bolao-vindicacao/${bolao.myVindicationToken}`}
+                text="Eu disse!"
+                imageUrl={`${window.location.origin}/card/bolao-vindicacao/${bolao.myVindicationToken}.png`}
+                label=""
+              />
             </div>
           </div>
         </div>

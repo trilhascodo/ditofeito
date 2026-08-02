@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { ShareRow } from "../components/ShareRow";
 
 const dataFmt = (d: string | Date) =>
   new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -23,7 +24,6 @@ export function GrupoDetalhe() {
   const utils = trpc.useUtils();
   const { data: group, isLoading } = trpc.groups.detail.useQuery({ groupId: groupId! }, { enabled: !!groupId });
 
-  const [copiado, setCopiado] = useState(false);
   const [showCriar, setShowCriar] = useState(false);
   const [bolaoKind, setBolaoKind] = useState<"MARKET" | "CUSTOM">("MARKET");
   const [busca, setBusca] = useState("");
@@ -68,18 +68,6 @@ export function GrupoDetalhe() {
 
   const inviteUrl = group ? `${window.location.origin}/convite/${group.inviteCode}` : "";
   const inviteText = group ? `Bora participar do grupo "${group.name}" comigo no Dito!` : "";
-
-  function onCopyInvite() {
-    if (!group) return;
-    navigator.clipboard?.writeText(inviteUrl);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 1500);
-  }
-
-  function onShareNative() {
-    if (!group) return;
-    navigator.share?.({ title: inviteText, url: inviteUrl }).catch(() => {});
-  }
 
   async function onCriarBolao() {
     if (!groupId) return;
@@ -151,36 +139,12 @@ export function GrupoDetalhe() {
         ))}
         <hr style={{ border: "none", borderTop: "1px solid var(--linha)", margin: "16px 0" }} />
         <p className="hint-text" style={{ marginBottom: 8 }}>Convide gente pro grupo — não precisa ter conta ainda:</p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-          <a
-            className="btn-outline" style={{ width: "auto" }}
-            href={`https://wa.me/?text=${encodeURIComponent(`${inviteText} ${inviteUrl}`)}`}
-            target="_blank" rel="noopener noreferrer"
-          >
-            WhatsApp
-          </a>
-          <a
-            className="btn-outline" style={{ width: "auto" }}
-            href={`https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(inviteText)}`}
-            target="_blank" rel="noopener noreferrer"
-          >
-            Telegram
-          </a>
-          <a
-            className="btn-outline" style={{ width: "auto" }}
-            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(inviteUrl)}`}
-            target="_blank" rel="noopener noreferrer"
-          >
-            Facebook
-          </a>
-          {typeof navigator !== "undefined" && !!navigator.share && (
-            <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onShareNative}>
-              Compartilhar…
-            </button>
-          )}
-          <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyInvite}>
-            {copiado ? "Copiado!" : "Copiar link"}
-          </button>
+        <div style={{ marginBottom: 10 }}>
+          <ShareRow
+            url={inviteUrl} text={inviteText}
+            imageUrl={group ? `${window.location.origin}/card/convite/${group.inviteCode}.png` : undefined}
+            label=""
+          />
         </div>
         <p className="hint-text" style={{ marginBottom: 4 }}>
           Ou passe o código pra quem já tem conta:{" "}

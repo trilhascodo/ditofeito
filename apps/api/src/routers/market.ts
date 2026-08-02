@@ -411,7 +411,10 @@ export const marketRouter = router({
   trackShare: publicProcedure
     .input(z.object({
       marketId: z.string().uuid(),
-      channel: z.enum(["WHATSAPP", "TELEGRAM", "FACEBOOK", "COPY_LINK", "NATIVE"]),
+      channel: z.enum([
+        "WHATSAPP", "TELEGRAM", "FACEBOOK", "X", "LINKEDIN", "PINTEREST",
+        "SNAPCHAT", "INSTAGRAM", "COPY_LINK", "NATIVE",
+      ]),
     }))
     .mutation(async ({ ctx, input }) => {
       const hash = visitorHash(ctx.ip, ctx.userAgent);

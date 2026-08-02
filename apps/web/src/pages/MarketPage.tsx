@@ -9,6 +9,7 @@ import { pathFromSeries } from "../lib/chart";
 import { SocialLinks } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
 import { CpfPrompt } from "../components/CpfPrompt";
+import { ShareRow } from "../components/ShareRow";
 import { getCurrentUf } from "../lib/useUfGeolocation";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
@@ -172,8 +173,6 @@ export function MarketPage() {
   const [needsCpf, setNeedsCpf] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
-  const [vindCopied, setVindCopied] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (!market) return;
@@ -252,34 +251,6 @@ export function MarketPage() {
     await utils.comments.list.invalidate({ marketId: market!.id });
   }
 
-  async function onCopyVindicationLink() {
-    if (!vindication) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/vindicacao/${vindication.shareToken}`);
-    setVindCopied(true);
-    setTimeout(() => setVindCopied(false), 1500);
-  }
-
-  // Compartilhar o mercado em si (qualquer status, não só quem ganhou —
-  // diferente do bloco de vindicação abaixo). trackShare é fire-and-forget:
-  // nunca atrasa/bloqueia a intent de compartilhamento em si.
-  function onTrackShare(channel: "WHATSAPP" | "TELEGRAM" | "FACEBOOK" | "COPY_LINK" | "NATIVE") {
-    if (!market) return;
-    trackShareMut.mutate({ marketId: market.id, channel });
-  }
-  async function onCopyMarketLink() {
-    if (!market) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/m/${market.slug}`);
-    onTrackShare("COPY_LINK");
-    setShareCopied(true);
-    setTimeout(() => setShareCopied(false), 1500);
-  }
-  function onShareMarketNative() {
-    if (!market) return;
-    navigator.share?.({
-      title: market.title, url: `${window.location.origin}/m/${market.slug}`,
-    }).then(() => onTrackShare("NATIVE")).catch(() => {});
-  }
-
   const W = 640, H = 220, P = 8;
   const simIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "SIM") : -1;
   const naoIdx = market.type === "BINARY" ? market.outcomes.findIndex((o) => o.label === "NÃO") : -1;
@@ -296,37 +267,13 @@ export function MarketPage() {
       </div>
       <p className="regras">{market.resolutionCriteria}</p>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 20 }}>
-        <span className="hint-text">Compartilhar:</span>
-        <a
-          className="btn-outline" style={{ width: "auto", padding: "6px 12px" }}
-          href={`https://wa.me/?text=${encodeURIComponent(`"${market.title}" — dá seu palpite no DitoFeito. ${window.location.origin}/m/${market.slug}`)}`}
-          target="_blank" rel="noopener noreferrer" onClick={() => onTrackShare("WHATSAPP")}
-        >
-          WhatsApp
-        </a>
-        <a
-          className="btn-outline" style={{ width: "auto", padding: "6px 12px" }}
-          href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}/m/${market.slug}`)}&text=${encodeURIComponent(`"${market.title}" — dá seu palpite no DitoFeito`)}`}
-          target="_blank" rel="noopener noreferrer" onClick={() => onTrackShare("TELEGRAM")}
-        >
-          Telegram
-        </a>
-        <a
-          className="btn-outline" style={{ width: "auto", padding: "6px 12px" }}
-          href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/m/${market.slug}`)}`}
-          target="_blank" rel="noopener noreferrer" onClick={() => onTrackShare("FACEBOOK")}
-        >
-          Facebook
-        </a>
-        {typeof navigator !== "undefined" && !!navigator.share && (
-          <button type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px" }} onClick={onShareMarketNative}>
-            Compartilhar…
-          </button>
-        )}
-        <button type="button" className="btn-outline" style={{ width: "auto", padding: "6px 12px" }} onClick={onCopyMarketLink}>
-          {shareCopied ? "Copiado!" : "Copiar link"}
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <ShareRow
+          url={`${window.location.origin}/m/${market.slug}`}
+          text={`"${market.title}" — dá seu palpite no DitoFeito`}
+          imageUrl={`${window.location.origin}/card/${market.slug}.png`}
+          onShare={(channel) => trackShareMut.mutate({ marketId: market.id, channel })}
+        />
       </div>
 
       {vindication && (
@@ -344,18 +291,12 @@ export function MarketPage() {
               <p className="hint-text" style={{ marginBottom: 14 }}>
                 Prova pública de que você tinha razão — antes de todo mundo saber.
               </p>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <a
-                  className="btn-outline" style={{ width: "auto" }}
-                  href={`https://wa.me/?text=${encodeURIComponent(`Eu disse! ${window.location.origin}/vindicacao/${vindication.shareToken}`)}`}
-                  target="_blank" rel="noopener noreferrer"
-                >
-                  Compartilhar no WhatsApp
-                </a>
-                <button type="button" className="btn-outline" style={{ width: "auto" }} onClick={onCopyVindicationLink}>
-                  {vindCopied ? "Copiado!" : "Copiar link"}
-                </button>
-              </div>
+              <ShareRow
+                url={`${window.location.origin}/vindicacao/${vindication.shareToken}`}
+                text="Eu disse!"
+                imageUrl={`${window.location.origin}/card/vindicacao/${vindication.shareToken}.png`}
+                label=""
+              />
             </div>
           </div>
         </div>
