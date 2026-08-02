@@ -48,13 +48,14 @@ function loadScript(): Promise<void> {
 // Brick renderiza um iframe hospedado pelo próprio Mercado Pago pros campos
 // sensíveis e devolve só um token de uso único aqui em onSubmit.
 export function MercadoPagoCardBrick({
-  amountCents, payerEmail, payerTaxId, onToken, onError,
+  amountCents, payerEmail, payerTaxId, onToken, onError, onReady,
 }: {
   amountCents: number;
   payerEmail: string;
   payerTaxId?: string;
   onToken: (data: CardBrickFormData) => Promise<void>;
   onError?: (message: string) => void;
+  onReady?: () => void;
 }) {
   const containerId = `mp-card-brick-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY as string | undefined;
@@ -79,6 +80,10 @@ export function MercadoPagoCardBrick({
           // (ver lib/mercadoPago.ts::createCardPayment).
           customization: { paymentMethods: { minInstallments: 1, maxInstallments: 1 } },
           callbacks: {
+            // onReady/onError são obrigatórios pro Brick — sem os dois ele
+            // lança "Callbacks onReady and/or onError are required" e nem
+            // inicializa.
+            onReady: () => onReady?.(),
             onSubmit: (formData: CardBrickFormData) => onToken(formData),
             onError: (error: unknown) =>
               onError?.(error instanceof Error ? error.message : "Erro no formulário de cartão"),
