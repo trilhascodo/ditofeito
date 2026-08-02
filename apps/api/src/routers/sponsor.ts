@@ -2,7 +2,8 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure, adminProcedure, sponsorProcedure } from "../trpc/trpc.js";
 import { notify } from "../domain/notify.js";
 import { sendTransactionalEmail } from "../lib/email.js";
-import { createPixPayment, createBoletoPayment, MercadoPagoError } from "../lib/mercadoPago.js";
+import { createPixPayment, createBoletoPayment, createCardPayment, MercadoPagoError } from "../lib/mercadoPago.js";
+import { appendSponsorLedger, creditApprovedPayment } from "../domain/sponsorBilling.js";
 
 // ----------------------------------------------------------------------------
 // Patrocínio nativo (identidade-ditofeito.md — card "Apresentado por", nunca
@@ -142,26 +143,28 @@ function priceForPeriodCents(plan: string, startsAt: Date, endsAt: Date): number
   return Math.round((monthly / 30) * days);
 }
 
-// Movimento CONFIRMADO de saldo (migrations/040_sponsor_billing.sql) — mesmo
-// formato de appendLedger (domain/trade.ts), sem hash-chain: aquilo é prova
-// pública pro usuário, isso é registro interno de negócio. PRESSUPÕE lock
-// FOR UPDATE já tomado em sponsors (mesma convenção de appendLedger).
-async function appendSponsorLedger(
-  c: import("pg").PoolClient, sponsorId: string, deltaCents: number,
-  reason: "TOPUP" | "CAMPAIGN_CHARGE" | "REFUND" | "ADMIN_ADJUST",
-  refs: { sponsorshipId?: string; paymentId?: string } = {},
-): Promise<{ newBalanceCents: number }> {
-  const cur = await c.query(`SELECT balance_cents FROM sponsors WHERE id = $1`, [sponsorId]);
-  const newBalance = Number(cur.rows[0].balance_cents) + deltaCents;
-  if (newBalance < 0) throw new Error("Saldo insuficiente");
-  await c.query(`UPDATE sponsors SET balance_cents = $2 WHERE id = $1`, [sponsorId, newBalance]);
-  await c.query(
-    `INSERT INTO sponsor_ledger (sponsor_id, delta_cents, balance_after_cents, reason, sponsorship_id, payment_id)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [sponsorId, deltaCents, newBalance, reason, refs.sponsorshipId ?? null, refs.paymentId ?? null],
-  );
-  return { newBalanceCents: newBalance };
-}
+// appendSponsorLedger/creditApprovedPayment vivem em domain/sponsorBilling.ts
+// (compartilhado com http/mercadoPagoWebhook.ts — único caminho de código
+// que credita saldo por pagamento aprovado, ver comentário lá).
+
+// status_detail documentados pelo Mercado Pago pra recusa de cartão
+// (checkout-api-payments/how-tos/reasons-for-rejection) — fallback genérico
+// pros não mapeados, ver createTopup abaixo.
+const CARD_REJECTION_MESSAGES: Record<string, string> = {
+  cc_rejected_bad_filled_card_number: "Número do cartão incorreto — confira e tente de novo.",
+  cc_rejected_bad_filled_date: "Validade do cartão incorreta — confira e tente de novo.",
+  cc_rejected_bad_filled_security_code: "Código de segurança (CVV) incorreto — confira e tente de novo.",
+  cc_rejected_bad_filled_other: "Dados do cartão incorretos — confira e tente de novo.",
+  cc_rejected_call_for_authorize: "Seu banco pediu autorização manual — ligue pra central do cartão ou use outro método.",
+  cc_rejected_card_disabled: "Cartão desabilitado — ligue pra central do seu banco ou use outro cartão.",
+  cc_rejected_duplicated_payment: "Já existe uma cobrança igual em andamento — aguarde ou confira o extrato antes de tentar de novo.",
+  cc_rejected_insufficient_amount: "Saldo/limite insuficiente no cartão.",
+  cc_rejected_invalid_installments: "Esse cartão não aceita pagamento à vista — tente outro cartão.",
+  cc_rejected_max_attempts: "Número máximo de tentativas atingido — tente outro cartão ou use Pix/boleto.",
+  cc_rejected_blacklist: "Pagamento não autorizado pelo seu banco.",
+  cc_rejected_high_risk: "Pagamento recusado por segurança — tente outro cartão ou use Pix/boleto.",
+  cc_rejected_other_reason: "Pagamento recusado pelo seu banco — tente outro cartão ou use Pix/boleto.",
+};
 
 // Valida a posição da home contra o plano do sponsor (cumulativo, ver
 // PLAN_ALLOWED_PLACEMENTS acima). Usada tanto na criação quanto na edição —
@@ -555,6 +558,9 @@ export const sponsorRouter = router({
          FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
     if (!s.rowCount) throw new Error("Patrocinador não encontrado");
     const links = await socialLinksBySponsor(ctx.pool, [ctx.sponsorId]);
+    // E-mail de quem está logado — pré-preenche o payer do Card Payment
+    // Brick na recarga por cartão (ver createTopup abaixo).
+    const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [ctx.user.id]);
     const row = s.rows[0];
     return {
       name: row.name as string, logoUrl: row.logo_url as string | null,
@@ -566,6 +572,7 @@ export const sponsorRouter = router({
       socialLinksMax: PLAN_LIMITS[row.plan] ?? 1,
       socialLinks: links.get(ctx.sponsorId) ?? [],
       balanceCents: Number(row.balance_cents), taxId: row.tax_id as string | null,
+      email: u.rows[0]?.email as string | undefined,
     };
   }),
 
@@ -632,27 +639,99 @@ export const sponsorRouter = router({
         reason: r.reason as string, createdAt: r.created_at as string,
       })),
       pendingPayments: pending.rows.map((r) => ({
-        id: r.id as string, method: r.method as "PIX" | "BOLETO", amountCents: Number(r.amount_cents),
+        id: r.id as string, method: r.method as "PIX" | "BOLETO" | "CARD", amountCents: Number(r.amount_cents),
         qrCode: r.qr_code as string | null, boletoUrl: r.boleto_url as string | null,
         createdAt: r.created_at as string,
       })),
     };
   }),
 
-  // Gera uma cobrança nova no Mercado Pago e guarda a tentativa — só vira
-  // saldo de verdade quando o webhook confirmar (getPayment como fonte de
-  // verdade, nunca o corpo do POST — ver http/mercadoPagoWebhook.ts).
+  // Gera uma cobrança nova no Mercado Pago e guarda a tentativa. Pix/boleto
+  // só viram saldo de verdade quando o webhook confirmar (getPayment como
+  // fonte de verdade, nunca o corpo do POST — ver http/mercadoPagoWebhook.ts).
+  // Cartão aprova na hora (resposta síncrona do Mercado Pago) — credita
+  // imediatamente via creditApprovedPayment, a mesma função idempotente que
+  // o webhook usa, então uma reentrega do webhook pro mesmo pagamento não
+  // credita de novo.
   createTopup: sponsorProcedure
-    .input(z.object({
-      amountCents: z.number().int().min(5_000, "mínimo R$ 50").max(5_000_000, "máximo R$ 50.000"),
-      method: z.enum(["PIX", "BOLETO"]),
-    }))
+    .input(z.discriminatedUnion("method", [
+      z.object({
+        method: z.literal("PIX"),
+        amountCents: z.number().int().min(5_000, "mínimo R$ 50").max(5_000_000, "máximo R$ 50.000"),
+      }),
+      z.object({
+        method: z.literal("BOLETO"),
+        amountCents: z.number().int().min(5_000, "mínimo R$ 50").max(5_000_000, "máximo R$ 50.000"),
+      }),
+      z.object({
+        method: z.literal("CARD"),
+        amountCents: z.number().int().min(5_000, "mínimo R$ 50").max(5_000_000, "máximo R$ 50.000"),
+        // Token de uso único do Card Payment Brick (tokenização no
+        // navegador) — nunca chega número de cartão/CVV aqui.
+        token: z.string().min(1),
+        paymentMethodId: z.string().min(1),
+        issuerId: z.string().optional(),
+        paymentMethodOptionId: z.string().optional(),
+        payerEmail: z.string().email(),
+        payerTaxId: z.string().regex(/^\d{11}$|^\d{14}$/, "CPF (11 dígitos) ou CNPJ (14)"),
+      }),
+    ]))
     .mutation(async ({ ctx, input }) => {
       const s = await ctx.pool.query(`SELECT name, tax_id FROM sponsors WHERE id = $1`, [ctx.sponsorId]);
       if (!s.rowCount) throw new Error("Patrocinador não encontrado");
+      const description = `Recarga de saldo DitoFeito — ${s.rows[0].name as string}`;
+
+      if (input.method === "CARD") {
+        try {
+          const r = await createCardPayment({
+            amountCents: input.amountCents, description, token: input.token,
+            paymentMethodId: input.paymentMethodId, issuerId: input.issuerId,
+            paymentMethodOptionId: input.paymentMethodOptionId,
+            payer: { email: input.payerEmail, taxId: input.payerTaxId },
+          });
+          if (r.status === "rejected") {
+            await ctx.pool.query(
+              `INSERT INTO sponsor_payments (sponsor_id, mp_payment_id, method, amount_cents, status, card_last4, card_brand)
+               VALUES ($1,$2,'CARD',$3,'REJECTED',$4,$5)`,
+              [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.cardLast4, r.cardBrand],
+            );
+            throw new Error(
+              (r.statusDetail && CARD_REJECTION_MESSAGES[r.statusDetail])
+              ?? "Pagamento recusado pelo seu banco — tente outro cartão ou use Pix/boleto.",
+            );
+          }
+          // approved ou in_process: grava PENDING sempre — creditApprovedPayment
+          // (idempotente) é o único caminho que efetivamente credita saldo,
+          // mesmo quando já sabemos que veio "approved" aqui.
+          const inserted = await ctx.pool.query(
+            `INSERT INTO sponsor_payments (sponsor_id, mp_payment_id, method, amount_cents, status, card_last4, card_brand)
+             VALUES ($1,$2,'CARD',$3,'PENDING',$4,$5) RETURNING id`,
+            [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.cardLast4, r.cardBrand],
+          );
+          if (r.status === "approved") {
+            try {
+              await creditApprovedPayment(ctx.pool, inserted.rows[0].id as string);
+            } catch (e) {
+              // Dinheiro já foi cobrado de verdade no Mercado Pago — diferente
+              // de Pix/Boleto, que só "prometem" cobrança até serem pagos.
+              // Log gritante pra reconciliar manualmente contra o extrato do
+              // Mercado Pago; o webhook ainda vai chegar e tentar de novo.
+              console.error("[sponsor.createTopup] cartão aprovado mas falhou ao creditar saldo — reconciliar manualmente", r.mpPaymentId, e);
+            }
+          }
+          return {
+            qrCode: null, qrCodeBase64: null, boletoUrl: null,
+            cardStatus: r.status as "approved" | "in_process", cardLast4: r.cardLast4,
+          };
+        } catch (e) {
+          if (e instanceof MercadoPagoError)
+            throw new Error(`Não foi possível processar o cartão: ${e.message}`);
+          throw e;
+        }
+      }
+
       const u = await ctx.pool.query(`SELECT email FROM users WHERE id = $1`, [ctx.user.id]);
       const payer = { email: u.rows[0].email as string, taxId: s.rows[0].tax_id as string | null };
-      const description = `Recarga de saldo DitoFeito — ${s.rows[0].name as string}`;
 
       try {
         if (input.method === "PIX") {
@@ -662,7 +741,7 @@ export const sponsorRouter = router({
              VALUES ($1,$2,'PIX',$3,'PENDING',$4)`,
             [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.qrCode],
           );
-          return { qrCode: r.qrCode, qrCodeBase64: r.qrCodeBase64, boletoUrl: null };
+          return { qrCode: r.qrCode, qrCodeBase64: r.qrCodeBase64, boletoUrl: null, cardStatus: null, cardLast4: null };
         }
         const r = await createBoletoPayment({ amountCents: input.amountCents, description, payer });
         await ctx.pool.query(
@@ -670,7 +749,7 @@ export const sponsorRouter = router({
            VALUES ($1,$2,'BOLETO',$3,'PENDING',$4)`,
           [ctx.sponsorId, r.mpPaymentId, input.amountCents, r.boletoUrl],
         );
-        return { qrCode: null, qrCodeBase64: null, boletoUrl: r.boletoUrl };
+        return { qrCode: null, qrCodeBase64: null, boletoUrl: r.boletoUrl, cardStatus: null, cardLast4: null };
       } catch (e) {
         if (e instanceof MercadoPagoError)
           throw new Error(`Não foi possível gerar a cobrança: ${e.message}`);

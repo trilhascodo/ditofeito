@@ -18,6 +18,7 @@ import type express from "express";
 import type { Pool } from "pg";
 import { MERCADOPAGO_CONFIG } from "../config.js";
 import { getPayment } from "../lib/mercadoPago.js";
+import { creditApprovedPayment } from "../domain/sponsorBilling.js";
 import { asyncHandler } from "./asyncHandler.js";
 
 // Formato documentado do Mercado Pago: header "ts=<epoch>,v1=<hmac-hex>",
@@ -73,34 +74,14 @@ export function mountMercadoPagoWebhook(app: express.Express, pool: Pool) {
     const row = payment.rows[0];
 
     if (status === "approved" && row.status === "PENDING") {
-      const client = await pool.connect();
+      // creditApprovedPayment é idempotente (WHERE status='PENDING') — cobre
+      // tanto reentrega do próprio webhook quanto cartão que já foi
+      // creditado na hora pelo branch síncrono de createTopup (ver
+      // domain/sponsorBilling.ts).
       try {
-        await client.query("BEGIN");
-        const upd = await client.query(
-          `UPDATE sponsor_payments SET status = 'APPROVED', paid_at = now()
-             WHERE id = $1 AND status = 'PENDING' RETURNING sponsor_id, amount_cents`,
-          [row.id],
-        );
-        // Reentrega do mesmo webhook depois que outra já processou — idempotente, no-op.
-        if (upd.rowCount) {
-          const sponsorId = upd.rows[0].sponsor_id as string;
-          const amountCents = Number(upd.rows[0].amount_cents);
-          await client.query(`SELECT id FROM sponsors WHERE id = $1 FOR UPDATE`, [sponsorId]);
-          const cur = await client.query(`SELECT balance_cents FROM sponsors WHERE id = $1`, [sponsorId]);
-          const newBalance = Number(cur.rows[0].balance_cents) + amountCents;
-          await client.query(`UPDATE sponsors SET balance_cents = $2 WHERE id = $1`, [sponsorId, newBalance]);
-          await client.query(
-            `INSERT INTO sponsor_ledger (sponsor_id, delta_cents, balance_after_cents, reason, payment_id)
-             VALUES ($1,$2,$3,'TOPUP',$4)`,
-            [sponsorId, amountCents, newBalance, row.id],
-          );
-        }
-        await client.query("COMMIT");
+        await creditApprovedPayment(pool, row.id);
       } catch (e) {
-        await client.query("ROLLBACK");
         console.error("[mercadopago-webhook] falha ao creditar saldo", dataId, e);
-      } finally {
-        client.release();
       }
     } else if ((status === "rejected" || status === "cancelled") && row.status === "PENDING") {
       await pool.query(

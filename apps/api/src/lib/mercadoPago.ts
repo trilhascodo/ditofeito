@@ -112,6 +112,50 @@ export async function createBoletoPayment(input: {
   };
 }
 
+export interface CardPaymentResult {
+  mpPaymentId: string;
+  status: string;
+  statusDetail: string | null;
+  cardLast4: string | null;
+  cardBrand: string | null;
+}
+
+// Token vem do Card Payment Brick (tokenização no navegador, iframe do
+// próprio Mercado Pago) — aqui nunca chega número de cartão, validade ou
+// CVV, só o token de uso único. `installments` NÃO é parâmetro: fixo em 1
+// (à vista) sempre, mesmo que o chamador tente mandar outra coisa — nunca
+// confiar em dado vindo do navegador pra isso (mesmo espírito de nunca
+// confiar no corpo do webhook, ver http/mercadoPagoWebhook.ts). CPF/CNPJ é
+// obrigatório aqui (diferente do Pix/Boleto): emissor brasileiro exige, e
+// vem do próprio formulário do Brick, não de sponsors.tax_id.
+export async function createCardPayment(input: {
+  amountCents: number; description: string;
+  token: string; paymentMethodId: string; issuerId?: string; paymentMethodOptionId?: string;
+  payer: { email: string; taxId: string };
+}): Promise<CardPaymentResult> {
+  const body = (await mpFetch("/v1/payments", {
+    method: "POST",
+    idempotencyKey: randomUUID(),
+    body: JSON.stringify({
+      transaction_amount: input.amountCents / 100,
+      description: input.description,
+      token: input.token,
+      installments: 1,
+      payment_method_id: input.paymentMethodId,
+      ...(input.issuerId ? { issuer_id: input.issuerId } : {}),
+      ...(input.paymentMethodOptionId ? { payment_method_option_id: input.paymentMethodOptionId } : {}),
+      payer: payerPayload(input.payer),
+    }),
+  })) as {
+    id: number; status: string; status_detail?: string; payment_method_id?: string;
+    card?: { last_four_digits?: string };
+  };
+  return {
+    mpPaymentId: String(body.id), status: body.status, statusDetail: body.status_detail ?? null,
+    cardLast4: body.card?.last_four_digits ?? null, cardBrand: body.payment_method_id ?? null,
+  };
+}
+
 /** Fonte de verdade de status — sempre chamar antes de creditar saldo por um
  *  webhook, nunca confiar no `status` que vem no corpo do POST recebido. */
 export async function getPayment(mpPaymentId: string): Promise<{ status: string }> {

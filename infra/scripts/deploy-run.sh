@@ -20,6 +20,8 @@ VITE_TURNSTILE_SITE_KEY="$(grep -m1 '^VITE_TURNSTILE_SITE_KEY=' infra/.env 2>/de
 export VITE_TURNSTILE_SITE_KEY
 VITE_GOOGLE_CLIENT_ID="$(grep -m1 '^VITE_GOOGLE_CLIENT_ID=' infra/.env 2>/dev/null | cut -d= -f2- || true)"
 export VITE_GOOGLE_CLIENT_ID
+VITE_MERCADOPAGO_PUBLIC_KEY="$(grep -m1 '^VITE_MERCADOPAGO_PUBLIC_KEY=' infra/.env 2>/dev/null | cut -d= -f2- || true)"
+export VITE_MERCADOPAGO_PUBLIC_KEY
 
 echo "==> build do frontend (apps/web/dist — nginx serve estático, ver infra/nginx/)"
 pnpm install --frozen-lockfile

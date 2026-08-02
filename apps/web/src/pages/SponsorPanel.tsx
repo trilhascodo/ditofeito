@@ -3,6 +3,7 @@ import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { SOCIAL_PLATFORMS, SOCIAL_LABEL, type SocialPlatform } from "../lib/socialIcons";
 import { UFS } from "../lib/ufs";
+import { MercadoPagoCardBrick, type CardBrickFormData } from "../components/MercadoPagoCardBrick";
 
 const PLAN_LABEL: Record<string, string> = {
   BASICO: "Básico", PROFISSIONAL: "Profissional", PREMIUM: "Premium",
@@ -95,7 +96,7 @@ function Desempenho() {
   );
 }
 
-function Saldo() {
+function Saldo({ payerEmail, payerTaxId }: { payerEmail?: string; payerTaxId?: string | null }) {
   const utils = trpc.useUtils();
   const { data: balance } = trpc.sponsor.myBalance.useQuery(undefined, {
     // Enquanto tiver Pix/boleto em aberto, atualiza sozinho — quando o
@@ -105,22 +106,40 @@ function Saldo() {
   const createTopup = trpc.sponsor.createTopup.useMutation();
 
   const [amount, setAmount] = useState("100");
-  const [method, setMethod] = useState<"PIX" | "BOLETO">("PIX");
+  const [method, setMethod] = useState<"PIX" | "BOLETO" | "CARD">("PIX");
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [cardOk, setCardOk] = useState(false);
   const [lastResult, setLastResult] = useState<{ qrCode: string | null; qrCodeBase64: string | null; boletoUrl: string | null } | null>(null);
 
-  async function onTopup(e: FormEvent) {
-    e.preventDefault();
+  const amountCents = Math.round(Number(amount.replace(",", ".")) * 100);
+
+  async function onTopup() {
     setErr(null);
-    const amountCents = Math.round(Number(amount.replace(",", ".")) * 100);
     if (!(amountCents >= 5_000)) { setErr("Valor mínimo: R$ 50,00"); return; }
     try {
-      const r = await createTopup.mutateAsync({ amountCents, method });
+      const r = await createTopup.mutateAsync({ amountCents, method: method as "PIX" | "BOLETO" });
       setLastResult(r);
       await utils.sponsor.myBalance.invalidate();
     } catch (error) {
       setErr(error instanceof Error ? error.message : "Erro ao gerar cobrança");
+    }
+  }
+
+  async function onCardToken(formData: CardBrickFormData) {
+    setErr(null); setCardOk(false);
+    try {
+      await createTopup.mutateAsync({
+        method: "CARD", amountCents,
+        token: formData.token, paymentMethodId: formData.payment_method_id,
+        issuerId: formData.issuer_id, paymentMethodOptionId: formData.payment_method_option_id,
+        payerEmail: formData.payer.email, payerTaxId: formData.payer.identification.number,
+      });
+      setCardOk(true);
+      await utils.sponsor.myBalance.invalidate();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Erro ao processar o cartão");
+      throw error; // deixa o Brick também sinalizar erro no próprio formulário
     }
   }
 
@@ -168,23 +187,51 @@ function Saldo() {
         </div>
       )}
 
-      <form onSubmit={onTopup} style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
         <div className="field" style={{ flex: "0 1 160px", marginBottom: 0 }}>
           <label className="label" htmlFor="topup-amount">Valor (R$)</label>
-          <input className="input" id="topup-amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input
+            className="input" id="topup-amount" inputMode="decimal" value={amount}
+            onChange={(e) => { setAmount(e.target.value); setCardOk(false); setErr(null); }}
+          />
         </div>
         <div className="field" style={{ flex: "0 1 160px", marginBottom: 0 }}>
           <label className="label" htmlFor="topup-method">Forma</label>
-          <select id="topup-method" value={method} onChange={(e) => setMethod(e.target.value as "PIX" | "BOLETO")}>
+          <select
+            id="topup-method" value={method}
+            onChange={(e) => { setMethod(e.target.value as "PIX" | "BOLETO" | "CARD"); setErr(null); setCardOk(false); }}
+          >
             <option value="PIX">Pix</option>
             <option value="BOLETO">Boleto</option>
+            <option value="CARD">Cartão</option>
           </select>
         </div>
-        <button className="btn-outline" style={{ width: "auto", padding: "10px 18px" }} disabled={createTopup.isPending}>
-          {createTopup.isPending ? "Gerando…" : "Recarregar"}
-        </button>
-      </form>
+        {method !== "CARD" && (
+          <button
+            type="button" className="btn-outline" style={{ width: "auto", padding: "10px 18px" }}
+            onClick={onTopup} disabled={createTopup.isPending}
+          >
+            {createTopup.isPending ? "Gerando…" : "Recarregar"}
+          </button>
+        )}
+      </div>
+
+      {method === "CARD" && (
+        amountCents >= 5_000 ? (
+          <div style={{ marginTop: 12 }}>
+            <MercadoPagoCardBrick
+              amountCents={amountCents} payerEmail={payerEmail ?? ""} payerTaxId={payerTaxId ?? undefined}
+              onToken={onCardToken} onError={(msg) => setErr(msg)}
+            />
+          </div>
+        ) : (
+          <p className="hint-text" style={{ marginTop: 8 }}>
+            Informe um valor de pelo menos R$ 50,00 pra continuar com cartão.
+          </p>
+        )
+      )}
       {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
+      {cardOk && <p className="hint-text" style={{ marginTop: 8, color: "var(--conferido)" }}>Pagamento aprovado — saldo atualizado.</p>}
 
       {balance && balance.ledger.length > 0 && (
         <>
@@ -582,7 +629,7 @@ export function SponsorPanel() {
         {linkErr && <p className="error-text" style={{ marginTop: 8 }}>{linkErr}</p>}
       </div>
 
-      <Saldo />
+      <Saldo payerEmail={mine.email} payerTaxId={mine.taxId} />
       <Desempenho />
       <MinhasCampanhas plan={mine.plan} />
     </main>
