@@ -5,6 +5,7 @@ import { trpc } from "../lib/trpc";
 const KIND_ICON: Record<string, string> = {
   MARKET_RESOLVED: "✓", MARKET_VOIDED: "↺", NEW_COMMENT: "💬",
   BOLAO_CLOSING_SOON: "⏰", GROUP_JOINED: "👋",
+  BOLAO_RESOLVED: "🎯", STREAK_MILESTONE: "🔥",
 };
 
 const timeFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });

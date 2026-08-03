@@ -15,6 +15,7 @@ import { checkRateLimit } from "../lib/rateLimit.js";
 import { appendLedger } from "../domain/trade.js";
 import { notify } from "../domain/notify.js";
 import { sendTransactionalEmail } from "../lib/email.js";
+import { APP_CONFIG } from "../config.js";
 
 // Mesmo teto de comments.ts (COMMENT_RATE_LIMIT) — mural de grupo é bem
 // menor em volume (poucos membros vs. mercado público), mas o risco de
@@ -31,6 +32,50 @@ async function assertMember(pool: Pool, groupId: string, userId: string): Promis
     [groupId, userId],
   );
   if (!r.rowCount) throw new TRPCError({ code: "FORBIDDEN", message: "você não é membro deste grupo" });
+}
+
+// Avisa quem palpitou assim que um bolão resolve por resolução manual
+// (resolveExtra — custom OU SCORE/NUMBER de mercado). Bolões WINNER de
+// mercado resolvem sozinhos e são avisados de outro lugar (ver
+// domain/trade.ts::resolveMarket) — este helper cobre só o caminho manual.
+// Reaproveita calcularVencedores (domain/bolao.ts), mesma função usada por
+// bolao.detail e por resolveMarket — nenhuma regra de "quem acertou" nova.
+async function notificarBolaoResolvido(
+  pool: Pool, bolaoId: string, groupId: string, marketId: string | null,
+  title: string, guessType: GuessType,
+  real: { outcomeId?: string | null; homeScore?: number | null; awayScore?: number | null; number?: number | null },
+): Promise<void> {
+  const palpites = await pool.query(
+    `SELECT bp.user_id, bp.guess_outcome_id, bp.guess_home_score, bp.guess_away_score, bp.guess_number,
+            u.email, u.email_notifications
+       FROM bolao_palpites bp JOIN users u ON u.id = bp.user_id
+      WHERE bp.bolao_id = $1`,
+    [bolaoId],
+  );
+  const vencedores = new Set(calcularVencedores(
+    palpites.rows.map((r) => ({
+      userId: r.user_id as string, guessOutcomeId: r.guess_outcome_id as string | null,
+      guessHomeScore: r.guess_home_score as number | null, guessAwayScore: r.guess_away_score as number | null,
+      guessNumber: r.guess_number !== null ? Number(r.guess_number) : null,
+    })),
+    guessType, real,
+  ));
+  const bolaoUrl = `${APP_CONFIG.webOrigin}/grupos/${groupId}/bolao/${bolaoId}`;
+  for (const row of palpites.rows) {
+    const uid = row.user_id as string;
+    const won = vencedores.has(uid);
+    const body = won
+      ? `Bolão "${title}" resolveu — você acertou! 🎉`
+      : `Bolão "${title}" resolveu — não foi dessa vez.`;
+    await notify(pool, uid, "BOLAO_RESOLVED", body, { groupId, bolaoId, marketId: marketId ?? undefined });
+    if (row.email_notifications) {
+      await sendTransactionalEmail(pool, {
+        to: row.email as string,
+        subject: `Bolão "${title}" resolveu — DitoFeito`,
+        html: `<p>${body}</p><p><a href="${bolaoUrl}">${bolaoUrl}</a></p>`,
+      });
+    }
+  }
 }
 
 const guessTypeSchema = z.enum(["WINNER", "SCORE", "NUMBER"]);
@@ -667,7 +712,8 @@ const groupsSubRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const b = await ctx.pool.query(
-          `SELECT b.created_by, b.guess_type, b.market_id, b.custom_close_at, m.status AS market_status
+          `SELECT b.created_by, b.guess_type, b.market_id, b.custom_close_at, b.group_id, b.custom_title,
+                  m.status AS market_status, m.title AS market_title
              FROM boloes b LEFT JOIN markets m ON m.id = b.market_id
             WHERE b.id = $1`,
           [input.bolaoId],
@@ -707,6 +753,10 @@ const groupsSubRouter = router({
             [input.bolaoId, input.homeScore ?? null, input.awayScore ?? null, input.number ?? null,
               input.customOutcomeId ?? null],
           );
+          await notificarBolaoResolvido(
+            ctx.pool, input.bolaoId, row.group_id as string, null, row.custom_title as string, guessType,
+            { outcomeId: input.customOutcomeId ?? null, homeScore: input.homeScore ?? null, awayScore: input.awayScore ?? null, number: input.number ?? null },
+          );
           return { ok: true };
         }
 
@@ -724,6 +774,10 @@ const groupsSubRouter = router({
               SET resolved_home_score = $2, resolved_away_score = $3, resolved_number = $4, resolved_at = now()
             WHERE id = $1`,
           [input.bolaoId, input.homeScore ?? null, input.awayScore ?? null, input.number ?? null],
+        );
+        await notificarBolaoResolvido(
+          ctx.pool, input.bolaoId, row.group_id as string, row.market_id as string, row.market_title as string, guessType,
+          { homeScore: input.homeScore ?? null, awayScore: input.awayScore ?? null, number: input.number ?? null },
         );
         return { ok: true };
       }),

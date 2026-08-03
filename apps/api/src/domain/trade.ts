@@ -18,9 +18,10 @@ import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   lmsrPrices, tradeCost, sharesForPoints,
-  brierScore, userImpliedProbs, skillDelta,
+  brierScore, userImpliedProbs, skillDelta, isStreakMilestone,
 } from "@ditofeito/core";
 import { notify } from "./notify.js";
+import { calcularVencedores } from "./bolao.js";
 import { sendTransactionalEmail } from "../lib/email.js";
 import { APP_CONFIG } from "../config.js";
 
@@ -327,7 +328,7 @@ export async function resolveMarket(
       // Sequência de acerto — coluna existia desde o F0, nunca foi escrita
       // (todo mundo mostrava "0" pra sempre no perfil/ranking). Acertou:
       // +1; errou: zera. streak_best só sobe, nunca desce.
-      await c.query(
+      const repUpd = await c.query(
         `INSERT INTO user_reputation AS ur
            (user_id, resolved_count, brier_sum, brier_mean, skill_score, streak_current, streak_best, updated_at)
          VALUES ($1, 1, $2, $2, $3, CASE WHEN $4 THEN 1 ELSE 0 END, CASE WHEN $4 THEN 1 ELSE 0 END, now())
@@ -338,9 +339,17 @@ export async function resolveMarket(
            skill_score = ur.skill_score + $3,
            streak_current = CASE WHEN $4 THEN ur.streak_current + 1 ELSE 0 END,
            streak_best = GREATEST(ur.streak_best, CASE WHEN $4 THEN ur.streak_current + 1 ELSE 0 END),
-           updated_at = now()`,
+           updated_at = now()
+         RETURNING streak_current`,
         [h.user_id, userBrier.toFixed(6), delta.toFixed(4), won],
       );
+      // Comemora o marco na hora — só sino, sem e-mail (bônus de
+      // gamificação, diferente da resolução em si que envolve pontos de
+      // verdade e por isso também manda e-mail, ver bloco abaixo).
+      const newStreak = Number(repUpd.rows[0].streak_current);
+      if (won && isStreakMilestone(newStreak)) {
+        await notify(c, h.user_id as string, "STREAK_MILESTONE", `Sequência de ${newStreak} acertos seguidos! 🔥`);
+      }
     }
 
     // Notifica quem tinha posição aberta — ganhador ou não, todo mundo que
@@ -368,6 +377,48 @@ export async function resolveMarket(
           subject: `"${title}" resolveu — DitoFeito`,
           html: `<p>${body}</p><p><a href="${marketUrl}">${marketUrl}</a></p>`,
         });
+      }
+    }
+
+    // Bolões "quem ganha" (WINNER) sobre esse mercado resolvem sozinhos no
+    // instante em que o mercado resolve — sem mutation própria (ver
+    // domain/bolao.ts::statusBolao). Ninguém avisava até agora, e é
+    // literalmente o momento de maior potencial de retorno: "apostei com
+    // meus amigos, será que ganhei?". Bolões SCORE/NUMBER sobre o mesmo
+    // mercado NÃO entram aqui — só resolvem via groups.bolao.resolveExtra,
+    // que tem o placar/número que este bloco não carrega.
+    const winnerBoloes = await c.query(
+      `SELECT id, group_id FROM boloes WHERE market_id = $1 AND guess_type = 'WINNER'`,
+      [p.marketId],
+    );
+    for (const bolao of winnerBoloes.rows) {
+      const palpites = await c.query(
+        `SELECT bp.user_id, bp.guess_outcome_id, u.email, u.email_notifications
+           FROM bolao_palpites bp JOIN users u ON u.id = bp.user_id
+          WHERE bp.bolao_id = $1`,
+        [bolao.id],
+      );
+      const vencedores = new Set(calcularVencedores(
+        palpites.rows.map((r) => ({ userId: r.user_id as string, guessOutcomeId: r.guess_outcome_id as string | null })),
+        "WINNER",
+        { outcomeId: p.winningOutcomeId },
+      ));
+      for (const row of palpites.rows) {
+        const uid = row.user_id as string;
+        const bolaoWon = vencedores.has(uid);
+        const bolaoBody = bolaoWon
+          ? `Bolão "${title}" resolveu: ${winLabel}. Você acertou — confira! 🎉`
+          : `Bolão "${title}" resolveu: ${winLabel}. Não foi dessa vez.`;
+        await notify(c, uid, "BOLAO_RESOLVED", bolaoBody, {
+          marketId: p.marketId, groupId: bolao.group_id as string, bolaoId: bolao.id as string,
+        });
+        if (row.email_notifications) {
+          emailQueue.push({
+            to: row.email as string,
+            subject: `Bolão "${title}" resolveu — DitoFeito`,
+            html: `<p>${bolaoBody}</p><p><a href="${marketUrl}">${marketUrl}</a></p>`,
+          });
+        }
       }
     }
 
