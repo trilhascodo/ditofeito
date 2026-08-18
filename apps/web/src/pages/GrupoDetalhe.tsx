@@ -24,6 +24,47 @@ const GUESS_TYPE_LABEL: Record<string, string> = {
   NUMBER: "Número (ex.: diferença de votos)",
 };
 
+type BolaoTemplate = {
+  id: string;
+  label: string;
+  guessType: "WINNER" | "SCORE" | "NUMBER";
+  outcomes?: string[];
+  titlePlaceholder: string;
+  criteriaPlaceholder: string;
+};
+
+// Cobre os formatos mais comuns de bolão informal — cada um só define
+// guessType + esqueleto de opções, os campos continuam editáveis depois de
+// escolhido. "Personalizado" não aparece na lista: é só não clicar em nenhum
+// e preencher tudo manual, igual já funcionava antes desses atalhos.
+const BOLAO_TEMPLATES: BolaoTemplate[] = [
+  {
+    id: "simnao", label: "Sim ou não", guessType: "WINNER", outcomes: ["Sim", "Não"],
+    titlePlaceholder: "ex.: Vai chover na festa junina do bairro?",
+    criteriaPlaceholder: "O que confirma o \"sim\" — pra não ter dúvida na hora de fechar",
+  },
+  {
+    id: "cabecaacabeca", label: "Cabeça a cabeça", guessType: "WINNER", outcomes: ["", ""],
+    titlePlaceholder: "ex.: Quem ganha o campeonato de sinuca do escritório",
+    criteriaPlaceholder: "Como se decide o vencedor entre os dois",
+  },
+  {
+    id: "enquete", label: "Enquete", guessType: "WINNER", outcomes: ["", "", ""],
+    titlePlaceholder: "ex.: Qual vai ser o próximo destino da viagem do grupo",
+    criteriaPlaceholder: "Como e quando o resultado vai ser confirmado",
+  },
+  {
+    id: "placar", label: "Placar exato", guessType: "SCORE",
+    titlePlaceholder: "ex.: Flamengo x Palmeiras — placar final",
+    criteriaPlaceholder: "ex.: Placar ao fim dos 90 minutos, sem prorrogação",
+  },
+  {
+    id: "numero", label: "Número", guessType: "NUMBER",
+    titlePlaceholder: "ex.: Quantos gols o Flamengo faz na rodada",
+    criteriaPlaceholder: "O que exatamente está sendo contado",
+  },
+];
+
 export function GrupoDetalhe() {
   const { user } = useAuth();
   const { groupId } = useParams<{ groupId: string }>();
@@ -44,6 +85,15 @@ export function GrupoDetalhe() {
   const [customCriteria, setCustomCriteria] = useState("");
   const [customCloseAt, setCustomCloseAt] = useState("");
   const [customOutcomes, setCustomOutcomes] = useState(["", ""]);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+
+  const activeTemplate = BOLAO_TEMPLATES.find((t) => t.id === templateId) ?? null;
+
+  function onPickTemplate(t: BolaoTemplate) {
+    setTemplateId(t.id);
+    setGuessType(t.guessType);
+    if (t.outcomes) setCustomOutcomes(t.outcomes);
+  }
 
   const { data: mercados } = trpc.market.list.useQuery(
     { q: busca, status: "OPEN" },
@@ -97,6 +147,7 @@ export function GrupoDetalhe() {
         setCustomCriteria("");
         setCustomCloseAt("");
         setCustomOutcomes(["", ""]);
+        setTemplateId(null);
       }
       setShowCriar(false);
       await utils.groups.detail.invalidate({ groupId });
@@ -235,7 +286,7 @@ export function GrupoDetalhe() {
               <button
                 type="button" className={bolaoKind === "MARKET" ? "btn" : "btn-outline"}
                 style={{ width: "auto", padding: "6px 14px" }}
-                onClick={() => setBolaoKind("MARKET")}
+                onClick={() => { setBolaoKind("MARKET"); setTemplateId(null); }}
               >
                 Mercado existente
               </button>
@@ -247,6 +298,24 @@ export function GrupoDetalhe() {
                 Evento do grupo
               </button>
             </div>
+
+            {bolaoKind === "CUSTOM" && (
+              <div className="field">
+                <label className="label">Modelo (opcional — só pra começar mais rápido)</label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {BOLAO_TEMPLATES.map((t) => (
+                    <button
+                      key={t.id} type="button"
+                      className={templateId === t.id ? "btn" : "btn-outline"}
+                      style={{ width: "auto", padding: "5px 12px", fontSize: 13 }}
+                      onClick={() => onPickTemplate(t)}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {bolaoKind === "MARKET" ? (
               <>
@@ -284,7 +353,8 @@ export function GrupoDetalhe() {
                 <div className="field">
                   <label className="label" htmlFor="custom-title">Título</label>
                   <input
-                    className="input" id="custom-title" placeholder="ex.: Quem ganha o campeonato de sinuca do escritório"
+                    className="input" id="custom-title"
+                    placeholder={activeTemplate?.titlePlaceholder ?? "ex.: Quem ganha o campeonato de sinuca do escritório"}
                     value={customTitle} onChange={(e) => setCustomTitle(e.target.value)}
                   />
                 </div>
@@ -292,7 +362,7 @@ export function GrupoDetalhe() {
                   <label className="label" htmlFor="custom-criteria">Critério de resolução</label>
                   <textarea
                     className="input" id="custom-criteria" rows={2}
-                    placeholder="O que define o resultado — pra não ter dúvida na hora de fechar"
+                    placeholder={activeTemplate?.criteriaPlaceholder ?? "O que define o resultado — pra não ter dúvida na hora de fechar"}
                     value={customCriteria} onChange={(e) => setCustomCriteria(e.target.value)}
                   />
                 </div>
@@ -308,7 +378,10 @@ export function GrupoDetalhe() {
 
             <div className="field">
               <label className="label" htmlFor="bolao-tipo">Tipo de palpite</label>
-              <select id="bolao-tipo" value={guessType} onChange={(e) => setGuessType(e.target.value as typeof guessType)}>
+              <select
+                id="bolao-tipo" value={guessType}
+                onChange={(e) => { setGuessType(e.target.value as typeof guessType); setTemplateId(null); }}
+              >
                 {Object.entries(GUESS_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
