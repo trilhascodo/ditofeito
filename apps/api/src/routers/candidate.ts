@@ -102,6 +102,21 @@ export const candidateRouter = router({
   // Moderação (F1: sem estado "REJEITADO" no schema — remover é a ação de
   // curadoria pra sugestão inválida/duplicada/spam).
   remove: resolverProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
+    // O gerador (jobs/gerador.ts) cria mercado/outcome pra candidato ainda
+    // PRE_ANUNCIADO (roda por cron, não espera moderação) — se isso já
+    // aconteceu, DELETE quebra na FK market_outcomes_candidate_id_fkey.
+    // Checa antes pra dar um erro que explica o motivo, em vez de deixar o
+    // erro cru do Postgres subir pro admin (ver AdminCandidates.tsx).
+    const outcome = await ctx.pool.query(
+      `SELECT 1 FROM market_outcomes WHERE candidate_id = $1 LIMIT 1`, [input.id],
+    );
+    if (outcome.rowCount)
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Esse pré-candidato já virou mercado (o gerador rodou antes da moderação) — "
+          + "não dá pra remover sem quebrar o mercado. Anule o mercado antes, se for o caso.",
+      });
+
     const r = await ctx.pool.query(
       `DELETE FROM candidates WHERE id = $1 AND candidacy_status = 'PRE_ANUNCIADO'`,
       [input.id],
