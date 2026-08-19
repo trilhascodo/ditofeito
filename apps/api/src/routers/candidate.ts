@@ -8,6 +8,8 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure, resolverProcedure, adminProcedure } from "../trpc/trpc.js";
 import { rodarGerador } from "../jobs/gerador.js";
+import { voidMarket } from "../domain/trade.js";
+import { throwAsTRPC } from "../trpc/errors.js";
 
 const OFFICE = z.enum([
   "PRESIDENTE", "GOVERNADOR", "SENADOR",
@@ -17,6 +19,12 @@ const CANDIDACY_STATUS = z.enum([
   "PRE_ANUNCIADO", "PRE_REIVINDICADO", "REGISTRADO",
   "DEFERIDO", "INDEFERIDO", "RENUNCIOU", "FALECIDO", "NAO_REGISTROU",
 ]);
+
+// Status que significam "saiu da disputa" — indeferimento, abandono,
+// não-registro (exclusão por não participação) ou falecimento. Fora desse
+// conjunto, o candidato segue na disputa (inclusive REGISTRADO/DEFERIDO), e
+// nenhum mercado é mexido.
+const EXIT_STATUSES = new Set(["INDEFERIDO", "RENUNCIOU", "FALECIDO", "NAO_REGISTROU"]);
 
 const suggestInput = z
   .object({
@@ -147,4 +155,66 @@ export const candidateRouter = router({
   runGerador: adminProcedure.mutation(async ({ ctx }) => {
     return rodarGerador(ctx.pool);
   }),
+
+  // Manutenção de status (desistência/indeferimento/não-registro/falecimento
+  // ANTES do lote automático pós-prazo — ver jobs/matcher.ts::markNonRegistered
+  // — ou pra corrigir manualmente a qualquer momento). Quando o novo status é
+  // de saída (EXIT_STATUSES), anula automaticamente o(s) mercado(s) BINÁRIO(S)
+  // "será eleito?" desse candidato (1 candidato = 1 outcome não-catchall no
+  // mercado — anular não afeta mais ninguém, é seguro). NUNCA anula um MULTI
+  // "quem vence a disputa" (vários candidatos como outcome — anular puniria
+  // quem apostou nos outros, que continuam concorrendo): esses ficam de fora,
+  // devolvidos em skippedMarkets pro admin decidir manualmente.
+  updateStatus: resolverProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        candidacyStatus: CANDIDACY_STATUS,
+        // Só exigido quando o novo status é de saída — é a justificativa/fonte
+        // que vai pro registro de anulação (resolutions.justification/source_url
+        // são NOT NULL), mesmo padrão de admin.ts::voidMarket.
+        justification: z.string().trim().min(10).optional(),
+        sourceUrl: z.string().url().optional(),
+      }).refine(
+        (d) => !EXIT_STATUSES.has(d.candidacyStatus) || (d.justification && d.sourceUrl),
+        { message: "justificativa e fonte são obrigatórias pra marcar saída da disputa", path: ["justification"] },
+      ),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const cand = await ctx.pool.query(`SELECT id FROM candidates WHERE id = $1`, [input.id]);
+      if (!cand.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "candidato não encontrado" });
+
+      await ctx.pool.query(
+        `UPDATE candidates SET candidacy_status = $2, updated_at = now() WHERE id = $1`,
+        [input.id, input.candidacyStatus],
+      );
+
+      const voidedMarkets: string[] = [];
+      const skippedMarkets: string[] = [];
+      if (EXIT_STATUSES.has(input.candidacyStatus)) {
+        const markets = await ctx.pool.query(
+          `SELECT m.id, m.slug, m.status,
+                  (SELECT count(*) FROM market_outcomes mo2
+                     WHERE mo2.market_id = m.id AND mo2.candidate_id IS NOT NULL) AS candidate_outcomes
+             FROM market_outcomes mo JOIN markets m ON m.id = mo.market_id
+            WHERE mo.candidate_id = $1`,
+          [input.id],
+        );
+        for (const row of markets.rows) {
+          const slug = row.slug as string;
+          if (Number(row.candidate_outcomes) > 1) { skippedMarkets.push(slug); continue; }
+          if (!["OPEN", "CLOSED"].includes(row.status as string)) continue; // já anulado/resolvido, nada a fazer
+          try {
+            await voidMarket(ctx.pool, {
+              marketId: row.id as string, resolverUserId: ctx.user.id,
+              justification: input.justification!, sourceUrl: input.sourceUrl!,
+            });
+            voidedMarkets.push(slug);
+          } catch (e) {
+            throwAsTRPC(e);
+          }
+        }
+      }
+      return { ok: true, voidedMarkets, skippedMarkets };
+    }),
 });
