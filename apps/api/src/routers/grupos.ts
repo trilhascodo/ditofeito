@@ -22,6 +22,12 @@ import { APP_CONFIG } from "../config.js";
 // spam/script é o mesmo tipo de mutation.
 const POST_RATE_LIMIT = { max: 5, windowMs: 60_000 };
 
+// Enquete pública (self-service, sem fila de aprovação — ver 043_enquete_publica.sql)
+// é a única mutation de bolão/grupo que qualquer usuário loga pode disparar
+// sem estar restrita a um grupo que ele já controla, então é o único ponto
+// dessa família que precisa de teto anti-spam por usuário.
+const ENQUETE_RATE_LIMIT = { max: 5, windowMs: 24 * 60 * 60_000 };
+
 // Pontos não-conversíveis (mesma moeda do SIGNUP_BONUS) — modestos de
 // propósito, é reputação, não incentivo financeiro.
 const REFERRAL_BONUS = { referrerPoints: 100, joineePoints: 50 };
@@ -202,11 +208,14 @@ const groupsSubRouter = router({
   // Pública — alimenta a página de convite (/grupos/entrar/:code) e o card OG
   // (http/inviteCard.ts) pra quem ainda nem tem conta. Só expõe o que já é
   // visível pra qualquer um que tenha o link: nada de lista de membros aqui.
+  // Quando kind='ENQUETE' (grupo de propósito único criado por createEnquete,
+  // ver 043_enquete_publica.sql), também devolve a pergunta/opções do bolão
+  // — é o que a tela de convite e o card mostram em vez de "N membros".
   previewByCode: publicProcedure
     .input(z.object({ code: z.string().trim().min(1) }))
     .query(async ({ ctx, input }) => {
       const g = await ctx.pool.query(
-        `SELECT g.name, u.display_name AS creator_name,
+        `SELECT g.id, g.name, g.kind, u.display_name AS creator_name,
                 (SELECT count(*) FROM group_members gm WHERE gm.group_id = g.id) AS member_count,
                 (SELECT count(*) FROM boloes b
                    LEFT JOIN markets m ON m.id = b.market_id
@@ -219,12 +228,98 @@ const groupsSubRouter = router({
       );
       if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
       const row = g.rows[0];
+      const kind = row.kind as "GRUPO" | "ENQUETE";
+
+      let enquete = null;
+      if (kind === "ENQUETE") {
+        const b = await ctx.pool.query(
+          `SELECT b.id, b.guess_type, b.custom_title, b.custom_criteria, b.custom_close_at,
+                  (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count
+             FROM boloes b WHERE b.group_id = $1 ORDER BY b.created_at LIMIT 1`,
+          [row.id],
+        );
+        if (b.rowCount) {
+          const outcomes = await ctx.pool.query(
+            `SELECT label FROM bolao_custom_outcomes WHERE bolao_id = $1 ORDER BY display_order`,
+            [b.rows[0].id],
+          );
+          enquete = {
+            title: b.rows[0].custom_title as string,
+            criteria: b.rows[0].custom_criteria as string,
+            guessType: b.rows[0].guess_type as GuessType,
+            closeAt: b.rows[0].custom_close_at as Date,
+            palpiteCount: Number(b.rows[0].palpite_count),
+            outcomes: outcomes.rows.map((o) => o.label as string),
+          };
+        }
+      }
+
       return {
+        kind,
         name: row.name as string,
         creatorDisplayName: row.creator_name as string,
         memberCount: Number(row.member_count),
         activeBoloesCount: Number(row.active_boloes_count),
+        enquete,
       };
+    }),
+
+  // Cria enquete pública num passo só — grupo de propósito único (kind=ENQUETE)
+  // + bolão CUSTOM dentro dele, na mesma transação. Sem fila de aprovação
+  // (self-service, ver conversa de produto), só rate limit por usuário —
+  // continua exigindo login (protectedProcedure), então quem vota é sempre
+  // conta verificada, mesmo vindo de um link do Instagram/Facebook.
+  createEnquete: protectedProcedure
+    .input(z.object({
+      guessType: guessTypeSchema,
+      title: z.string().trim().min(1).max(200),
+      criteria: z.string().trim().min(1).max(1000),
+      closeAt: z.string().datetime(),
+      outcomes: z.array(z.string().trim().min(1).max(80)).min(2).max(10).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!checkRateLimit(`enquete-create:${ctx.user.id}`, ENQUETE_RATE_LIMIT.max, ENQUETE_RATE_LIMIT.windowMs))
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Você já criou várias enquetes hoje — tenta de novo amanhã." });
+      if (new Date(input.closeAt) <= new Date())
+        throw new TRPCError({ code: "BAD_REQUEST", message: "o prazo precisa ser no futuro" });
+      if (input.guessType === "WINNER" && (!input.outcomes || input.outcomes.length < 2))
+        throw new TRPCError({ code: "BAD_REQUEST", message: "informe pelo menos 2 opções" });
+
+      const client = await ctx.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const inviteCode = randomBytes(6).toString("base64url");
+        const g = await client.query(
+          `INSERT INTO groups (name, invite_code, created_by, kind) VALUES ($1,$2,$3,'ENQUETE') RETURNING id`,
+          [input.title.slice(0, 80), inviteCode, ctx.user.id],
+        );
+        const groupId = g.rows[0].id as string;
+        await client.query(
+          `INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)`,
+          [groupId, ctx.user.id],
+        );
+        const b = await client.query(
+          `INSERT INTO boloes (group_id, created_by, guess_type, custom_title, custom_criteria, custom_close_at)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+          [groupId, ctx.user.id, input.guessType, input.title, input.criteria, input.closeAt],
+        );
+        const bolaoId = b.rows[0].id as string;
+        if (input.guessType === "WINNER") {
+          for (const [i, label] of input.outcomes!.entries()) {
+            await client.query(
+              `INSERT INTO bolao_custom_outcomes (bolao_id, label, display_order) VALUES ($1,$2,$3)`,
+              [bolaoId, label, i],
+            );
+          }
+        }
+        await client.query("COMMIT");
+        return { groupId, bolaoId, inviteCode };
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
     }),
 
   myGroups: protectedProcedure.query(async ({ ctx }) => {

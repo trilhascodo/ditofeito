@@ -59,6 +59,17 @@ export function Grupos() {
     <main className="page">
       <h1 style={{ fontFamily: "var(--serif)", fontSize: 24, marginBottom: 16 }}>Grupos</h1>
 
+      <div className="card" style={{ marginBottom: 20, borderColor: "var(--violeta)" }}>
+        <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 8px" }}>Quer divulgar uma enquete fora do DitoFeito?</h2>
+        <p className="hint-text" style={{ marginBottom: 12 }}>
+          Crie uma enquete com link pronto pra postar no Instagram, WhatsApp ou onde quiser —
+          com voto de conta verificada, sem gente palpitando duas vezes.
+        </p>
+        <Link to="/enquete/nova" className="btn" style={{ display: "inline-block", width: "auto", padding: "10px 18px" }}>
+          Criar enquete
+        </Link>
+      </div>
+
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 12px" }}>Criar grupo</h2>
         <form onSubmit={onCreate} style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>

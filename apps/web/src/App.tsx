@@ -34,6 +34,7 @@ import { Grupos } from "./pages/Grupos";
 import { GrupoDetalhe } from "./pages/GrupoDetalhe";
 import { EntrarGrupo } from "./pages/EntrarGrupo";
 import { BolaoDetalhe } from "./pages/BolaoDetalhe";
+import { CriarEnquete } from "./pages/CriarEnquete";
 
 const router = createBrowserRouter([
   {
@@ -55,6 +56,7 @@ const router = createBrowserRouter([
       { path: "/indice/:slug", element: <Indice /> },
       { path: "/solicitar-mercado", element: <SolicitarMercado /> },
       { path: "/grupos", element: <Grupos /> },
+      { path: "/enquete/nova", element: <CriarEnquete /> },
       { path: "/grupos/entrar/:code", element: <EntrarGrupo /> },
       { path: "/grupos/:groupId", element: <GrupoDetalhe /> },
       { path: "/grupos/:groupId/bolao/:bolaoId", element: <BolaoDetalhe /> },

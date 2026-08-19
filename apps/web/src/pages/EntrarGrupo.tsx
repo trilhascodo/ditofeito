@@ -39,29 +39,58 @@ export function EntrarGrupo() {
     );
   }
 
+  const isEnquete = preview.kind === "ENQUETE" && preview.enquete;
+  const GUESS_TYPE_LABEL: Record<string, string> = {
+    WINNER: "Quem ganha", SCORE: "Placar exato", NUMBER: "Palpite de número",
+  };
+
   return (
     <main className="page-narrow">
       <div className="card">
-        <span className="eyebrow">Você foi convidado</span>
-        <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "6px 0 4px" }}>{preview.name}</h1>
-        <p className="hint-text" style={{ marginBottom: 16 }}>
-          Criado por {preview.creatorDisplayName} · {preview.memberCount} membro{preview.memberCount === 1 ? "" : "s"}
-          {preview.activeBoloesCount > 0
-            ? ` · ${preview.activeBoloesCount} bolão${preview.activeBoloesCount === 1 ? "" : "ões"} rolando`
-            : ""}
-        </p>
+        <span className="eyebrow">{isEnquete ? "Enquete" : "Você foi convidado"}</span>
+        <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "6px 0 4px" }}>
+          {isEnquete ? preview.enquete!.title : preview.name}
+        </h1>
+
+        {isEnquete ? (
+          <>
+            <p className="hint-text" style={{ marginBottom: 8 }}>
+              De {preview.creatorDisplayName} · {GUESS_TYPE_LABEL[preview.enquete!.guessType]}
+              {" · "}{preview.enquete!.palpiteCount} palpite{preview.enquete!.palpiteCount === 1 ? "" : "s"} até agora
+            </p>
+            {preview.enquete!.guessType === "WINNER" && preview.enquete!.outcomes.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {preview.enquete!.outcomes.map((o) => (
+                  <span key={o} className="badge">{o}</span>
+                ))}
+              </div>
+            )}
+            <p className="hint-text" style={{ marginBottom: 16 }}>
+              Voto com conta verificada — sem gente palpitando duas vezes com conta fake.
+            </p>
+          </>
+        ) : (
+          <p className="hint-text" style={{ marginBottom: 16 }}>
+            Criado por {preview.creatorDisplayName} · {preview.memberCount} membro{preview.memberCount === 1 ? "" : "s"}
+            {preview.activeBoloesCount > 0
+              ? ` · ${preview.activeBoloesCount} bolão${preview.activeBoloesCount === 1 ? "" : "ões"} rolando`
+              : ""}
+          </p>
+        )}
 
         {user ? (
           <>
             {joinMut.error && <p className="error-text">{joinMut.error.message}</p>}
             <button className="btn" onClick={onEntrar} disabled={joinMut.isPending}>
-              {joinMut.isPending ? "Entrando…" : "Entrar no grupo"}
+              {joinMut.isPending ? "Entrando…" : isEnquete ? "Dar meu palpite" : "Entrar no grupo"}
             </button>
           </>
         ) : (
           <>
             <p className="hint-text" style={{ marginBottom: 12 }}>
-              Crie sua conta (ou entre, se já tem) pra participar do bolão com esse grupo.
+              {isEnquete
+                ? "Crie sua conta (ou entre, se já tem) pra dar seu palpite."
+                : "Crie sua conta (ou entre, se já tem) pra participar do bolão com esse grupo."}
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Link to="/cadastro" className="btn" style={{ flex: "1 1 auto", textAlign: "center" }} onClick={onQuerCriarConta}>
