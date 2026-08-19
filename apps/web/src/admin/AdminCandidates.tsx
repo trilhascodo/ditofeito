@@ -22,14 +22,18 @@ export function AdminCandidates() {
   const removeMutation = trpc.candidate.remove.useMutation();
   const runGeradorMutation = trpc.candidate.runGerador.useMutation();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeErr, setRemoveErr] = useState<string | null>(null);
   const [geradorMsg, setGeradorMsg] = useState<string | null>(null);
 
   async function onRemove(id: string) {
     if (!confirm("Remover essa sugestão de pré-candidato?")) return;
     setRemovingId(id);
+    setRemoveErr(null);
     try {
       await removeMutation.mutateAsync({ id });
       await utils.candidate.list.invalidate();
+    } catch (err) {
+      setRemoveErr(err instanceof Error ? err.message : "Erro ao remover sugestão");
     } finally {
       setRemovingId(null);
     }
@@ -79,6 +83,7 @@ export function AdminCandidates() {
         />
       </div>
 
+      {removeErr && <p className="error-text">{removeErr}</p>}
       {isLoading && <p className="hint-text">Carregando…</p>}
       {candidates && candidates.length === 0 && <p className="hint-text">Nada pendente com esse filtro.</p>}
       {candidates?.map((c) => (
