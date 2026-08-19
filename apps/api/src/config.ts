@@ -62,6 +62,19 @@ export const FINANCE_CONFIG = {
   brapiBaseUrl: "https://brapi.dev/api",
 } as const;
 
+// Compra de pontos pelo usuário comum (ver migrations/044_user_points_topup.sql
+// e domain/pointsPurchase.ts) — moeda recreativa gastável em previsão, nunca
+// resgatável em dinheiro (sem saque em lugar nenhum do sistema). Taxa e
+// limites deliberadamente conservadores no lançamento; ajustar aqui, nunca
+// espalhar o número em outro lugar.
+export const POINTS_PURCHASE_CONFIG = {
+  /** 100 pontos por R$1 — R$10 compra o mesmo tanto que o bônus de cadastro
+   *  (AUTH_CONFIG.signupBonusPoints), referência de escala intuitiva. */
+  pointsPerCent: 1,
+  minTopupCents: 500,    // R$ 5,00
+  maxTopupCents: 20_000, // R$ 200,00 — bem abaixo do teto B2B do sponsor
+} as const;
+
 export const MERCADOPAGO_CONFIG = {
   /** Vazio (dev/local) = recarga de saldo desligada no front, mesmo padrão
    *  de TURNSTILE_SECRET_KEY/GOOGLE_CLIENT_ID — ausência de chave desliga a

@@ -233,6 +233,12 @@ export function MarketPage() {
     }
   }
 
+  // TradeError SALDO_INSUFICIENTE (domain/trade.ts::appendLedger) sempre
+  // começa com "Saldo" — sem código TRPC distinto pra isso (só CPF_PENDENTE
+  // ganhou um, por ser um fluxo próprio), então casa pelo prefixo da mensagem
+  // pra oferecer o atalho de comprar mais pontos sem duplicar o texto do erro.
+  const saldoInsuficiente = tradeError?.startsWith("Saldo") ?? false;
+
   async function onPostComment() {
     const body = commentBody.trim();
     if (!body) return;
@@ -462,7 +468,12 @@ export function MarketPage() {
                     <div className="row"><span>Se acertar, recebe</span><b>{fmtPoints(preview.shares)} pts</b></div>
                   </div>
                 )}
-                {tradeError && <p className="error-text" aria-live="polite">{tradeError}</p>}
+                {tradeError && (
+                  <p className="error-text" aria-live="polite">
+                    {tradeError}
+                    {saldoInsuficiente && <> — <Link to="/pontos/comprar">comprar mais pontos</Link></>}
+                  </p>
+                )}
                 {needsCpf ? (
                   <CpfPrompt onDone={() => { setNeedsCpf(false); onRegistrar(); }} />
                 ) : (

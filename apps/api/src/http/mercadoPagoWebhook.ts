@@ -19,6 +19,7 @@ import type { Pool } from "pg";
 import { MERCADOPAGO_CONFIG } from "../config.js";
 import { getPayment } from "../lib/mercadoPago.js";
 import { creditApprovedPayment } from "../domain/sponsorBilling.js";
+import { creditApprovedUserPayment } from "../domain/pointsPurchase.js";
 import { asyncHandler } from "./asyncHandler.js";
 
 // Formato documentado do Mercado Pago: header "ts=<epoch>,v1=<hmac-hex>",
@@ -66,26 +67,38 @@ export function mountMercadoPagoWebhook(app: express.Express, pool: Pool) {
       return res.status(200).json({ ok: true }); // MP reentrega; nosso log já registrou
     }
 
-    const payment = await pool.query(
-      `SELECT id, sponsor_id, amount_cents, status FROM sponsor_payments WHERE mp_payment_id = $1`,
+    // Duas tabelas possíveis pro mesmo mp_payment_id (nunca a mesma cobrança
+    // nas duas — sponsor_payments é B2B, user_payments é compra de pontos do
+    // usuário comum, ver migrations/044_user_points_topup.sql) — checa as
+    // duas porque o webhook não sabe de antemão qual fluxo gerou a cobrança.
+    const sponsorPayment = await pool.query(
+      `SELECT id, amount_cents, status FROM sponsor_payments WHERE mp_payment_id = $1`,
       [String(dataId)],
     );
+    const table = sponsorPayment.rowCount ? "sponsor_payments" : "user_payments";
+    const payment = sponsorPayment.rowCount
+      ? sponsorPayment
+      : await pool.query(
+          `SELECT id, amount_cents, status FROM user_payments WHERE mp_payment_id = $1`,
+          [String(dataId)],
+        );
     if (!payment.rowCount) return res.status(200).json({ ok: true }); // não é nosso (ou já foi limpo)
     const row = payment.rows[0];
 
     if (status === "approved" && row.status === "PENDING") {
-      // creditApprovedPayment é idempotente (WHERE status='PENDING') — cobre
-      // tanto reentrega do próprio webhook quanto cartão que já foi
-      // creditado na hora pelo branch síncrono de createTopup (ver
-      // domain/sponsorBilling.ts).
+      // creditApprovedPayment/creditApprovedUserPayment são idempotentes
+      // (WHERE status='PENDING') — cobre tanto reentrega do próprio webhook
+      // quanto cartão que já foi creditado na hora pelo branch síncrono de
+      // createTopup (ver domain/sponsorBilling.ts e domain/pointsPurchase.ts).
       try {
-        await creditApprovedPayment(pool, row.id);
+        if (table === "sponsor_payments") await creditApprovedPayment(pool, row.id);
+        else await creditApprovedUserPayment(pool, row.id);
       } catch (e) {
-        console.error("[mercadopago-webhook] falha ao creditar saldo", dataId, e);
+        console.error("[mercadopago-webhook] falha ao creditar", table, dataId, e);
       }
     } else if ((status === "rejected" || status === "cancelled") && row.status === "PENDING") {
       await pool.query(
-        `UPDATE sponsor_payments SET status = $2 WHERE id = $1 AND status = 'PENDING'`,
+        `UPDATE ${table} SET status = $2 WHERE id = $1 AND status = 'PENDING'`,
         [row.id, status === "rejected" ? "REJECTED" : "CANCELLED"],
       );
     }

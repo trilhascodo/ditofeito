@@ -24,6 +24,7 @@ const REASON_LABEL: Record<string, string> = {
   ADMIN_ADJUST: "Ajuste administrativo",
   REFERRAL_BONUS: "Alguém entrou no seu grupo",
   GROUP_JOIN_BONUS: "Entrou em um grupo por convite",
+  TOPUP: "Compra de pontos",
 };
 
 const MARKET_STATUS_LABEL: Record<string, string> = {
@@ -213,7 +214,10 @@ export function Profile() {
           <div className="mono" style={{ fontSize: 28, fontWeight: 600, color: "var(--violeta)" }}>
             {meLoading ? "—" : `${fmt(me?.balance ?? 0)} pts`}
           </div>
-          <p className="hint-text" style={{ margin: 0 }}>saldo</p>
+          <p className="hint-text" style={{ margin: "0 0 6px" }}>saldo</p>
+          <Link to="/pontos/comprar" className="btn-outline" style={{ display: "inline-block", width: "auto", padding: "6px 14px", fontSize: 13 }}>
+            Comprar pontos
+          </Link>
         </div>
       </div>
 

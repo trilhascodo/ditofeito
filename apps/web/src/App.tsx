@@ -35,6 +35,7 @@ import { GrupoDetalhe } from "./pages/GrupoDetalhe";
 import { EntrarGrupo } from "./pages/EntrarGrupo";
 import { BolaoDetalhe } from "./pages/BolaoDetalhe";
 import { CriarEnquete } from "./pages/CriarEnquete";
+import { ComprarPontos } from "./pages/ComprarPontos";
 
 const router = createBrowserRouter([
   {
@@ -57,6 +58,7 @@ const router = createBrowserRouter([
       { path: "/solicitar-mercado", element: <SolicitarMercado /> },
       { path: "/grupos", element: <Grupos /> },
       { path: "/enquete/nova", element: <CriarEnquete /> },
+      { path: "/pontos/comprar", element: <ComprarPontos /> },
       { path: "/grupos/entrar/:code", element: <EntrarGrupo /> },
       { path: "/grupos/:groupId", element: <GrupoDetalhe /> },
       { path: "/grupos/:groupId/bolao/:bolaoId", element: <BolaoDetalhe /> },

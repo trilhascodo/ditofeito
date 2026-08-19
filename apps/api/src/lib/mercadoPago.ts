@@ -162,6 +162,26 @@ export async function createCardPayment(input: {
   };
 }
 
+// status_detail documentados pelo Mercado Pago pra recusa de cartão
+// (checkout-api-payments/how-tos/reasons-for-rejection) — compartilhado por
+// todo fluxo de cartão do produto (sponsor e usuário comum), pra não duplicar
+// a mesma tabela em cada router que usa createCardPayment.
+export const CARD_REJECTION_MESSAGES: Record<string, string> = {
+  cc_rejected_bad_filled_card_number: "Número do cartão incorreto — confira e tente de novo.",
+  cc_rejected_bad_filled_date: "Validade do cartão incorreta — confira e tente de novo.",
+  cc_rejected_bad_filled_security_code: "Código de segurança (CVV) incorreto — confira e tente de novo.",
+  cc_rejected_bad_filled_other: "Dados do cartão incorretos — confira e tente de novo.",
+  cc_rejected_call_for_authorize: "Seu banco pediu autorização manual — ligue pra central do cartão ou use outro método.",
+  cc_rejected_card_disabled: "Cartão desabilitado — ligue pra central do seu banco ou use outro cartão.",
+  cc_rejected_duplicated_payment: "Já existe uma cobrança igual em andamento — aguarde ou confira o extrato antes de tentar de novo.",
+  cc_rejected_insufficient_amount: "Saldo/limite insuficiente no cartão.",
+  cc_rejected_invalid_installments: "Esse cartão não aceita pagamento à vista — tente outro cartão.",
+  cc_rejected_max_attempts: "Número máximo de tentativas atingido — tente outro cartão ou use Pix/boleto.",
+  cc_rejected_blacklist: "Pagamento não autorizado pelo seu banco.",
+  cc_rejected_high_risk: "Pagamento recusado por segurança — tente outro cartão ou use Pix/boleto.",
+  cc_rejected_other_reason: "Pagamento recusado pelo seu banco — tente outro cartão ou use Pix/boleto.",
+};
+
 /** Fonte de verdade de status — sempre chamar antes de creditar saldo por um
  *  webhook, nunca confiar no `status` que vem no corpo do POST recebido. */
 export async function getPayment(mpPaymentId: string): Promise<{ status: string }> {
