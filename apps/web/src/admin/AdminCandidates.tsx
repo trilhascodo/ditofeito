@@ -95,12 +95,18 @@ export function AdminCandidates() {
               <a href={c.source_url} target="_blank" rel="noopener noreferrer">fonte</a>
             </div>
           </span>
-          <button
-            className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
-            onClick={() => onRemove(c.id)} disabled={removingId === c.id}
-          >
-            {removingId === c.id ? "Removendo…" : "Remover"}
-          </button>
+          {c.has_market_outcome ? (
+            <span className="hint-text" style={{ fontSize: 13, textAlign: "right", maxWidth: 220 }}>
+              Já virou mercado — registro permanente, não dá pra remover a sugestão.
+            </span>
+          ) : (
+            <button
+              className="btn-outline btn-danger" style={{ padding: "8px 14px", fontSize: 13 }}
+              onClick={() => onRemove(c.id)} disabled={removingId === c.id}
+            >
+              {removingId === c.id ? "Removendo…" : "Remover"}
+            </button>
+          )}
         </div>
       ))}
     </div>

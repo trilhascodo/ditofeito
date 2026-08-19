@@ -91,7 +91,13 @@ export const candidateRouter = router({
       const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
       const r = await ctx.pool.query(
         `SELECT id, name, public_name, party, office, uf, municipality_ibge,
-                photo_url, candidacy_status, source_url, updated_at
+                photo_url, candidacy_status, source_url, updated_at,
+                -- gerador (jobs/gerador.ts) roda por cron e pode criar mercado pra
+                -- candidato ainda PRE_ANUNCIADO, antes de qualquer moderação — a fila
+                -- (AdminCandidates.tsx) usa isso pra não oferecer "Remover" num
+                -- candidato que já não pode mais sair do banco (FK
+                -- market_outcomes_candidate_id_fkey, ver candidate.remove abaixo).
+                EXISTS(SELECT 1 FROM market_outcomes mo WHERE mo.candidate_id = candidates.id) AS has_market_outcome
            FROM candidates ${where}
           ORDER BY updated_at DESC LIMIT 100`,
         params,
@@ -111,10 +117,16 @@ export const candidateRouter = router({
       `SELECT 1 FROM market_outcomes WHERE candidate_id = $1 LIMIT 1`, [input.id],
     );
     if (outcome.rowCount)
+      // Anular o mercado NÃO libera isso — voidMarket só muda markets.status
+      // e devolve pontos, nunca apaga market_outcomes (mesmo espírito de
+      // market.remove: publicado é registro permanente, ver comentário lá).
+      // Então não existe caminho pra remover a sugestão depois desse ponto —
+      // nem sugere um passo intermediário que não resolveria.
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Esse pré-candidato já virou mercado (o gerador rodou antes da moderação) — "
-          + "não dá pra remover sem quebrar o mercado. Anule o mercado antes, se for o caso.",
+          + "o registro fica permanente, igual qualquer mercado publicado (anular não muda isso, "
+          + "só devolve os pontos de quem apostou). Não é mais uma sugestão pendente pra remover.",
       });
 
     const r = await ctx.pool.query(
