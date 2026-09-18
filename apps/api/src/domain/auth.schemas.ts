@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidCpf, onlyDigits, hasMinAge } from "@ditofeito/core";
+import { isValidCpf, onlyDigits, hasMinAge, normalizeSource } from "@ditofeito/core";
 import { AUTH_CONFIG } from "../config.js";
 
 // Cadastro em camadas: CPF NÃO entra aqui de propósito — é pedido só no
@@ -10,6 +10,11 @@ const birthDateSchema = z.string().date("Data inválida").refine(
   (d) => hasMinAge(d, AUTH_CONFIG.minAgeYears),
   `Idade mínima: ${AUTH_CONFIG.minAgeYears} anos`,
 );
+
+// Canal de onde a pessoa chegou (045_traffic_source.sql). Leniente de
+// propósito: valor fora do padrão vira undefined em vez de reprovar o
+// cadastro — atribuição nunca pode custar uma conta.
+const sourceSchema = z.string().max(200).optional().catch(undefined).transform(normalizeSource);
 
 // Regra de handle espelha o CHECK de users.handle no schema (packages/db/migrations/001_schema.sql).
 export const signupSchema = z.object({
@@ -24,6 +29,7 @@ export const signupSchema = z.object({
   // priorizar a própria grade de mercados por região.
   regionUf: z.string().length(2).optional(),
   regionCity: z.string().trim().max(120).optional(),
+  source: sourceSchema,
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
@@ -71,5 +77,6 @@ export const oauthCompleteSchema = z.object({
   captchaToken: z.string().min(1, "Captcha obrigatório"),
   regionUf: z.string().length(2).optional(),
   regionCity: z.string().trim().max(120).optional(),
+  source: sourceSchema,
 });
 export type OauthCompleteInput = z.infer<typeof oauthCompleteSchema>;

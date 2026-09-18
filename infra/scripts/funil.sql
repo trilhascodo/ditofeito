@@ -78,8 +78,16 @@ SELECT regexp_replace(path, '^/(m|grupos|indice|convite)/.*', '/\1/*') AS pagina
        count(*) AS views, count(DISTINCT visitor_hash || dia) AS visitantes
   FROM pv GROUP BY 1 ORDER BY views DESC LIMIT 15;
 
+\echo '== 7b. POR CANAL (?origem= / utm / fbclid — migration 045) =='
+SELECT coalesce(src, '(sem marcacao)') AS canal, count(*) AS visitantes,
+       count(*) FILTER (WHERE viu_cadastro) AS chegou_no_cadastro
+  FROM (SELECT visitor_hash, dia, (array_agg(source) FILTER (WHERE source IS NOT NULL))[1] AS src,
+               bool_or(path = '/cadastro') AS viu_cadastro
+          FROM pv GROUP BY visitor_hash, dia) t
+ GROUP BY 1 ORDER BY visitantes DESC LIMIT 15;
+
 \echo '== 8. CONTAS (todas) =='
-SELECT u.created_at::date AS criada, u.role, u.email_verified_at IS NOT NULL AS email_ok,
+SELECT u.created_at::date AS criada, u.role, u.signup_source AS origem, u.email_verified_at IS NOT NULL AS email_ok,
        EXISTS (SELECT 1 FROM oauth_identities o WHERE o.user_id = u.id) AS google,
        (SELECT max(s.created_at)::date FROM sessions s WHERE s.user_id = u.id) AS ultima_sessao
   FROM users u ORDER BY u.created_at;

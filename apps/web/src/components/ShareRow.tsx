@@ -33,6 +33,26 @@ const CHANNEL_LABEL: Record<ShareChannel, string> = {
   COPY_LINK: "Copiar link", NATIVE: "Mais opções",
 };
 
+// Link compartilhado sai com ?origem=<canal> (ver 045_traffic_source.sql):
+// app de mensagem não manda referrer, então sem isso 95% das visitas caíam
+// como "direto" no funil. Só marca link do próprio site.
+const ORIGEM: Record<ShareChannel, string> = {
+  WHATSAPP: "whatsapp", TELEGRAM: "telegram", FACEBOOK: "facebook", X: "x",
+  LINKEDIN: "linkedin", PINTEREST: "pinterest", SNAPCHAT: "snapchat",
+  INSTAGRAM: "instagram", COPY_LINK: "link", NATIVE: "compartilhar",
+};
+
+function withOrigem(url: string, channel: ShareChannel): string {
+  try {
+    const u = new URL(url);
+    if (u.origin !== window.location.origin) return url;
+    u.searchParams.set("origem", ORIGEM[channel]);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 function ShareIcon({ channel }: { channel: ShareChannel }) {
   return (
     <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor"
@@ -65,7 +85,7 @@ export function ShareRow({
   }
 
   async function onCopy() {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(withOrigem(url, "COPY_LINK"));
     fire("COPY_LINK");
     flashCopied("COPY_LINK");
   }
@@ -73,25 +93,26 @@ export function ShareRow({
   // link abre o app já com texto/URL prontos) — o único caminho real a
   // partir do navegador é copiar o link pra colar no Story/bio/DM na mão.
   async function onInstagram() {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(withOrigem(url, "INSTAGRAM"));
     fire("INSTAGRAM");
     flashCopied("INSTAGRAM");
   }
   function onNative() {
-    navigator.share?.({ title: text, url }).then(() => fire("NATIVE")).catch(() => {});
+    navigator.share?.({ title: text, url: withOrigem(url, "NATIVE") }).then(() => fire("NATIVE")).catch(() => {});
   }
 
+  const u = (channel: ShareChannel) => withOrigem(url, channel);
   const links: { channel: ShareChannel; href: string }[] = [
-    { channel: "WHATSAPP", href: `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}` },
-    { channel: "TELEGRAM", href: `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}` },
-    { channel: "FACEBOOK", href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
-    { channel: "X", href: `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}` },
-    { channel: "LINKEDIN", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+    { channel: "WHATSAPP", href: `https://wa.me/?text=${encodeURIComponent(`${text} ${u("WHATSAPP")}`)}` },
+    { channel: "TELEGRAM", href: `https://t.me/share/url?url=${encodeURIComponent(u("TELEGRAM"))}&text=${encodeURIComponent(text)}` },
+    { channel: "FACEBOOK", href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u("FACEBOOK"))}` },
+    { channel: "X", href: `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(u("X"))}` },
+    { channel: "LINKEDIN", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u("LINKEDIN"))}` },
     ...(imageUrl ? [{
       channel: "PINTEREST" as const,
-      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(text)}&media=${encodeURIComponent(imageUrl)}`,
+      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(u("PINTEREST"))}&description=${encodeURIComponent(text)}&media=${encodeURIComponent(imageUrl)}`,
     }] : []),
-    { channel: "SNAPCHAT", href: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(url)}` },
+    { channel: "SNAPCHAT", href: `https://www.snapchat.com/scan?attachmentUrl=${encodeURIComponent(u("SNAPCHAT"))}` },
   ];
 
   return (

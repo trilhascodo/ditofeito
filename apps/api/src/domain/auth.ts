@@ -43,7 +43,7 @@ function hashToken(raw: string): string {
 // ------------------------------ Cadastro --------------------------------------
 export async function signup(
   pool: Pool, input: SignupInput, meta: { ip?: string; userAgent?: string } = {},
-): Promise<{ userId: string }> {
+): Promise<{ userId: string; token: string; expiresAt: Date; user: SessionUser }> {
   const captchaOk = await verifyCaptcha(input.captchaToken, meta.ip);
   if (!captchaOk) throw new AuthError("CAPTCHA_INVALIDO", "Não foi possível validar o captcha");
   if (isDisposableEmail(input.email))
@@ -69,11 +69,11 @@ export async function signup(
 
     const u = await client.query(
       `INSERT INTO users (handle, display_name, email, password_hash, birth_date, signup_ip,
-                          signup_user_agent, region_uf, region_city)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+                          signup_user_agent, region_uf, region_city, signup_source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [input.handle, input.displayName, input.email, passwordHash, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
-        input.regionUf ?? null, input.regionCity?.trim() || null]);
+        input.regionUf ?? null, input.regionCity?.trim() || null, input.source ?? null]);
     userId = u.rows[0].id;
 
     await appendLedger(client, userId, AUTH_CONFIG.signupBonusPoints, "SIGNUP_BONUS", null, null);
@@ -97,12 +97,21 @@ export async function signup(
   await sendTransactionalEmail(pool, {
     to: input.email,
     subject: "Confirme seu e-mail — DitoFeito",
-    html: `<p>Pode escrever. Confirme seu e-mail para registrar previsões:</p>
+    html: `<p>Pode escrever. Confirme seu e-mail pra garantir o acesso à sua conta:</p>
            <p><a href="${link}">${link}</a></p>
            <p>Se não foi você, ignore esta mensagem.</p>`,
   }).catch((e) => console.error("[auth] envio de verificação falhou", e));
 
-  return { userId };
+  // Já sai logado. login() nunca exigiu e-mail confirmado (só o painel de
+  // patrocinador exige, sponsor.ts) — mandar a pessoa confirmar e depois
+  // voltar pra logar era um passo que não protegia nada e perdia gente: no
+  // funil de 2026-09 nenhuma conta de e-mail+senha chegou a confirmar.
+  const { token, expiresAt } = await issueSession(pool, userId, meta);
+  const user: SessionUser = {
+    id: userId, handle: input.handle, displayName: input.displayName, role: "USER",
+    emailVerified: false, sponsorId: null, cpfVerified: false,
+  };
+  return { userId, token, expiresAt, user };
 }
 
 // -------------------------- Sessão (compartilhado) -------------------------------
@@ -242,12 +251,12 @@ export async function oauthGoogleComplete(
 
     const u = await client.query(
       `INSERT INTO users (handle, display_name, email, birth_date, signup_ip, signup_user_agent,
-                          region_uf, region_city, email_verified_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+                          region_uf, region_city, email_verified_at, signup_source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [input.handle, input.displayName, identity.email, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
         input.regionUf ?? null, input.regionCity?.trim() || null,
-        identity.emailVerified ? new Date() : null]);
+        identity.emailVerified ? new Date() : null, input.source ?? null]);
     userId = u.rows[0].id;
 
     await client.query(

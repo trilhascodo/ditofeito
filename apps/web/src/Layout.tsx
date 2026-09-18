@@ -5,6 +5,7 @@ import { useAuth } from "./lib/useAuth";
 import { trpc } from "./lib/trpc";
 import { NotificationBell } from "./components/NotificationBell";
 import { PENDING_INVITE_KEY } from "./pages/EntrarGrupo";
+import { captureSource, visitSource, rememberReturnTo, consumeReturnTo } from "./lib/attribution";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
 
@@ -23,7 +24,8 @@ function usePageViewTracking() {
         return undefined;
       }
     })();
-    track.mutate({ path: location.pathname, referrerHost });
+    captureSource(location.search);
+    track.mutate({ path: location.pathname, referrerHost, source: visitSource() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 }
@@ -34,14 +36,23 @@ function usePageViewTracking() {
 // /grupos/entrar/:code — este efeito roda em toda a SPA e consome o convite
 // pendente assim que a sessão vira autenticada, não importa por onde entrou
 // (usuário/senha, Google, ou confirmação de e-mail).
+// Mesmo gancho cobre o "voltar pra onde estava" (lib/attribution.ts): quem
+// clicou em criar conta num mercado e só logou depois (outra aba, link do
+// e-mail) volta pro mercado. Login/Cadastro já consomem isso na hora; aqui é
+// a rede de segurança. Convite pendente tem prioridade — leva pro grupo.
 function usePendingInviteAutoJoin(userId: string | undefined) {
   const navigate = useNavigate();
   const joinMut = trpc.groups.joinByCode.useMutation();
   useEffect(() => {
     if (!userId) return;
     const code = localStorage.getItem(PENDING_INVITE_KEY);
-    if (!code) return;
+    if (!code) {
+      const back = consumeReturnTo();
+      if (back) navigate(back);
+      return;
+    }
     localStorage.removeItem(PENDING_INVITE_KEY);
+    consumeReturnTo();
     joinMut.mutateAsync({ code }).then((g) => navigate(`/grupos/${g.id}`)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -50,6 +61,7 @@ function usePendingInviteAutoJoin(userId: string | undefined) {
 export function Layout() {
   const { user, isLoading, refresh } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [busca, setBusca] = useState("");
   usePageViewTracking();
   usePendingInviteAutoJoin(user?.id);
@@ -101,8 +113,10 @@ export function Layout() {
               </>
             ) : (
               <>
-                <Link to="/entrar">Entrar</Link>
-                <Link to="/cadastro" className="btn-small">Cadastrar</Link>
+                <Link to="/entrar" onClick={() => rememberReturnTo(location.pathname)}>Entrar</Link>
+                <Link to="/cadastro" className="btn-small" onClick={() => rememberReturnTo(location.pathname)}>
+                  Criar conta
+                </Link>
               </>
             )}
           </div>

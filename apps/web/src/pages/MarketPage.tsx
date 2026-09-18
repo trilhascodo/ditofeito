@@ -10,6 +10,8 @@ import { SocialLinks } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
 import { CpfPrompt } from "../components/CpfPrompt";
 import { ShareRow } from "../components/ShareRow";
+import { SignupCta } from "../components/SignupCta";
+import { rememberReturnTo } from "../lib/attribution";
 import { getCurrentUf } from "../lib/useUfGeolocation";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
@@ -429,11 +431,7 @@ export function MarketPage() {
         <aside className="painel">
           <div className="card">
             {!user ? (
-              <>
-                <h2>O que você diz?</h2>
-                <p className="sub">Entre para registrar sua previsão.</p>
-                <Link to="/entrar" className="btn" style={{ display: "block", textAlign: "center" }}>Entrar</Link>
-              </>
+              <SignupCta returnPath={`/m/${market.slug}`} />
             ) : !canTrade ? (
               <>
                 <h2>O que você diz?</h2>
@@ -534,7 +532,9 @@ export function MarketPage() {
           </div>
         ) : (
           <p className="hint-text" style={{ marginBottom: 20 }}>
-            <Link to="/entrar">Entre</Link> pra comentar.
+            <Link to="/cadastro" onClick={() => rememberReturnTo(`/m/${market.slug}`)}>Crie sua conta grátis</Link>
+            {" "}ou{" "}
+            <Link to="/entrar" onClick={() => rememberReturnTo(`/m/${market.slug}`)}>entre</Link> pra comentar.
           </p>
         )}
         {!comments || comments.length === 0 ? (

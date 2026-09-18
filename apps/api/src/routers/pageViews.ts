@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeSource } from "@ditofeito/core";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { visitorHash } from "../lib/visitorHash.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
@@ -14,14 +15,17 @@ export const pageViewsRouter = router({
     .input(z.object({
       path: z.string().trim().min(1).max(500),
       referrerHost: z.string().trim().max(200).optional(),
+      // Canal da visita (?origem=/utm_source/fbclid — ver 045). Leniente:
+      // valor inválido vira null, nunca derruba o track.
+      source: z.string().max(200).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const hash = visitorHash(ctx.ip, ctx.userAgent);
       // Generoso pra navegação real (uma troca de rota por vez); barra script.
       if (!checkRateLimit(`pageview:${hash}`, 30, 60_000)) return { ok: true };
       await ctx.pool.query(
-        `INSERT INTO page_views (path, referrer_host, visitor_hash) VALUES ($1,$2,$3)`,
-        [input.path, input.referrerHost ?? null, hash],
+        `INSERT INTO page_views (path, referrer_host, visitor_hash, source) VALUES ($1,$2,$3,$4)`,
+        [input.path, input.referrerHost ?? null, hash, normalizeSource(input.source) ?? null],
       );
       return { ok: true };
     }),
@@ -60,6 +64,22 @@ export const pageViewsRouter = router({
         [window],
       );
 
+      // Por visitante-dia (não por pageview): quem chegou por um canal conta
+      // uma vez, não uma por página que navegou depois.
+      const topSources = await ctx.pool.query(
+        `SELECT source, count(DISTINCT visitor_hash || date_trunc('day', created_at)::text)::int AS visitors
+           FROM page_views WHERE created_at > now() - $1::interval AND source IS NOT NULL
+          GROUP BY source ORDER BY visitors DESC LIMIT 10`,
+        [window],
+      );
+
+      const signupSources = await ctx.pool.query(
+        `SELECT coalesce(signup_source, '(sem origem)') AS source, count(*)::int AS signups
+           FROM users WHERE created_at > now() - $1::interval AND role = 'USER'
+          GROUP BY 1 ORDER BY signups DESC LIMIT 10`,
+        [window],
+      );
+
       return {
         days,
         views: totals.rows[0].views as number,
@@ -70,6 +90,12 @@ export const pageViewsRouter = router({
         topPaths: topPaths.rows.map((row) => ({ path: row.path as string, views: row.views as number })),
         topReferrers: topReferrers.rows.map((row) => ({
           referrerHost: row.referrer_host as string, views: row.views as number,
+        })),
+        topSources: topSources.rows.map((row) => ({
+          source: row.source as string, visitors: row.visitors as number,
+        })),
+        signupSources: signupSources.rows.map((row) => ({
+          source: row.source as string, signups: row.signups as number,
         })),
       };
     }),

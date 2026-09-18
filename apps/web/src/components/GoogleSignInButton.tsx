@@ -50,8 +50,12 @@ export function GoogleSignInButton({ onCredential }: { onCredential: (credential
         client_id: clientId,
         callback: (resp) => onCredential(resp.credential),
       });
+      // Largura fixa de 320 estourava cartões estreitos (painel lateral do
+      // mercado no celular) — acompanha o container, dentro do limite do
+      // Google (200–400px).
+      const width = Math.max(200, Math.min(320, ref.current.offsetWidth || 320));
       window.google.accounts.id.renderButton(ref.current, {
-        theme: "outline", size: "large", text: "continue_with", width: 320,
+        theme: "outline", size: "large", text: "continue_with", width,
       });
       // eslint-disable-next-line @typescript-eslint/no-empty-function
     }).catch(() => {});

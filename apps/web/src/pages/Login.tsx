@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login, oauthGoogleLogin } from "../lib/auth";
 import { useAuth } from "../lib/useAuth";
+import { consumeReturnTo } from "../lib/attribution";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { GoogleCompleteProfileForm } from "../components/GoogleCompleteProfileForm";
 
@@ -24,7 +25,7 @@ export function Login() {
     try {
       await login({ email, password });
       refresh();
-      navigate("/");
+      navigate(consumeReturnTo() ?? "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao entrar");
     } finally {
@@ -38,7 +39,7 @@ export function Login() {
       const result = await oauthGoogleLogin(credential);
       if (result.status === "LOGGED_IN") {
         refresh();
-        navigate("/");
+        navigate(consumeReturnTo() ?? "/");
       } else {
         setGooglePending({ credential, name: result.name });
       }
@@ -55,7 +56,7 @@ export function Login() {
           <GoogleCompleteProfileForm
             credential={googlePending.credential}
             suggestedName={googlePending.name}
-            onDone={() => { refresh(); navigate("/"); }}
+            onDone={() => { refresh(); navigate(consumeReturnTo() ?? "/"); }}
             onCancel={() => setGooglePending(null)}
           />
         </div>
@@ -95,7 +96,7 @@ export function Login() {
           </button>
         </form>
         <p className="hint-text" style={{ marginTop: 16 }}>
-          Não tem conta? <Link to="/cadastro">Cadastre-se</Link>
+          Não tem conta? <Link to="/cadastro">Crie grátis — ganhe 1.000 pontos</Link>
           {" · "}
           <Link to="/esqueci-senha">Esqueci minha senha</Link>
         </p>

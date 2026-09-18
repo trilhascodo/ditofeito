@@ -48,10 +48,11 @@ export function mountAuth(app: express.Express, pool: Pool) {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ erro: "DADOS_INVALIDOS", detalhes: parsed.error.flatten() });
     try {
-      const { userId } = await signup(pool, parsed.data, {
+      const { userId, token, user } = await signup(pool, parsed.data, {
         ip: req.ip, userAgent: req.get("user-agent"),
       });
-      res.status(201).json({ userId });
+      res.cookie(AUTH_CONFIG.sessionCookieName, token, cookieOptions());
+      res.status(201).json({ userId, user });
     } catch (e) {
       if (e instanceof AuthError) return res.status(AUTH_ERROR_STATUS[e.code] ?? 400).json({ erro: e.code, mensagem: e.message });
       throw e;

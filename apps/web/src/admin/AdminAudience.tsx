@@ -107,6 +107,36 @@ export function AdminAudience() {
                 ))
               )}
             </div>
+            <div className="card">
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 4px" }}>Canais (?origem=)</h2>
+              <p className="hint-text" style={{ marginBottom: 12 }}>
+                Visitantes por canal: links compartilhados pelo site já saem marcados. Nos seus
+                posts, use ditofeito.com/…?origem=instagram (ou o nome que quiser).
+              </p>
+              {stats.topSources.length === 0 ? (
+                <p className="hint-text">Nenhuma visita marcada ainda.</p>
+              ) : (
+                stats.topSources.map((r) => (
+                  <div key={r.source} className="admin-row">
+                    <span className="titulo mono" style={{ fontSize: 13 }}>{r.source}</span>
+                    <span className="badge">{fmtPoints(r.visitors)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="card">
+              <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 12px" }}>Cadastros por origem</h2>
+              {stats.signupSources.length === 0 ? (
+                <p className="hint-text">Nenhum cadastro no período.</p>
+              ) : (
+                stats.signupSources.map((r) => (
+                  <div key={r.source} className="admin-row">
+                    <span className="titulo mono" style={{ fontSize: 13 }}>{r.source}</span>
+                    <span className="badge">{fmtPoints(r.signups)}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </>
       )}
