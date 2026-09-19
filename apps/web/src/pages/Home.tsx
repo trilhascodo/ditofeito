@@ -154,7 +154,10 @@ function PatroSlots({ items }: { items: HomeSponsor[] }) {
           <>
             {s.label && <span className="patro-slot-label">{s.label}</span>}
             {s.logoUrl && <img src={s.logoUrl} alt="" />}
-            <b>{s.sponsorName}</b>
+            {/* Com logo, o nome repetia o que a logo já diz — fica só pra leitor
+                de tela e pro formato compacto do mobile, que esconde a logo
+                ("Patrocinado por X", ver .patro-slots-mobile no CSS). */}
+            <b className={s.logoUrl ? "so-leitor" : undefined}>{s.sponsorName}</b>
             {s.siteUrl && <span className="patro-slot-cta">Visitar site ↗</span>}
           </>
         );
@@ -239,8 +242,11 @@ function PatroFaixa({ items }: { items: HomeSponsor[] }) {
       {items.map((s, i) => {
         const conteudo = (
           <>
+            {/* rótulo antes da logo: "Patrocinado por [logo]" — com o nome
+                escondido, logo antes do rótulo lia "[logo] Patrocinado por" */}
+            {s.label && <span>{s.label}</span>}
             {s.logoUrl && <img src={s.logoUrl} alt="" />}
-            <span>{s.label && `${s.label} `}<b>{s.sponsorName}</b></span>
+            <b className={s.logoUrl ? "so-leitor" : undefined}>{s.sponsorName}</b>
           </>
         );
         return (
@@ -264,8 +270,8 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
   const conteudo = (
     <>
       <span className="market-tile-ad-label">Publicidade</span>
-      {ad.logoUrl && <img src={ad.logoUrl} alt="" style={{ maxHeight: 32, width: "auto", maxWidth: "100%", objectFit: "contain" }} />}
-      <b>{ad.sponsorName}</b>
+      {ad.logoUrl && <img src={ad.logoUrl} alt="" />}
+      <b className={ad.logoUrl ? "so-leitor" : undefined}>{ad.sponsorName}</b>
     </>
   );
   return (

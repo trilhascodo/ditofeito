@@ -497,13 +497,15 @@ export function MarketPage() {
             <div className="patrocinio">
               {sponsorship.siteUrl ? (
                 <a className="patrocinio-main" href={`/ir/${sponsorship.sponsorshipId}`} target="_blank" rel="noopener noreferrer">
-                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-                  <span>{sponsorship.label && `${sponsorship.label} `}<b>{sponsorship.sponsorName}</b></span>
+                  {sponsorship.label && <span>{sponsorship.label}</span>}
+                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 120 }} />}
+                  <b className={sponsorship.logoUrl ? "so-leitor" : undefined}>{sponsorship.sponsorName}</b>
                 </a>
               ) : (
                 <>
-                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={20} style={{ width: "auto", maxWidth: 80 }} />}
-                  <span>{sponsorship.label && `${sponsorship.label} `}<b>{sponsorship.sponsorName}</b></span>
+                  {sponsorship.label && <span>{sponsorship.label}</span>}
+                  {sponsorship.logoUrl && <img src={sponsorship.logoUrl} alt="" height={28} style={{ width: "auto", maxWidth: 120 }} />}
+                  <b className={sponsorship.logoUrl ? "so-leitor" : undefined}>{sponsorship.sponsorName}</b>
                 </>
               )}
               <SocialLinks items={sponsorship.socialLinks} sponsorshipId={sponsorship.sponsorshipId} />
