@@ -86,52 +86,75 @@ async function deleteDraftMarket(pool: Pool, marketId: string): Promise<void> {
   }
 }
 
-const suggestInput = z
-  .object({
-    name: z.string().trim().min(3).max(200),
-    publicName: z.string().trim().max(120).optional(),
-    party: z.string().trim().min(1).max(20),
-    office: OFFICE,
-    uf: z.string().length(2).toUpperCase().optional(),
-    municipalityIbge: z.number().int().positive().optional(),
-    photoUrl: z.string().url().optional(),
-    // Fonte pública do anúncio: obrigatória por regra de produto (curadoria
-    // verificável), mesmo a coluna sendo nullable no schema.
-    sourceUrl: z.string().url(),
-  })
-  .refine((d) => d.office === "PRESIDENTE" || !!d.uf, {
-    message: "uf é obrigatória para esse cargo",
-    path: ["uf"],
-  });
+const candidateFields = z.object({
+  name: z.string().trim().min(3).max(200),
+  publicName: z.string().trim().max(120).optional(),
+  party: z.string().trim().min(1).max(20),
+  office: OFFICE,
+  uf: z.string().length(2).toUpperCase().optional(),
+  municipalityIbge: z.number().int().positive().optional(),
+  photoUrl: z.string().url().optional(),
+  // Fonte pública do anúncio: obrigatória por regra de produto (curadoria
+  // verificável), mesmo a coluna sendo nullable no schema.
+  sourceUrl: z.string().url(),
+});
+const hasUfIfNeeded = (d: { office: string; uf?: string }) => d.office === "PRESIDENTE" || !!d.uf;
+const UF_REQUIRED = { message: "uf é obrigatória para esse cargo", path: ["uf"] };
+
+const suggestInput = candidateFields.refine(hasUfIfNeeded, UF_REQUIRED);
+
+// Cadastro direto pelo admin — a lista do gerador vem de sugestão/importação
+// e deixava de fora gente que de fato concorre (ex.: "Policial Edjane" pra
+// governador/SP), sem nenhum jeito de incluir pela tela. Entra já com o
+// status que o admin confirmou (normalmente REGISTRADO, candidatura oficial).
+const createInput = candidateFields
+  .extend({ candidacyStatus: z.enum(["PRE_ANUNCIADO", "REGISTRADO", "DEFERIDO"]).default("REGISTRADO") })
+  .refine(hasUfIfNeeded, UF_REQUIRED);
+
+async function insertCandidate(
+  pool: Pool, input: z.infer<typeof candidateFields>, status: string,
+): Promise<string> {
+  try {
+    // ballot_name (nome de urna) é NOT NULL no schema, mas só existe de
+    // verdade após o registro no TSE — usa o nome público/civil como
+    // estimativa até lá (mesmo padrão de fallback do gerador.ts).
+    const ballotName = input.publicName ?? input.name;
+    const r = await pool.query(
+      `INSERT INTO candidates
+         (name, ballot_name, public_name, party, office, uf, municipality_ibge, photo_url,
+          source_url, candidacy_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [
+        input.name, ballotName, input.publicName ?? null, input.party, input.office,
+        input.uf ?? null, input.municipalityIbge ?? null, input.photoUrl ?? null,
+        input.sourceUrl, status,
+      ],
+    );
+    return r.rows[0].id as string;
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505")
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "já existe um candidato com esse nome, cargo e UF",
+      });
+    throw e;
+  }
+}
 
 export const candidateRouter = router({
   suggest: protectedProcedure.input(suggestInput).mutation(async ({ ctx, input }) => {
-    try {
-      // ballot_name (nome de urna) é NOT NULL no schema, mas só existe de
-      // verdade após o registro no TSE — usa o nome público/civil como
-      // estimativa até lá (mesmo padrão de fallback do gerador.ts).
-      const ballotName = input.publicName ?? input.name;
-      const r = await ctx.pool.query(
-        `INSERT INTO candidates
-           (name, ballot_name, public_name, party, office, uf, municipality_ibge, photo_url,
-            source_url, candidacy_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'PRE_ANUNCIADO')
-         RETURNING id`,
-        [
-          input.name, ballotName, input.publicName ?? null, input.party, input.office,
-          input.uf ?? null, input.municipalityIbge ?? null, input.photoUrl ?? null,
-          input.sourceUrl,
-        ],
-      );
-      return { id: r.rows[0].id as string };
-    } catch (e) {
-      if ((e as { code?: string }).code === "23505")
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "já existe um pré-candidato com esse nome, cargo e UF",
-        });
-      throw e;
-    }
+    return { id: await insertCandidate(ctx.pool, input, "PRE_ANUNCIADO") };
+  }),
+
+  // Já roda o gerador em seguida: o candidato entra como opção do "quem
+  // vence" da disputa (se já existe, via sync de outcomes) e ganha o
+  // rascunho "será eleito?" — sem precisar lembrar do botão do gerador.
+  create: resolverProcedure.input(createInput).mutation(async ({ ctx, input }) => {
+    const { candidacyStatus, ...fields } = input;
+    const id = await insertCandidate(ctx.pool, fields, candidacyStatus);
+    const gerador = await rodarGerador(ctx.pool);
+    return { id, gerador };
   }),
 
   list: publicProcedure

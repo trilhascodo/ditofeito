@@ -158,14 +158,18 @@ export async function gerarDisputasMajoritarias(
         [slugDisputa, `Eleições 2026 — ${cargoTxt}${local}`, opts.categoriaEleicoesId]);
       const groupId = grp.rows[0].id;
 
-      // Candidatos da disputa (reivindicados primeiro; corte em maxOutcomesNomeados)
+      // Candidatos da disputa (registro oficial primeiro, depois reivindicados;
+      // corte em maxOutcomesNomeados). Sem priorizar o registro, o corte por
+      // nome deixava candidato oficial de fora numa disputa grande enquanto
+      // pré-candidato que nunca se registrou ocupava a vaga.
       const cands = await c.query<Candidato>(
         `SELECT id, name, public_name, ballot_name, party, office, uf,
                 municipality_ibge, candidacy_status
            FROM candidates
           WHERE office=$1 AND uf IS NOT DISTINCT FROM $2
             AND candidacy_status IN ('PRE_ANUNCIADO','PRE_REIVINDICADO','REGISTRADO','DEFERIDO')
-          ORDER BY (candidacy_status='PRE_REIVINDICADO') DESC, name
+          ORDER BY (candidacy_status IN ('REGISTRADO','DEFERIDO')) DESC,
+                   (candidacy_status='PRE_REIVINDICADO') DESC, name
           LIMIT $3`,
         [d.office, d.uf, GERADOR_CONFIG.maxOutcomesNomeados]);
       if (cands.rowCount! < 2) continue; // disputa sem massa crítica ainda

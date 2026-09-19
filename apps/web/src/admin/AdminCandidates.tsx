@@ -25,6 +25,106 @@ const EXIT_STATUS_LABEL = {
   FALECIDO: STATUS_LABEL.FALECIDO, NAO_REGISTROU: STATUS_LABEL.NAO_REGISTROU,
 } as const;
 
+// Cadastro direto pelo admin (candidate.create) — a base vinha só de
+// sugestão/importação e deixava candidato real de fora da disputa sem
+// nenhum jeito de incluir. Já roda o gerador no backend, então a pessoa
+// entra como opção do "quem vence" existente na hora.
+function AddCandidateForm({ onDone }: { onDone: () => void }) {
+  const createMutation = trpc.candidate.create.useMutation();
+  const [name, setName] = useState("");
+  const [publicName, setPublicName] = useState("");
+  const [party, setParty] = useState("");
+  const [office, setOffice] = useState<Office>("GOVERNADOR");
+  const [uf, setUf] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [candidacyStatus, setCandidacyStatus] = useState<"REGISTRADO" | "PRE_ANUNCIADO">("REGISTRADO");
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await createMutation.mutateAsync({
+        name: name.trim(), publicName: publicName.trim() || undefined, party: party.trim(),
+        office, uf: office === "PRESIDENTE" ? undefined : uf, sourceUrl: sourceUrl.trim(), candidacyStatus,
+      });
+      setMsg(
+        r.gerador.outcomesSincronizados > 0
+          ? `Adicionado e incluído em ${r.gerador.outcomesSincronizados} mercado(s) "quem vence" já existente(s).`
+          : "Adicionado. Se a disputa já tem mercado \"quem vence\" e o nome não entrou, ela já está no "
+            + "limite de 12 candidatos — marque a saída de quem não concorre e rode o gerador de novo.",
+      );
+      setName(""); setPublicName(""); setParty(""); setSourceUrl("");
+      onDone();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Erro ao adicionar candidato");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} style={{ marginBottom: 16, padding: 12, border: "1px solid var(--linha)", borderRadius: 8 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: "2 1 220px" }}>
+          <label className="label" htmlFor="ac-name">Nome completo</label>
+          <input id="ac-name" className="input" required minLength={3} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: "2 1 180px" }}>
+          <label className="label" htmlFor="ac-public">Nome de urna (opcional)</label>
+          <input
+            id="ac-public" className="input" placeholder="Policial Edjane"
+            value={publicName} onChange={(e) => setPublicName(e.target.value)}
+          />
+        </div>
+        <div className="field" style={{ flex: "1 1 100px" }}>
+          <label className="label" htmlFor="ac-party">Partido</label>
+          <input id="ac-party" className="input" required value={party} onChange={(e) => setParty(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: "1 1 160px" }}>
+          <label className="label" htmlFor="ac-office">Cargo</label>
+          <select id="ac-office" value={office} onChange={(e) => setOffice(e.target.value as Office)}>
+            {Object.entries(OFFICE_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </div>
+        {office !== "PRESIDENTE" && (
+          <div className="field" style={{ flex: "0 1 90px" }}>
+            <label className="label" htmlFor="ac-uf">UF</label>
+            <input
+              id="ac-uf" className="input" required minLength={2} maxLength={2}
+              value={uf} onChange={(e) => setUf(e.target.value.toUpperCase())}
+            />
+          </div>
+        )}
+        <div className="field" style={{ flex: "1 1 160px" }}>
+          <label className="label" htmlFor="ac-status">Situação</label>
+          <select
+            id="ac-status" value={candidacyStatus}
+            onChange={(e) => setCandidacyStatus(e.target.value as "REGISTRADO" | "PRE_ANUNCIADO")}
+          >
+            <option value="REGISTRADO">Registrado no TSE</option>
+            <option value="PRE_ANUNCIADO">Pré-candidato</option>
+          </select>
+        </div>
+        <div className="field" style={{ flex: "2 1 220px" }}>
+          <label className="label" htmlFor="ac-source">Fonte (link)</label>
+          <input
+            id="ac-source" className="input" type="url" required placeholder="https://divulgacandcontas.tse.jus.br/..."
+            value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)}
+          />
+        </div>
+      </div>
+      {err && <p className="error-text">{err}</p>}
+      {msg && <p style={{ color: "var(--conferido)", fontSize: 13 }}>{msg}</p>}
+      <button className="btn-outline" type="submit" style={{ width: "auto", padding: "8px 16px" }} disabled={createMutation.isPending}>
+        {createMutation.isPending ? "Adicionando…" : "Adicionar candidato"}
+      </button>
+    </form>
+  );
+}
+
 export function AdminCandidates() {
   const utils = trpc.useUtils();
   const [status, setStatus] = useState<Status>("PRE_ANUNCIADO");
@@ -43,6 +143,7 @@ export function AdminCandidates() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeErr, setRemoveErr] = useState<string | null>(null);
   const [geradorMsg, setGeradorMsg] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   const [exitFormId, setExitFormId] = useState<string | null>(null);
   const [exitStatus, setExitStatus] = useState<keyof typeof EXIT_STATUS_LABEL>("RENUNCIOU");
@@ -108,6 +209,12 @@ export function AdminCandidates() {
           <p className="hint-text" style={{ marginBottom: 12 }}>
             Fila de moderação de sugestões e manutenção de status (desistência, indeferimento, etc.).
           </p>
+          <button
+            type="button" className="btn-outline" style={{ padding: "8px 14px", fontSize: 13, width: "auto", marginBottom: 12 }}
+            onClick={() => setShowAdd((v) => !v)}
+          >
+            {showAdd ? "Fechar" : "+ Adicionar candidato"}
+          </button>
         </div>
         <div style={{ textAlign: "right" }}>
           <button
@@ -123,6 +230,8 @@ export function AdminCandidates() {
           {geradorMsg && <p style={{ color: "var(--conferido)", fontSize: 13, marginTop: 4 }}>{geradorMsg}</p>}
         </div>
       </div>
+
+      {showAdd && <AddCandidateForm onDone={() => utils.candidate.list.invalidate()} />}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <input
