@@ -70,6 +70,22 @@ export function titleCase(s: string): string {
     .join(" ");
 }
 
+/** Pedido duplicado: a mesma pessoa pode ter 2 SQ_CANDIDATO na mesma disputa
+ *  (ex.: Guto Schiavetto, senador/SP, mesmo CPF e número 144 — um deles vai
+ *  ser indeferido). Fica o pedido que não saiu da disputa e, entre iguais, o
+ *  mais recente (SQ maior). Sem CPF no arquivo, cai pro nome civil. */
+export function umaPessoaPorDisputa<T extends TseCandidateRow & { office: string }>(rows: T[]): T[] {
+  const ativo = (x: T) => !EXIT_STATUSES.has(statusFromTse(x.dsSituacao));
+  const porPessoa = new Map<string, T>();
+  for (const r of rows) {
+    const k = `${r.office}/${r.sgUf}/${r.cpf || norm(r.nmCandidato)}`;
+    const cur = porPessoa.get(k);
+    if (!cur || (ativo(r) && !ativo(cur))
+        || (ativo(r) === ativo(cur) && BigInt(r.sqCandidato) > BigInt(cur.sqCandidato))) porPessoa.set(k, r);
+  }
+  return [...porPessoa.values()];
+}
+
 export interface RaceReport {
   vinculados: string[];      // "Braide (base) = EDUARDO BRAIDE (TSE, 0.95)"
   criados: string[];
@@ -95,10 +111,11 @@ export interface SyncOptions {
 }
 
 export async function syncCandidatesWithTse(pool: Pool, opt: SyncOptions): Promise<SyncResult> {
-  const rows = opt.rows
+  const all = opt.rows
     .map((r) => ({ ...r, office: officeFromCargo(r.dsCargo), sgUf: r.sgUf.toUpperCase() }))
     .filter((r): r is typeof r & { office: string } =>
       !!r.office && (!opt.ufs.length || opt.ufs.includes(r.sgUf)));
+  const rows = umaPessoaPorDisputa(all);
 
   const corridas = new Map<string, RaceReport>();
   const race = (office: string, uf: string | null) => {
@@ -177,14 +194,14 @@ export async function syncCandidatesWithTse(pool: Pool, opt: SyncOptions): Promi
     const pairs = await c.query(
       `SELECT c.id AS candidate_id, t.sq_candidato::text AS sq_candidato,
               similarity(c.norm_full_name, t.norm_nm_candidato) AS sim_civil,
-              similarity(coalesce(c.norm_public_name, c.norm_full_name), t.norm_nm_urna) AS sim_urna,
+              similarity(f_norm_name(coalesce(c.public_name, c.ballot_name, c.name)), t.norm_nm_urna) AS sim_urna,
               coalesce((SELECT max(similarity(a.norm_alias, t.norm_nm_urna)) FROM candidate_aliases a
                          WHERE a.candidate_id = c.id), 0) AS best_alias_sim,
               (c.party = t.sg_partido) AS party_equal,
               (c.birth_date IS NOT NULL AND c.birth_date = t.dt_nascimento) AS birth_equal,
               (c.birth_date IS NOT NULL AND t.dt_nascimento IS NOT NULL) AS birth_known,
               c.norm_full_name AS cand_tokens, t.norm_nm_candidato AS tse_tokens,
-              coalesce(c.norm_public_name, c.norm_full_name) AS cand_pub, t.norm_nm_urna AS tse_urna,
+              f_norm_name(coalesce(c.public_name, c.ballot_name, c.name)) AS cand_pub, t.norm_nm_urna AS tse_urna,
               coalesce(c.public_name, c.ballot_name, c.name) AS cand_label, t.nm_urna,
               c.office, c.uf
          FROM candidates c
@@ -193,7 +210,7 @@ export async function syncCandidatesWithTse(pool: Pool, opt: SyncOptions): Promi
           AND t.sq_candidato = ANY($2::bigint[])
           AND NOT EXISTS (SELECT 1 FROM candidates c2 WHERE c2.tse_sq_candidato = t.sq_candidato)
           AND greatest(similarity(c.norm_full_name, t.norm_nm_candidato),
-                       similarity(coalesce(c.norm_public_name, c.norm_full_name), t.norm_nm_urna)) >= $3`,
+                       similarity(f_norm_name(coalesce(c.public_name, c.ballot_name, c.name)), t.norm_nm_urna)) >= $3`,
       [ACTIVE, [...sqInFile], MATCH_CONFIG.minPairSim]);
     const scored = pairs.rows.map((p) => {
       // Mesmo score do matcher, testando o subconjunto de nomes nos dois

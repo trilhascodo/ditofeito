@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { officeFromCargo, statusFromTse, titleCase } from "./tseSync.js";
+import { officeFromCargo, statusFromTse, titleCase, umaPessoaPorDisputa } from "./tseSync.js";
 import { compositeScore, type PairRow } from "./matcher.js";
 
 describe("officeFromCargo", () => {
@@ -57,5 +57,25 @@ describe("score de casamento sem data de nascimento", () => {
     const s = compositeScore({ ...base, party_equal: false }).score;
     expect(s).toBeGreaterThanOrEqual(0.7);
     expect(s).toBeLessThan(0.85);
+  });
+});
+
+describe("umaPessoaPorDisputa", () => {
+  const guto = (sq: string, dsSituacao = "") => ({
+    sqCandidato: sq, nmCandidato: "RICARDO AUGUSTO MANGUE SCHIAVETTO", nmUrna: "GUTO SCHIAVETTO",
+    nrCandidato: 144, sgPartido: "MISSÃO", dsCargo: "SENADOR", sgUf: "SP", dtNascimento: "1982-01-23",
+    dsSituacao, cpf: "30360769802", office: "SENADOR",
+  });
+  it("2 pedidos da mesma pessoa pro mesmo cargo viram 1 (o mais recente)", () => {
+    const r = umaPessoaPorDisputa([guto("250002553928"), guto("250002554075")]);
+    expect(r.map((x) => x.sqCandidato)).toEqual(["250002554075"]);
+  });
+  it("prefere o pedido que segue na disputa, mesmo sendo o mais antigo", () => {
+    const r = umaPessoaPorDisputa([guto("250002553928", "APTO"), guto("250002554075", "INAPTO")]);
+    expect(r.map((x) => x.sqCandidato)).toEqual(["250002553928"]);
+  });
+  it("cargos diferentes não são duplicata", () => {
+    const r = umaPessoaPorDisputa([guto("1"), { ...guto("2"), office: "GOVERNADOR", dsCargo: "GOVERNADOR" }]);
+    expect(r).toHaveLength(2);
   });
 });

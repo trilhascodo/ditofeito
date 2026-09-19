@@ -8,7 +8,7 @@
 // ficariam sem vínculo, e marcar a saída do candidato (candidate.updateStatus)
 // não o tiraria desses mercados.
 //
-// Uso (na VPS): docker compose -f infra/docker-compose.yml exec api node dist/jobs/run-primeiro-turno.js [--publish]
+// Uso (na VPS): docker compose -f infra/docker-compose.yml exec api node apps/api/dist/jobs/run-primeiro-turno.js [--publish]
 //   sem --publish: nasce em DRAFT (revisar em Admin → Mercados e publicar).
 import { getPool } from "@ditofeito/db";
 import { suggestB } from "@ditofeito/core";

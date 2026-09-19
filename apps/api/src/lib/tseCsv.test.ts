@@ -51,6 +51,15 @@ describe("readConsultaCand", () => {
     expect(rows.find((r) => r.sqCandidato === "100003")!.nmCandidato).toBe("HILTON GONÇALO DE SOUSA");
   });
 
+  it("layout real de 2026: sem DS_DETALHE_SITUACAO_CAND, situação ainda \"#NE\"", () => {
+    const h = ["NR_TURNO", "SG_UF", "DS_CARGO", "SQ_CANDIDATO", "NR_CANDIDATO", "NM_CANDIDATO",
+      "NM_URNA_CANDIDATO", "NR_CPF_CANDIDATO", "DS_SITUACAO_CANDIDATURA", "SG_PARTIDO", "DT_NASCIMENTO"];
+    const csv = [row(h), row(["1", "SP", "SENADOR", "250002551502", "400", "SIMONE NASSAR TEBET ROCHA",
+      "SIMONE TEBET", "01099561760", "#NE", "PSB", "22/02/1970"])].join("\r\n");
+    const [r] = readConsultaCand(Buffer.from(csv, "latin1"));
+    expect(r).toMatchObject({ nmUrna: "SIMONE TEBET", dsSituacao: "", cpf: "01099561760", sgPartido: "PSB" });
+  });
+
   it("no zip, usa o _BRASIL quando existe", () => {
     const zip = zipOf({
       "leiame.pdf": Buffer.from("x"),

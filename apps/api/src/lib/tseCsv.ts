@@ -19,7 +19,13 @@ export interface TseCandidateRow {
   dsCargo: string;
   sgUf: string;          // "BR" pra presidente
   dtNascimento: string | null; // ISO yyyy-mm-dd
-  dsSituacao: string;    // DS_DETALHE_SITUACAO_CAND (DEFERIDO, INDEFERIDO COM RECURSO, RENÚNCIA...)
+  /** DS_DETALHE_SITUACAO_CAND quando existe; senão DS_SITUACAO_CANDIDATURA
+   *  (APTO/INAPTO). Em 19/09/2026 o arquivo de 2026 ainda vinha com "#NE"
+   *  (não especificado) em todo mundo — vira "" até o TSE julgar. */
+  dsSituacao: string;
+  /** Só pra reconhecer pedido duplicado da mesma pessoa na mesma disputa
+   *  (tseSync.ts) — nunca é gravado. */
+  cpf: string;
 }
 
 // ------------------------------- zip ---------------------------------------
@@ -77,7 +83,7 @@ function parseLine(line: string): string[] {
   return out;
 }
 
-const NULO = new Set(["", "#NULO#", "#NULO", "#NE#", "#NE"]);
+const NULO = new Set(["", "#NULO#", "#NULO", "#NE#", "#NE", "NÃO DIVULGÁVEL"]);
 const val = (s: string | undefined) => (s === undefined || NULO.has(s.trim()) ? "" : s.trim());
 
 function parseCsv(text: string): TseCandidateRow[] {
@@ -92,7 +98,7 @@ function parseCsv(text: string): TseCandidateRow[] {
   };
   const iSq = col("SQ_CANDIDATO"), iNome = col("NM_CANDIDATO"), iUrna = col("NM_URNA_CANDIDATO");
   const iNr = col("NR_CANDIDATO"), iPart = col("SG_PARTIDO"), iCargo = col("DS_CARGO");
-  const iUf = col("SG_UF"), iNasc = col("DT_NASCIMENTO", false);
+  const iUf = col("SG_UF"), iNasc = col("DT_NASCIMENTO", false), iCpf = col("NR_CPF_CANDIDATO", false);
   const iSit = header.indexOf("DS_DETALHE_SITUACAO_CAND") >= 0
     ? header.indexOf("DS_DETALHE_SITUACAO_CAND") : col("DS_SITUACAO_CANDIDATURA");
   // Depois do 1º turno o arquivo repete quem vai ao 2º com NR_TURNO=2 — só o 1º importa aqui.
@@ -116,6 +122,7 @@ function parseCsv(text: string): TseCandidateRow[] {
       sgUf: val(f[iUf]),
       dtNascimento: m ? `${m[3]}-${m[2]}-${m[1]}` : null,
       dsSituacao: val(f[iSit]),
+      cpf: iCpf >= 0 ? val(f[iCpf]) : "",
     });
   }
   return [...bySq.values()];

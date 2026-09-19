@@ -4,14 +4,14 @@
 // desfaz tudo.
 //
 // Uso (na VPS, a partir da raiz do repo):
-//   docker compose -f infra/docker-compose.yml exec api node dist/jobs/run-tse-sync.js [opções]
+//   docker compose -f infra/docker-compose.yml exec api node apps/api/dist/jobs/run-tse-sync.js [opções]
 //
 // Opções:
 //   --uf MA,SP,BR          só essas UFs (BR = presidente). Padrão: todas.
 //   --aceitar-pendentes    casa também os pares duvidosos listados como PENDENTE
 //   --aplicar              grava (sem isso, simulação)
 //   --arquivo -            lê o .zip/.csv do stdin em vez de baixar do TSE:
-//                          ... exec -T api node dist/jobs/run-tse-sync.js --arquivo - < consulta_cand_2026.zip
+//                          ... exec -T api node apps/api/dist/jobs/run-tse-sync.js --arquivo - < consulta_cand_2026.zip
 import { createHash } from "node:crypto";
 import { getPool } from "@ditofeito/db";
 import { readConsultaCand } from "../lib/tseCsv.js";
