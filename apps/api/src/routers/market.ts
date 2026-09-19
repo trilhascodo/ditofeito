@@ -180,7 +180,9 @@ export const marketRouter = router({
     const leaderOutcomeId = new Map<string, string>();
     const marketSummary = new Map<string, { label: string; price: number }>();
     // Mini-ranking pro slide de destaque: top outcomes (sem catchall), preço
-    // desc — mesmos `prices` já calculados acima, só reaproveita.
+    // desc — mesmos `prices` já calculados acima, só reaproveita. Até 9: sem
+    // gráfico (mercado sem histórico) o slide lista as opções em até 3
+    // colunas (Home.tsx::Destaque); com gráfico ele mesmo corta em 4.
     const marketRanking = new Map<string, { label: string; price: number }[]>();
     for (const row of r.rows) {
       const outcomes = outcomesByMarket.get(row.id) ?? [];
@@ -199,7 +201,7 @@ export const marketRouter = router({
         .map((o, i) => ({ label: o.label, price: prices[i], isCatchall: o.isCatchall }))
         .filter((o) => !o.isCatchall)
         .sort((a, b) => b.price - a.price)
-        .slice(0, 4)
+        .slice(0, 9)
         .map(({ label, price }) => ({ label, price })));
     }
 

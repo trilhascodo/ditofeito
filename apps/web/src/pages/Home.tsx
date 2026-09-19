@@ -49,14 +49,14 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
   //
   // Sem histórico de verdade (mercado novo, sem previsão: série vazia ou
   // reta) o gráfico era só 3 linhas pontilhadas ocupando 2/3 do card — aí a
-  // lista ocupa o card inteiro, em 2 colunas, mostrando mais candidatos. E
+  // lista ocupa o card inteiro, em até 3 colunas (até 9 opções). E
   // com todo mundo empatado (ninguém previu ainda) não existe líder: marcar
   // o 1º da lista como destaque sugeria uma vantagem que não existe.
   const serie = m.series.map(([, p]) => p);
   const temHistorico = !!path && Math.max(...serie) - Math.min(...serie) >= 0.01;
   const precos = m.outcomes.map((o) => o.price);
   const empate = precos.length > 1 && Math.max(...precos) - Math.min(...precos) < 0.005;
-  const outros = m.outcomes.filter((o) => o.label !== m.summary?.label).slice(0, temHistorico ? 3 : 5);
+  const outros = m.outcomes.filter((o) => o.label !== m.summary?.label).slice(0, temHistorico ? 3 : 8);
   const linhas = m.summary
     ? [{ ...m.summary, lead: !empate }, ...outros.map((o) => ({ ...o, lead: false }))]
     : [];
