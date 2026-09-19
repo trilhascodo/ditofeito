@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { lmsrPrices, suggestB } from "@ditofeito/core";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { createMarketIdempotent } from "../domain/marketFactory.js";
+import { checkMarketAgainstTse } from "../domain/tseCheck.js";
 import { visitorHash } from "../lib/visitorHash.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 
@@ -437,6 +438,36 @@ export const marketRouter = router({
       throw new TRPCError({ code: "BAD_REQUEST", message: "mercado não encontrado ou não está em DRAFT" });
     return { id: r.rows[0].id as string };
   }),
+
+  // Conferência com o registro do TSE mostrada na tela do mercado no admin
+  // (AdminMarketDetail) — principalmente antes de publicar. Ver domain/tseCheck.ts.
+  tseCheck: adminProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ ctx, input }) => {
+    return checkMarketAgainstTse(ctx.pool, input.id);
+  }),
+
+  // Só o texto da opção (ex.: "POLICIAL EDJANE (AGIR)" -> "Policial Edjane
+  // (AGIR)") — preço/q, posições e candidate_id ficam iguais, então é seguro
+  // mesmo com previsões registradas. Não mexe no "OUTROS".
+  renameOutcome: adminProcedure
+    .input(z.object({
+      marketId: z.string().uuid(),
+      label: z.string().min(1),
+      newLabel: z.string().trim().min(1).max(120),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const r = await ctx.pool.query(
+          `UPDATE market_outcomes SET label = $3
+            WHERE market_id = $1 AND label = $2 AND NOT is_catchall`,
+          [input.marketId, input.label, input.newLabel]);
+        if (!r.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "opção não encontrada" });
+        return { ok: true };
+      } catch (e) {
+        if ((e as { code?: string }).code === "23505")
+          throw new TRPCError({ code: "CONFLICT", message: "já existe uma opção com esse nome nesse mercado" });
+        throw e;
+      }
+    }),
 
   // Só apaga de verdade em DRAFT — nunca esteve visível pro público, então
   // nunca teve trade/posição/comentário/resolução possível (essas telas só

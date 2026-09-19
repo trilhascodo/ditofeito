@@ -15,6 +15,91 @@ function dtLocal(iso: string | Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+interface TseCheck {
+  disputa: string | null; disputaNoTse: boolean;
+  foraDoTse: string[]; faltando: string[]; semVinculo: string[]; maiusculas: string[];
+}
+
+// "POLICIAL EDJANE (AGIR)" -> "Policial Edjane (AGIR)": só o nome, o partido
+// entre parênteses fica como está. Mesma regra do titleCase da sync do TSE.
+const MINUSCULAS = new Set(["da", "de", "do", "das", "dos", "e"]);
+function nomeNormal(label: string): string {
+  const m = /^(.*?)(\s*\(.*\))?$/.exec(label)!;
+  const nome = m[1].toLowerCase().split(/\s+/).filter(Boolean)
+    .map((w, i) => (i > 0 && MINUSCULAS.has(w) ? w : w.replace(/(^|[.'-])(\p{L})/gu, (_, s, l) => s + l.toUpperCase())))
+    .join(" ");
+  return nome + (m[2] ?? "");
+}
+
+// Conferência com o registro do TSE (market.tseCheck) — CE e MG foram
+// publicados com a lista de pré-candidatos porque a sync do TSE não tinha
+// rodado pra eles, e o erro só apareceu depois. Aqui aparece antes.
+function TseCheckPanel({ check, draft, marketId, canEdit, onChanged }: {
+  check: TseCheck; draft: boolean; marketId: string; canEdit: boolean; onChanged: () => void;
+}) {
+  const rename = trpc.market.renameOutcome.useMutation();
+  const [renameErr, setRenameErr] = useState<string | null>(null);
+  async function onFix(label: string) {
+    setRenameErr(null);
+    try {
+      await rename.mutateAsync({ marketId, label, newLabel: nomeNormal(label) });
+      onChanged();
+    } catch (e) {
+      setRenameErr(e instanceof Error ? e.message : "Erro ao corrigir o nome");
+    }
+  }
+  const [office, uf] = (check.disputa ?? "").split("/");
+  const onde = `${office?.toLowerCase() ?? ""}${uf && uf !== "BR" ? "/" + uf : ""}`;
+  const ok = check.disputaNoTse && !check.foraDoTse.length && !check.faltando.length
+    && !check.semVinculo.length && !check.maiusculas.length;
+  const item = (titulo: string, nomes: string[], dica: string) => nomes.length > 0 && (
+    <div style={{ marginTop: 10 }}>
+      <b style={{ fontSize: 13 }}>{titulo}:</b> <span style={{ fontSize: 13 }}>{nomes.join(", ")}</span>
+      <p className="hint-text" style={{ margin: "2px 0 0" }}>{dica}</p>
+    </div>
+  );
+  return (
+    <div className="card" style={{ marginTop: 20, borderColor: ok ? "var(--conferido)" : "var(--carimbo)" }}>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: 0, color: ok ? "var(--conferido)" : "var(--carimbo)" }}>
+        {ok ? `✓ Conferido com o TSE (${onde})` : `Conferência com o TSE (${onde})`}
+      </h2>
+      {!check.disputaNoTse && (
+        <p className="hint-text" style={{ margin: "8px 0 0" }}>
+          Essa disputa ainda não foi sincronizada com o TSE — a lista pode ter pré-candidato que não se
+          registrou e faltar registrado. {draft ? "Antes de publicar, rode" : "Rode"} na VPS:{" "}
+          <code>run-tse-sync.js --uf {uf || "BR"}</code> (simulação, depois <code>--aplicar</code>).
+        </p>
+      )}
+      {item("Sem registro no TSE / fora da disputa", check.foraDoTse,
+        "Admin → Candidatos → Marcar saída (ou rode a sync, que faz isso sozinha).")}
+      {item("Registrados no TSE que faltam", check.faltando,
+        "Admin → Candidatos → Rodar gerador agora (inclui quem já está na base).")}
+      {item("Opções sem vínculo com a base de candidatos", check.semVinculo,
+        "Digitadas à mão — não dá pra conferir nem sai sozinha se o candidato deixar a disputa.")}
+      {check.maiusculas.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <b style={{ fontSize: 13 }}>Nome todo em maiúsculas:</b>
+          {check.maiusculas.map((l) => (
+            <div key={l} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13 }}>{l}</span>
+              {canEdit && (
+                <button
+                  type="button" className="btn-outline" style={{ width: "auto", padding: "4px 10px", fontSize: 12 }}
+                  onClick={() => onFix(l)} disabled={rename.isPending}
+                >
+                  Corrigir para "{nomeNormal(l)}"
+                </button>
+              )}
+            </div>
+          ))}
+          <p className="hint-text" style={{ margin: "4px 0 0" }}>Só o texto muda — preço e previsões ficam iguais.</p>
+          {renameErr && <p className="error-text">{renameErr}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminMarketDetail() {
   const { slug = "" } = useParams();
   const { role } = useOutletContext<Ctx>();
@@ -26,6 +111,13 @@ export function AdminMarketDetail() {
 
   const updateMutation = trpc.market.update.useMutation();
   const publishMutation = trpc.market.publish.useMutation();
+  const { data: tse } = trpc.market.tseCheck.useQuery(
+    { id: market?.id ?? "" }, { enabled: !!market && ["DRAFT", "OPEN"].includes(market.status) },
+  );
+  const tseProblemas = !!tse?.aplicavel && (
+    !tse.disputaNoTse || tse.foraDoTse.length > 0 || tse.faltando.length > 0
+    || tse.semVinculo.length > 0 || tse.maiusculas.length > 0
+  );
   const removeMutation = trpc.market.remove.useMutation();
   const resolveMutation = trpc.admin.resolveMarket.useMutation();
   const voidMutation = trpc.admin.voidMarket.useMutation();
@@ -281,14 +373,22 @@ export function AdminMarketDetail() {
         )}
       </div>
 
+      {tse?.aplicavel && ["DRAFT", "OPEN"].includes(market.status) && (
+        <TseCheckPanel
+          check={tse} draft={market.status === "DRAFT"} marketId={market.id} canEdit={canEdit}
+          onChanged={() => { void refresh(); void utils.market.tseCheck.invalidate({ id: market.id }); }}
+        />
+      )}
+
       {market.status === "DRAFT" && canEdit && (
         <div className="card" style={{ marginTop: 20 }}>
           <p className="hint-text" style={{ marginBottom: 12 }}>
             Rascunho — não aparece pro público até publicar.
+            {tseProblemas && " Confira os avisos do TSE acima antes."}
           </p>
           <div className="form-actions">
             <button className="btn" onClick={onPublish} disabled={publishMutation.isPending}>
-              {publishMutation.isPending ? "Publicando…" : "Publicar mercado"}
+              {publishMutation.isPending ? "Publicando…" : tseProblemas ? "Publicar mesmo assim" : "Publicar mercado"}
             </button>
             <button
               type="button" className="btn-outline btn-danger"
