@@ -53,8 +53,9 @@ function AddCandidateForm({ onDone }: { onDone: () => void }) {
       setMsg(
         r.gerador.outcomesSincronizados > 0
           ? `Adicionado e incluído em ${r.gerador.outcomesSincronizados} mercado(s) "quem vence" já existente(s).`
-          : "Adicionado. Se a disputa já tem mercado \"quem vence\" e o nome não entrou, ela já está no "
-            + "limite de 12 candidatos — marque a saída de quem não concorre e rode o gerador de novo.",
+          : "Adicionado. Se a disputa já tem mercado \"quem vence\" e o nome não entrou, confira se a "
+            + "pessoa já não estava na base (veio do TSE) — ou, se é pré-candidato, a disputa já tem 12 "
+            + "pré-candidatos (registrado no TSE sempre entra).",
       );
       setName(""); setPublicName(""); setParty(""); setSourceUrl("");
       onDone();

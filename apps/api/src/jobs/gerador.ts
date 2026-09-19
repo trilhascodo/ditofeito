@@ -43,7 +43,8 @@ export const GERADOR_CONFIG = {
   /** Profundidade de liquidez (multiplicador do suggestB) por tipo */
   depthBinario: 40,
   depthMajoritaria: 150,      // disputas visíveis: preço mais estável
-  /** Máximo de outcomes nomeados no MULTI; excedente vai p/ OUTROS */
+  /** Máximo de PRÉ-candidatos nomeados no MULTI (excedente vai p/ OUTROS);
+   *  registrado no TSE sempre entra, mesmo passando disso. */
   maxOutcomesNomeados: 12,
   /** Publicar direto (OPEN) ou deixar em DRAFT p/ revisão editorial.
    *  false desde o reset de 2026-09-18: publicar 1 mercado por candidato
@@ -162,10 +163,15 @@ export async function gerarDisputasMajoritarias(
         [slugDisputa, `Eleições 2026 — ${cargoTxt}${local}`, opts.categoriaEleicoesId]);
       const groupId = grp.rows[0].id;
 
-      // Candidatos da disputa (registro oficial primeiro, depois reivindicados;
-      // corte em maxOutcomesNomeados). Sem priorizar o registro, o corte por
-      // nome deixava candidato oficial de fora numa disputa grande enquanto
-      // pré-candidato que nunca se registrou ocupava a vaga.
+      // Candidatos da disputa (registro oficial primeiro, depois reivindicados).
+      // O corte em maxOutcomesNomeados vale só pra pré-candidato: quem tem
+      // registro no TSE sempre entra — presidente/2026 tem 14 registrados e o
+      // corte fixo em 12 deixava 2 candidatos reais (ex.: Samara/UP) em OUTROS.
+      const registrados = await c.query(
+        `SELECT count(*)::int AS n FROM candidates
+          WHERE office=$1 AND uf IS NOT DISTINCT FROM $2 AND candidacy_status IN ('REGISTRADO','DEFERIDO')`,
+        [d.office, d.uf]);
+      const limite = Math.max(GERADOR_CONFIG.maxOutcomesNomeados, registrados.rows[0].n as number);
       const cands = await c.query<Candidato>(
         `SELECT id, name, public_name, ballot_name, party, office, uf,
                 municipality_ibge, candidacy_status
@@ -175,7 +181,7 @@ export async function gerarDisputasMajoritarias(
           ORDER BY (candidacy_status IN ('REGISTRADO','DEFERIDO')) DESC,
                    (candidacy_status='PRE_REIVINDICADO') DESC, name
           LIMIT $3`,
-        [d.office, d.uf, GERADOR_CONFIG.maxOutcomesNomeados]);
+        [d.office, d.uf, limite]);
       if (cands.rowCount! < 2) continue; // disputa sem massa crítica ainda
 
       const b = suggestB(cands.rowCount! + 1, GERADOR_CONFIG.depthMajoritaria);
