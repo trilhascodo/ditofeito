@@ -5,7 +5,8 @@
 // Uso: node dist/jobs/run-gerador.js [--publish]
 //   sem --publish: mercados nascem em DRAFT (revisão editorial no admin antes
 //                  de ir ao ar — default seguro pra primeira carga real).
-//   --publish:     nasce OPEN direto (GERADOR_CONFIG.publicarDireto).
+//   --publish:     nasce OPEN direto (o cron/botão do admin usam
+//                  GERADOR_CONFIG.publicarDireto, que hoje é false).
 import { getPool } from "@ditofeito/db";
 import { rodarGerador } from "./gerador.js";
 

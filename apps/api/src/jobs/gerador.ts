@@ -41,8 +41,12 @@ export const GERADOR_CONFIG = {
   depthMajoritaria: 150,      // disputas visíveis: preço mais estável
   /** Máximo de outcomes nomeados no MULTI; excedente vai p/ OUTROS */
   maxOutcomesNomeados: 12,
-  /** Publicar direto (OPEN) ou deixar em DRAFT p/ revisão editorial */
-  publicarDireto: true,
+  /** Publicar direto (OPEN) ou deixar em DRAFT p/ revisão editorial.
+   *  false desde o reset de 2026-09-18: publicar 1 mercado por candidato
+   *  encheu a home de ~120 mercados parados (funil: 7 visitas/dia, quase
+   *  nenhuma previsão). O cron diário e o botão do admin seguem criando tudo,
+   *  mas em rascunho — o admin publica só os que vai divulgar. */
+  publicarDireto: false,
 } as const;
 
 // -------------------------------- Utils --------------------------------------
