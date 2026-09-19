@@ -84,8 +84,8 @@ export const candidateRouter = router({
   }),
 
   // Já roda o gerador em seguida: o candidato entra como opção do "quem
-  // vence" da disputa (se já existe, via sync de outcomes) e ganha o
-  // rascunho "será eleito?" — sem precisar lembrar do botão do gerador.
+  // vence" / "mais votado" da disputa (via sync de outcomes) — sem precisar
+  // lembrar do botão do gerador.
   create: resolverProcedure.input(createInput).mutation(async ({ ctx, input }) => {
     const { candidacyStatus, ...fields } = input;
     const id = await insertCandidate(ctx.pool, fields, candidacyStatus);

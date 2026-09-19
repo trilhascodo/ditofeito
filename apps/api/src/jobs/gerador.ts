@@ -7,7 +7,8 @@
 //   PROPORCIONAL (DEP_FEDERAL, DEP_ESTADUAL, VEREADOR):
 //     -> sem MULTI (não há "vencedor" da disputa); só binários individuais
 //   TODO CANDIDATO (qualquer cargo):
-//     -> binário "será eleito?"           (slug eleito-*)
+//     -> binário "será eleito?"           (slug eleito-*) — DESLIGADO desde
+//        2026-09-19 (GERADOR_CONFIG.criarBinarios), só mercado de disputa
 //
 // "vai registrar candidatura?" (slug registro-*) foi aposentado por decisão
 // de produto (migrations/023_remove_registro_markets.sql apaga os existentes
@@ -52,6 +53,11 @@ export const GERADOR_CONFIG = {
    *  nenhuma previsão). O cron diário e o botão do admin seguem criando tudo,
    *  mas em rascunho — o admin publica só os que vai divulgar. */
   publicarDireto: false,
+  /** Binário "Fulano será eleito?" por candidato. Desligado em 2026-09-19 por
+   *  decisão de produto: só mercado de disputa (um por UF e cargo, com os
+   *  registrados no TSE) — candidato isolado espalhava as previsões em
+   *  dezenas de mercados parados. Ver jobs/run-limpar-candidatos.ts. */
+  criarBinarios: false,
 } as const;
 
 // -------------------------------- Utils --------------------------------------
@@ -264,9 +270,11 @@ export async function rodarGerador(pool: Pool, opts: { publicarDireto?: boolean 
     `SELECT id FROM users WHERE handle = 'sistema'`);
   if (!cat.rowCount || !sys.rowCount)
     throw new Error("Seed ausente: categoria 'eleicoes-2026' e usuário 'sistema'");
-  const a = await gerarBinariosCandidatos(pool, {
-    categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
-    publicarDireto: opts.publicarDireto });
+  const a = GERADOR_CONFIG.criarBinarios
+    ? await gerarBinariosCandidatos(pool, {
+      categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
+      publicarDireto: opts.publicarDireto })
+    : { criados: 0 };
   const b = await gerarDisputasMajoritarias(pool, {
     categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
     publicarDireto: opts.publicarDireto });

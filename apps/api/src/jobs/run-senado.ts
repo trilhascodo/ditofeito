@@ -1,15 +1,14 @@
-// CLI: mercados de Senado de uma UF para 2026.
+// CLI: mercado de Senado de uma UF para 2026.
 //
 // Senado tem 2 vagas por UF (renovação de 2/3) e turno único em 04/10, então
-// não existe "quem vence" (o gerador nem cria esse MULTI pra senador). O que
-// funciona com 2 vagas:
-//   - binário "Fulano será eleito senador?" — 1 por candidato; o gerador já
-//     cria em rascunho (slug eleito-*-senador-<uf>); aqui, com --publish, os
-//     dos candidatos ATIVOS são publicados (quem saiu da disputa fica de fora);
-//   - MULTI "quem será o senador mais votado?" — vencedor único (o 1º
-//     colocado), criado aqui com as opções vindas da base de candidatos COM
-//     candidate_id (marcar saída de alguém tira ele daqui também).
-// Idempotente pelo slug; sem --publish tudo fica/nasce em DRAFT.
+// não existe "quem vence" (o gerador nem cria esse MULTI pra senador). O
+// mercado de disputa do Senado é o MULTI "quem será o senador mais votado?"
+// — vencedor único (o 1º colocado), com todos os candidatos ativos da base
+// (já sincronizada com o TSE) COM candidate_id: marcar saída de alguém tira
+// ele daqui também. Mercado de candidato isolado ("será eleito?") foi
+// descontinuado em 2026-09-19 (ver run-limpar-candidatos.ts).
+// Idempotente pelo slug; sem --publish nasce em DRAFT, e --publish publica
+// mesmo se ele já existir como rascunho.
 //
 // Uso (na VPS): docker compose -f infra/docker-compose.yml exec api node apps/api/dist/jobs/run-senado.js --uf MA [--publish]
 import { getPool } from "@ditofeito/db";
@@ -48,7 +47,7 @@ async function main() {
   if (semTse.length)
     console.log(`AVISO: sem vínculo com o TSE (rode run-tse-sync --uf ${uf}): ${semTse.join(", ")}`);
 
-  // 1. MULTI "mais votado" (vencedor único = 1º colocado)
+  // MULTI "mais votado" (vencedor único = 1º colocado)
   const slug = `mais-votado-senador-${uf.toLowerCase()}-2026`;
   const outcomes = [
     ...cands.rows.map((c) => ({ label: `${c.nome} (${c.party})`, candidateId: c.id as string })),
@@ -69,37 +68,20 @@ async function main() {
       closeAt: CALENDARIO_2026.primeiroTurno, resolveBy: RESOLVE_BY,
       isElectoral: true, createdBy: sys.rows[0].id, regionUf: uf, outcomes,
     });
+    let publicado = false;
+    if (!created && publish) {
+      const u = await c.query(`UPDATE markets SET status = 'OPEN' WHERE slug = $1 AND status = 'DRAFT'`, [slug]);
+      publicado = !!u.rowCount;
+    }
     await c.query("COMMIT");
-    console.log(`${created ? (publish ? "CRIADO   " : "RASCUNHO ") : "JÁ EXISTE"} ${slug} (${cands.rowCount} candidatos + OUTROS)`);
+    const estado = created ? (publish ? "CRIADO   " : "RASCUNHO ") : publicado ? "PUBLICADO" : "JÁ EXISTE";
+    console.log(`${estado} ${slug} (${cands.rowCount} candidatos + OUTROS)`);
   } catch (e) {
     await c.query("ROLLBACK");
     throw e;
   } finally {
     c.release();
   }
-
-  // 2. binários "será eleito?" dos candidatos ativos (criados em rascunho pelo gerador)
-  const bins = await pool.query(
-    `SELECT DISTINCT m.id, m.slug, m.status, cd.nome
-       FROM markets m JOIN market_outcomes o ON o.market_id = m.id
-       JOIN (SELECT id, coalesce(public_name, ballot_name, name) AS nome FROM candidates
-              WHERE office = 'SENADOR' AND uf = $1
-                AND candidacy_status IN ('PRE_ANUNCIADO','PRE_REIVINDICADO','REGISTRADO','DEFERIDO')) cd
-         ON cd.id = o.candidate_id
-      WHERE m.type = 'BINARY' AND m.slug LIKE 'eleito-%' ORDER BY m.slug`, [uf]);
-  const comMercado = new Set<string>();
-  for (const b of bins.rows) {
-    comMercado.add(b.nome);
-    if (publish && b.status === "DRAFT") {
-      await pool.query(`UPDATE markets SET status = 'OPEN' WHERE id = $1 AND status = 'DRAFT'`, [b.id]);
-      console.log(`PUBLICADO ${b.slug}`);
-    } else {
-      console.log(`${b.status.padEnd(9)} ${b.slug}`);
-    }
-  }
-  const semBinario = cands.rows.map((x) => x.nome).filter((n) => !comMercado.has(n));
-  if (semBinario.length)
-    console.log(`Sem "será eleito?" ainda (rode o gerador no admin): ${semBinario.join(", ")}`);
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });

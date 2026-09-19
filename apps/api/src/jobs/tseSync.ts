@@ -332,7 +332,7 @@ export function formatReport(r: SyncResult): string {
     sec("PENDENTE — casamento duvidoso, nada mexido (confira; --aceitar-pendentes casa todos)", x.pendentes);
   }
   if (r.anulados.length) out.push(`\n"será eleito?" publicados ${r.aplicado ? "anulados" : "que serão anulados"}: ${r.anulados.join(", ")}`);
-  if (r.gerador) out.push(`\nGerador: ${r.gerador.binarios} rascunho(s) "será eleito?" novo(s), ${r.gerador.outcomesSincronizados} candidato(s) incluído(s) em "quem vence".`);
-  else if (!r.aplicado) out.push(`\nAo aplicar, o gerador roda em seguida e inclui os novos candidatos nos "quem vence" e cria os rascunhos "será eleito?".`);
+  if (r.gerador) out.push(`\nGerador: ${r.gerador.multis} "quem vence" novo(s) em rascunho, ${r.gerador.outcomesSincronizados} candidato(s) incluído(s) nos mercados de disputa.`);
+  else if (!r.aplicado) out.push(`\nAo aplicar, o gerador roda em seguida e inclui os novos candidatos nos mercados de disputa ("quem vence" / "mais votado").`);
   return out.join("\n");
 }

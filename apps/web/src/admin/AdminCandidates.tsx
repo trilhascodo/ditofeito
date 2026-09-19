@@ -345,9 +345,9 @@ export function AdminCandidates() {
                     />
                   </div>
                   <p className="hint-text" style={{ marginBottom: 10 }}>
-                    O mercado "será eleito?" dele é anulado (devolve os pontos apostados) ou, se
-                    ainda for rascunho, apagado. Nos mercados "quem vence", ele sai da lista de
-                    candidatos, desde que ninguém tenha apostado nele.
+                    Ele sai da lista de candidatos dos mercados da disputa ("quem vence" / "mais
+                    votado"), desde que ninguém tenha apostado nele — se já houver aposta, o
+                    mercado aparece aqui pra você decidir.
                   </p>
                   {exitErr && <p className="error-text">{exitErr}</p>}
                   <button
