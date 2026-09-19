@@ -65,6 +65,7 @@ describe("umaPessoaPorDisputa", () => {
     sqCandidato: sq, nmCandidato: "RICARDO AUGUSTO MANGUE SCHIAVETTO", nmUrna: "GUTO SCHIAVETTO",
     nrCandidato: 144, sgPartido: "MISSÃO", dsCargo: "SENADOR", sgUf: "SP", dtNascimento: "1982-01-23",
     dsSituacao, cpf: "30360769802", office: "SENADOR",
+    nmPartido: "PARTIDO MISSÃO", nrFederacao: "", nmFederacao: "", dsComposicaoFederacao: "",
   });
   it("2 pedidos da mesma pessoa pro mesmo cargo viram 1 (o mais recente)", () => {
     const r = umaPessoaPorDisputa([guto("250002553928"), guto("250002554075")]);

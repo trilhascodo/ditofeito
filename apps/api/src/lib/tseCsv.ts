@@ -26,6 +26,12 @@ export interface TseCandidateRow {
   /** Só pra reconhecer pedido duplicado da mesma pessoa na mesma disputa
    *  (tseSync.ts) — nunca é gravado. */
   cpf: string;
+  /** Agremiação da disputa proporcional (deputado): federação conta como uma
+   *  só na distribuição das vagas. Sem federação: nrFederacao vazio/-1. */
+  nmPartido: string;
+  nrFederacao: string;
+  nmFederacao: string;
+  dsComposicaoFederacao: string;
 }
 
 // ------------------------------- zip ---------------------------------------
@@ -99,6 +105,9 @@ function parseCsv(text: string): TseCandidateRow[] {
   const iSq = col("SQ_CANDIDATO"), iNome = col("NM_CANDIDATO"), iUrna = col("NM_URNA_CANDIDATO");
   const iNr = col("NR_CANDIDATO"), iPart = col("SG_PARTIDO"), iCargo = col("DS_CARGO");
   const iUf = col("SG_UF"), iNasc = col("DT_NASCIMENTO", false), iCpf = col("NR_CPF_CANDIDATO", false);
+  const iNmPart = col("NM_PARTIDO", false), iNrFed = col("NR_FEDERACAO", false);
+  const iNmFed = col("NM_FEDERACAO", false), iCompFed = col("DS_COMPOSICAO_FEDERACAO", false);
+  const opt = (i: number, f: string[]) => (i >= 0 ? val(f[i]) : "");
   const iSit = header.indexOf("DS_DETALHE_SITUACAO_CAND") >= 0
     ? header.indexOf("DS_DETALHE_SITUACAO_CAND") : col("DS_SITUACAO_CANDIDATURA");
   // Depois do 1º turno o arquivo repete quem vai ao 2º com NR_TURNO=2 — só o 1º importa aqui.
@@ -122,7 +131,11 @@ function parseCsv(text: string): TseCandidateRow[] {
       sgUf: val(f[iUf]),
       dtNascimento: m ? `${m[3]}-${m[2]}-${m[1]}` : null,
       dsSituacao: val(f[iSit]),
-      cpf: iCpf >= 0 ? val(f[iCpf]) : "",
+      cpf: opt(iCpf, f),
+      nmPartido: opt(iNmPart, f),
+      nrFederacao: opt(iNrFed, f),
+      nmFederacao: opt(iNmFed, f),
+      dsComposicaoFederacao: opt(iCompFed, f),
     });
   }
   return [...bySq.values()];
