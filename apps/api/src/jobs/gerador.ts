@@ -28,7 +28,11 @@ export const CALENDARIO_2026 = {
   prazoResolucaoEleito: "2026-12-20T23:59:59-03:00", // pós-diplomação
 } as const;
 
-const MAJORITARIOS = new Set(["PRESIDENTE", "GOVERNADOR", "SENADOR", "PREFEITO"]);
+// Cargos com MULTI "quem vence a disputa" (um único vencedor). SENADOR fica
+// de fora: em 2026 cada UF elege 2 senadores (renovação de 2/3), então "quem
+// vence" não tem resposta única — o MULTI resolveria errado. Senado segue só
+// com os binários "será eleito?", que funcionam com qualquer nº de vagas.
+const MAJORITARIOS = new Set(["PRESIDENTE", "GOVERNADOR", "PREFEITO"]);
 const CARGO_LABEL: Record<string, string> = {
   PRESIDENTE: "presidente", GOVERNADOR: "governador(a)", SENADOR: "senador(a)",
   DEP_FEDERAL: "deputado(a) federal", DEP_ESTADUAL: "deputado(a) estadual",
