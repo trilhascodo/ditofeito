@@ -11,6 +11,7 @@ import { router, publicProcedure, protectedProcedure, resolverProcedure, adminPr
 import { rodarGerador } from "../jobs/gerador.js";
 import { voidMarket } from "../domain/trade.js";
 import { throwAsTRPC } from "../trpc/errors.js";
+import { EXIT_STATUSES, applyExitToMarkets, type ExitEffects } from "../domain/candidateExit.js";
 
 const OFFICE = z.enum([
   "PRESIDENTE", "GOVERNADOR", "SENADOR",
@@ -20,71 +21,6 @@ const CANDIDACY_STATUS = z.enum([
   "PRE_ANUNCIADO", "PRE_REIVINDICADO", "REGISTRADO",
   "DEFERIDO", "INDEFERIDO", "RENUNCIOU", "FALECIDO", "NAO_REGISTROU",
 ]);
-
-// Status que significam "saiu da disputa" — indeferimento, abandono,
-// não-registro (exclusão por não participação) ou falecimento. Fora desse
-// conjunto, o candidato segue na disputa (inclusive REGISTRADO/DEFERIDO), e
-// nenhum mercado é mexido.
-const EXIT_STATUSES = new Set(["INDEFERIDO", "RENUNCIOU", "FALECIDO", "NAO_REGISTROU"]);
-
-// Tira o candidato de um MULTI "quem vence" quando ninguém tocou nele: sem
-// trade, sem posição, sem palpite de bolão, sem resolução. Nesse caso não há
-// aposta de ninguém pra proteger — o outcome é só uma linha errada (ex.:
-// pré-candidato que o gerador pegou e que nunca concorreu ao cargo). LMSR
-// renormaliza os preços dos outros sozinho (a massa dele se redistribui), o
-// que é o certo: quem está fora da disputa não tem chance. Com qualquer
-// aposta nele, devolve false e o admin decide (anular o MULTI inteiro puniria
-// quem apostou nos outros candidatos — ver updateStatus).
-async function removeUntouchedOutcome(pool: Pool, marketId: string, candidateId: string): Promise<boolean> {
-  const c = await pool.connect();
-  try {
-    await c.query("BEGIN");
-    // Mesmo lock do executeTrade (domain/trade.ts) — nenhum trade entra no meio.
-    const m = await c.query(`SELECT status FROM markets WHERE id = $1 FOR UPDATE`, [marketId]);
-    if (!m.rowCount || !["DRAFT", "OPEN", "CLOSED"].includes(m.rows[0].status as string)) {
-      await c.query("ROLLBACK");
-      return false;
-    }
-    const o = await c.query(
-      `SELECT id FROM market_outcomes WHERE market_id = $1 AND candidate_id = $2`, [marketId, candidateId]);
-    if (!o.rowCount) { await c.query("ROLLBACK"); return true; }
-    const outcomeId = o.rows[0].id as string;
-    const used = await c.query(
-      `SELECT EXISTS (SELECT 1 FROM trades WHERE outcome_id = $1)
-           OR EXISTS (SELECT 1 FROM positions WHERE outcome_id = $1 AND shares > 0)
-           OR EXISTS (SELECT 1 FROM bolao_palpites WHERE guess_outcome_id = $1)
-           OR EXISTS (SELECT 1 FROM resolutions WHERE resolved_outcome_id = $1) AS used`,
-      [outcomeId]);
-    if (used.rows[0].used) { await c.query("ROLLBACK"); return false; }
-    await c.query(`DELETE FROM price_snapshots WHERE outcome_id = $1`, [outcomeId]);
-    await c.query(`DELETE FROM positions WHERE outcome_id = $1`, [outcomeId]);
-    await c.query(`DELETE FROM market_outcomes WHERE id = $1`, [outcomeId]);
-    await c.query("COMMIT");
-    return true;
-  } catch (e) {
-    await c.query("ROLLBACK");
-    throw e;
-  } finally {
-    c.release();
-  }
-}
-
-// Rascunho nunca foi público (market.remove segue a mesma regra) — o
-// "será eleito?" de quem saiu da disputa só some, não precisa ser anulado.
-async function deleteDraftMarket(pool: Pool, marketId: string): Promise<void> {
-  const c = await pool.connect();
-  try {
-    await c.query("BEGIN");
-    await c.query(`DELETE FROM sponsorships WHERE market_id = $1`, [marketId]);
-    await c.query(`DELETE FROM markets WHERE id = $1 AND status = 'DRAFT'`, [marketId]);
-    await c.query("COMMIT");
-  } catch (e) {
-    await c.query("ROLLBACK");
-    throw e;
-  } finally {
-    c.release();
-  }
-}
 
 const candidateFields = z.object({
   name: z.string().trim().min(3).max(200),
@@ -248,7 +184,7 @@ export const candidateRouter = router({
   // NUNCA anula um MULTI "quem vence a disputa" (vários candidatos como
   // outcome — anular puniria quem apostou nos outros, que continuam
   // concorrendo): tira só a linha do candidato se ninguém apostou nele
-  // (removeUntouchedOutcome); com aposta, devolve em skippedMarkets pro admin.
+  // (domain/candidateExit.ts); com aposta, devolve em skippedMarkets pro admin.
   updateStatus: resolverProcedure
     .input(
       z.object({
@@ -265,51 +201,42 @@ export const candidateRouter = router({
       ),
     )
     .mutation(async ({ ctx, input }) => {
-      const cand = await ctx.pool.query(`SELECT id FROM candidates WHERE id = $1`, [input.id]);
-      if (!cand.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "candidato não encontrado" });
-
-      await ctx.pool.query(
-        `UPDATE candidates SET candidacy_status = $2, updated_at = now() WHERE id = $1`,
-        [input.id, input.candidacyStatus],
-      );
+      // Status + efeitos nos mercados numa transação só (domain/candidateExit.ts,
+      // mesma lógica da sync com o TSE); anular "será eleito?" publicado fica
+      // pra depois do commit — voidMarket abre transação própria e manda e-mail.
+      const c = await ctx.pool.connect();
+      let fx: ExitEffects = { removedFromMarkets: [], deletedDrafts: [], toVoid: [], skippedMarkets: [] };
+      try {
+        await c.query("BEGIN");
+        const r = await c.query(
+          `UPDATE candidates SET candidacy_status = $2, updated_at = now() WHERE id = $1`,
+          [input.id, input.candidacyStatus],
+        );
+        if (!r.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "candidato não encontrado" });
+        if (EXIT_STATUSES.has(input.candidacyStatus)) fx = await applyExitToMarkets(c, input.id);
+        await c.query("COMMIT");
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
 
       const voidedMarkets: string[] = [];
-      const skippedMarkets: string[] = [];
-      const removedFromMarkets: string[] = [];
-      const deletedDrafts: string[] = [];
-      if (EXIT_STATUSES.has(input.candidacyStatus)) {
-        const markets = await ctx.pool.query(
-          `SELECT m.id, m.slug, m.status,
-                  (SELECT count(*) FROM market_outcomes mo2
-                     WHERE mo2.market_id = m.id AND mo2.candidate_id IS NOT NULL) AS candidate_outcomes
-             FROM market_outcomes mo JOIN markets m ON m.id = mo.market_id
-            WHERE mo.candidate_id = $1`,
-          [input.id],
-        );
-        for (const row of markets.rows) {
-          const slug = row.slug as string;
-          if (Number(row.candidate_outcomes) > 1) {
-            if (await removeUntouchedOutcome(ctx.pool, row.id as string, input.id)) removedFromMarkets.push(slug);
-            else skippedMarkets.push(slug);
-            continue;
-          }
-          if (row.status === "DRAFT") {
-            await deleteDraftMarket(ctx.pool, row.id as string);
-            deletedDrafts.push(slug);
-            continue;
-          }
-          if (!["OPEN", "CLOSED"].includes(row.status as string)) continue; // já anulado/resolvido, nada a fazer
-          try {
-            await voidMarket(ctx.pool, {
-              marketId: row.id as string, resolverUserId: ctx.user.id,
-              justification: input.justification!, sourceUrl: input.sourceUrl!,
-            });
-            voidedMarkets.push(slug);
-          } catch (e) {
-            throwAsTRPC(e);
-          }
+      for (const m of fx.toVoid) {
+        try {
+          await voidMarket(ctx.pool, {
+            marketId: m.id, resolverUserId: ctx.user.id,
+            justification: input.justification!, sourceUrl: input.sourceUrl!,
+          });
+          voidedMarkets.push(m.slug);
+        } catch (e) {
+          throwAsTRPC(e);
         }
       }
-      return { ok: true, voidedMarkets, skippedMarkets, removedFromMarkets, deletedDrafts };
+      return {
+        ok: true, voidedMarkets, skippedMarkets: fx.skippedMarkets,
+        removedFromMarkets: fx.removedFromMarkets, deletedDrafts: fx.deletedDrafts,
+      };
     }),
 });
