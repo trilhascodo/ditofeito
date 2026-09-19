@@ -46,8 +46,20 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
   // MULTI, mesma regra do resto do produto) sempre em primeiro e destacado,
   // seguido de até 3 outros — substitui o antigo par "stat grande + pills
   // soltas" por uma lista única, mais parecida com o carrossel do Kalshi.
-  const outros = m.outcomes.filter((o) => o.label !== m.summary?.label).slice(0, 3);
-  const linhas = m.summary ? [{ ...m.summary, lead: true }, ...outros.map((o) => ({ ...o, lead: false }))] : [];
+  //
+  // Sem histórico de verdade (mercado novo, sem previsão: série vazia ou
+  // reta) o gráfico era só 3 linhas pontilhadas ocupando 2/3 do card — aí a
+  // lista ocupa o card inteiro, em 2 colunas, mostrando mais candidatos. E
+  // com todo mundo empatado (ninguém previu ainda) não existe líder: marcar
+  // o 1º da lista como destaque sugeria uma vantagem que não existe.
+  const serie = m.series.map(([, p]) => p);
+  const temHistorico = !!path && Math.max(...serie) - Math.min(...serie) >= 0.01;
+  const precos = m.outcomes.map((o) => o.price);
+  const empate = precos.length > 1 && Math.max(...precos) - Math.min(...precos) < 0.005;
+  const outros = m.outcomes.filter((o) => o.label !== m.summary?.label).slice(0, temHistorico ? 3 : 5);
+  const linhas = m.summary
+    ? [{ ...m.summary, lead: !empate }, ...outros.map((o) => ({ ...o, lead: false }))]
+    : [];
 
   return (
     <div className="destaque" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
@@ -67,7 +79,7 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
         <h2 className="destaque-titulo">{m.title}</h2>
         <div className="destaque-corpo">
           {linhas.length > 0 && (
-            <div className="destaque-linhas">
+            <div className={`destaque-linhas${temHistorico ? "" : " destaque-linhas-cheia"}`}>
               {linhas.map((o) => (
                 <div key={o.label} className={`destaque-linha${o.lead ? " destaque-linha-lead" : ""}`}>
                   <span className="destaque-linha-dot" aria-hidden="true" />
@@ -78,15 +90,20 @@ function Destaque({ items }: { items: FeaturedMarket[] }) {
               ))}
             </div>
           )}
-          <svg viewBox="0 0 640 100" className="destaque-spark" preserveAspectRatio="none" aria-hidden="true">
-            <line x1="0" y1="20" x2="640" y2="20" stroke="var(--linha)" strokeDasharray="2 4" />
-            <line x1="0" y1="50" x2="640" y2="50" stroke="var(--linha)" strokeDasharray="2 4" />
-            <line x1="0" y1="80" x2="640" y2="80" stroke="var(--linha)" strokeDasharray="2 4" />
-            {path && <path d={path} fill="none" stroke="var(--violeta)" strokeWidth={3}
-                            strokeLinecap="round" strokeLinejoin="round" />}
-          </svg>
+          {temHistorico && (
+            <svg viewBox="0 0 640 100" className="destaque-spark" preserveAspectRatio="none" aria-hidden="true">
+              <line x1="0" y1="20" x2="640" y2="20" stroke="var(--linha)" strokeDasharray="2 4" />
+              <line x1="0" y1="50" x2="640" y2="50" stroke="var(--linha)" strokeDasharray="2 4" />
+              <line x1="0" y1="80" x2="640" y2="80" stroke="var(--linha)" strokeDasharray="2 4" />
+              <path d={path} fill="none" stroke="var(--violeta)" strokeWidth={3}
+                    strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </div>
-        <span className="hint-text">{relativeClose(m.closeAt)}</span>
+        <span className="hint-text">
+          {relativeClose(m.closeAt)}
+          {empate && <> · <span className="destaque-primeiro">ninguém previu ainda — dê o primeiro palpite</span></>}
+        </span>
       </Link>
     </div>
   );
