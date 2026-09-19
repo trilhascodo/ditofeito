@@ -16,7 +16,8 @@ export function EntrarGrupo() {
   async function onEntrar() {
     if (!code) return;
     const g = await joinMut.mutateAsync({ code });
-    navigate(`/grupos/${g.id}`);
+    // desafio/enquete têm um bolão só — vai direto pro palpite
+    navigate(g.bolaoId ? `/grupos/${g.id}/bolao/${g.bolaoId}` : `/grupos/${g.id}`);
   }
 
   function onQuerCriarConta() {
@@ -40,6 +41,7 @@ export function EntrarGrupo() {
   }
 
   const isEnquete = preview.kind === "ENQUETE" && preview.enquete;
+  const desafio = preview.kind === "DESAFIO" ? preview.desafio : null;
   const GUESS_TYPE_LABEL: Record<string, string> = {
     WINNER: "Quem ganha", SCORE: "Placar exato", NUMBER: "Palpite de número",
   };
@@ -47,12 +49,29 @@ export function EntrarGrupo() {
   return (
     <main className="page-narrow">
       <div className="card">
-        <span className="eyebrow">{isEnquete ? "Enquete" : "Você foi convidado"}</span>
+        <span className="eyebrow">
+          {desafio ? `${preview.creatorDisplayName} te desafiou` : isEnquete ? "Enquete" : "Você foi convidado"}
+        </span>
         <h1 style={{ fontFamily: "var(--serif)", fontSize: 22, margin: "6px 0 4px" }}>
-          {isEnquete ? preview.enquete!.title : preview.name}
+          {desafio ? desafio.marketTitle : isEnquete ? preview.enquete!.title : preview.name}
         </h1>
 
-        {isEnquete ? (
+        {desafio ? (
+          <>
+            <p className="hint-text" style={{ marginBottom: 8 }}>
+              Quem acerta mais? Dê seu palpite e compare com o de {preview.creatorDisplayName} quando sair o
+              resultado. {preview.memberCount > 1 && `${preview.memberCount} pessoas já estão no desafio.`}
+            </p>
+            {desafio.outcomes.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {desafio.outcomes.map((o) => <span key={o} className="badge">{o}</span>)}
+              </div>
+            )}
+            <p className="hint-text" style={{ marginBottom: 16 }}>
+              Grátis, sem dinheiro de verdade — é palpite e reputação. Entrar pelo convite vale +50 pontos.
+            </p>
+          </>
+        ) : isEnquete ? (
           <>
             <p className="hint-text" style={{ marginBottom: 8 }}>
               De {preview.creatorDisplayName} · {GUESS_TYPE_LABEL[preview.enquete!.guessType]}
@@ -82,13 +101,13 @@ export function EntrarGrupo() {
           <>
             {joinMut.error && <p className="error-text">{joinMut.error.message}</p>}
             <button className="btn" onClick={onEntrar} disabled={joinMut.isPending}>
-              {joinMut.isPending ? "Entrando…" : isEnquete ? "Dar meu palpite" : "Entrar no grupo"}
+              {joinMut.isPending ? "Entrando…" : desafio ? "Aceitar o desafio" : isEnquete ? "Dar meu palpite" : "Entrar no grupo"}
             </button>
           </>
         ) : (
           <>
             <p className="hint-text" style={{ marginBottom: 12 }}>
-              {isEnquete
+              {desafio || isEnquete
                 ? "Crie sua conta (ou entre, se já tem) pra dar seu palpite."
                 : "Crie sua conta (ou entre, se já tem) pra participar do bolão com esse grupo."}
             </p>

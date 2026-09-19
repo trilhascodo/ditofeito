@@ -22,9 +22,10 @@
 import type { Pool } from "pg";
 import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng } from "./embed.js";
 import type { GuessType } from "../domain/bolao.js";
+import { normalizeSource } from "@ditofeito/core";
 
 export interface InviteCardData {
-  kind: "GRUPO" | "ENQUETE";
+  kind: "GRUPO" | "ENQUETE" | "DESAFIO";
   name: string;
   creatorDisplayName: string;
   memberCount: number;
@@ -52,9 +53,30 @@ export async function getInviteCardData(pool: Pool, code: string): Promise<Invit
   );
   if (!r.rowCount) return null;
   const row = r.rows[0];
-  const kind = row.kind as "GRUPO" | "ENQUETE";
+  const kind = row.kind as InviteCardData["kind"];
 
   let enquete: InviteCardData["enquete"] = null;
+  // Desafio (046): mesmo card da enquete, com a pergunta e as opções do
+  // mercado por trás do bolão em vez das opções customizadas.
+  if (kind === "DESAFIO") {
+    const b = await pool.query(
+      `SELECT m.title, b.guess_type,
+              (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count,
+              (SELECT array_agg(o.label ORDER BY o.display_order) FROM market_outcomes o
+                WHERE o.market_id = m.id AND NOT o.is_catchall) AS outcomes
+         FROM boloes b JOIN markets m ON m.id = b.market_id
+        WHERE b.group_id = $1 ORDER BY b.created_at LIMIT 1`,
+      [row.id],
+    );
+    if (b.rowCount) {
+      enquete = {
+        title: b.rows[0].title as string,
+        guessType: b.rows[0].guess_type as GuessType,
+        outcomes: (b.rows[0].outcomes as string[] | null) ?? [],
+        palpiteCount: Number(b.rows[0].palpite_count),
+      };
+    }
+  }
   if (kind === "ENQUETE") {
     const b = await pool.query(
       `SELECT b.id, b.guess_type, b.custom_title,
@@ -93,6 +115,7 @@ function guessTypeSummary(guessType: GuessType, outcomes: string[]): string {
 }
 
 function renderEnqueteCardSvg(d: InviteCardData & { enquete: NonNullable<InviteCardData["enquete"]> }): string {
+  const desafio = d.kind === "DESAFIO";
   const titleLines = wrapText(d.enquete.title, 1040, 44, 3);
   const summaryY = 152 + titleLines.length * 52 + 14;
   const countY = summaryY + 50;
@@ -101,7 +124,7 @@ function renderEnqueteCardSvg(d: InviteCardData & { enquete: NonNullable<InviteC
   <rect width="1200" height="630" fill="${TOKENS.papel}"/>
   <rect x="0" y="0" width="1200" height="8" fill="${TOKENS.violeta}"/>
   <text x="80" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="600"
-        letter-spacing="1.4" fill="${TOKENS.violeta}">ENQUETE DE ${esc(d.creatorDisplayName.toUpperCase())}</text>
+        letter-spacing="1.4" fill="${TOKENS.violeta}">${desafio ? "DESAFIO" : "ENQUETE"} DE ${esc(d.creatorDisplayName.toUpperCase())}</text>
   <text x="1120" y="64" font-family="IBM Plex Mono" font-size="18" font-weight="700"
         letter-spacing="1.4" fill="${TOKENS.violeta}" text-anchor="end">DÁ SEU PALPITE</text>
   ${titleLines.map((line, i) => `<text x="80" y="${152 + i * 52}" font-family="IBM Plex Sans" font-size="44"
@@ -110,7 +133,9 @@ function renderEnqueteCardSvg(d: InviteCardData & { enquete: NonNullable<InviteC
     ${esc(guessTypeSummary(d.enquete.guessType, d.enquete.outcomes))}
   </text>
   <text x="80" y="${countY}" font-family="IBM Plex Sans" font-size="18" fill="${TOKENS.grafite}">
-    ${d.enquete.palpiteCount} palpite${d.enquete.palpiteCount === 1 ? "" : "s"} até agora — conta verificada, sem voto repetido
+    ${desafio
+      ? "Quem acerta mais? Entra, dá seu palpite e confere no resultado da eleição"
+      : `${d.enquete.palpiteCount} palpite${d.enquete.palpiteCount === 1 ? "" : "s"} até agora — conta verificada, sem voto repetido`}
   </text>
   <text x="80" y="540" font-family="IBM Plex Serif" font-size="34" font-weight="700" fill="${TOKENS.tinta}">Dito<tspan fill="${TOKENS.violeta}">Feito</tspan></text>
   <text x="1120" y="521" font-family="IBM Plex Mono" font-size="18" font-weight="700"
@@ -119,7 +144,7 @@ function renderEnqueteCardSvg(d: InviteCardData & { enquete: NonNullable<InviteC
 }
 
 export function renderInviteCardSvg(d: InviteCardData): string {
-  if (d.kind === "ENQUETE" && d.enquete) return renderEnqueteCardSvg(d as Parameters<typeof renderEnqueteCardSvg>[0]);
+  if (d.kind !== "GRUPO" && d.enquete) return renderEnqueteCardSvg(d as Parameters<typeof renderEnqueteCardSvg>[0]);
 
   const titleLines = wrapText(d.name, 1040, 44, 2);
   const extraLine = titleLines.length > 1 ? 1 : 0;
@@ -152,12 +177,18 @@ export function renderInviteCardPng(d: InviteCardData): Buffer {
   return svgToPng(renderInviteCardSvg(d));
 }
 
-export function renderInviteHtml(d: InviteCardData, code: string): string {
-  const joinUrl = `${EMBED_CONFIG.baseUrl}/grupos/entrar/${code}`;
+export function renderInviteHtml(d: InviteCardData, code: string, origem?: string): string {
+  // origem (?origem= do link compartilhado) segue pro /grupos/entrar — o
+  // botão desta página é um clique a mais e perdia a atribuição do canal.
+  const joinUrl = `${EMBED_CONFIG.baseUrl}/grupos/entrar/${code}${origem ? `?origem=${encodeURIComponent(origem)}` : ""}`;
   const cardUrl = `${EMBED_CONFIG.baseUrl}/card/convite/${code}.png`;
   const isEnquete = d.kind === "ENQUETE" && d.enquete;
-  const pageTitle = isEnquete ? d.enquete!.title : `Convite pro grupo "${d.name}"`;
-  const desc = isEnquete
+  const isDesafio = d.kind === "DESAFIO" && d.enquete;
+  const pageTitle = isDesafio ? `${d.creatorDisplayName} te desafiou: ${d.enquete!.title}`
+    : isEnquete ? d.enquete!.title : `Convite pro grupo "${d.name}"`;
+  const desc = isDesafio
+    ? `Quem acerta mais? Dá seu palpite no desafio de ${d.creatorDisplayName} no DitoFeito — é grátis e entrar vale pontos.`
+    : isEnquete
     ? `${d.creatorDisplayName} criou uma enquete no DitoFeito: "${d.enquete!.title}" — ${d.enquete!.palpiteCount} palpite${d.enquete!.palpiteCount === 1 ? "" : "s"} até agora, conta verificada.`
     : `${d.creatorDisplayName} te convidou pro grupo "${d.name}" — ${d.memberCount} membro${
         d.memberCount === 1 ? "" : "s"
@@ -188,7 +219,7 @@ export function renderInviteHtml(d: InviteCardData, code: string): string {
 </style></head><body>
 <img src="${cardUrl}" alt="${esc(desc)}">
 <p>${esc(desc)}</p>
-<a class="btn" href="${joinUrl}">${isEnquete ? "Dar meu palpite" : "Entrar no grupo"}</a>
+<a class="btn" href="${joinUrl}">${isDesafio ? "Aceitar o desafio" : isEnquete ? "Dar meu palpite" : "Entrar no grupo"}</a>
 </body></html>`;
 }
 
@@ -215,6 +246,7 @@ export function mountInviteCard(app: express.Express, pool: Pool) {
   app.get("/convite/:code", asyncHandler(async (req, res) => {
     const d = await getInviteCardData(pool, req.params.code);
     if (!d) return res.status(404).send("convite não encontrado");
-    cache(res); res.type("html").send(renderInviteHtml(d, req.params.code));
+    const origem = normalizeSource(typeof req.query.origem === "string" ? req.query.origem : undefined);
+    cache(res); res.type("html").send(renderInviteHtml(d, req.params.code, origem));
   }));
 }

@@ -133,16 +133,63 @@ const groupsSubRouter = router({
       }
     }),
 
+  // "Desafiar amigos" da página do mercado (046_grupo_desafio.sql): grupo de
+  // propósito único + bolão WINNER sobre o mercado, num passo. Um desafio por
+  // pessoa e mercado — clicar de novo devolve o mesmo convite em vez de
+  // espalhar os amigos por vários grupos iguais.
+  challenge: protectedProcedure
+    .input(z.object({ marketId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const mkt = await ctx.pool.query(`SELECT title, status FROM markets WHERE id = $1`, [input.marketId]);
+      if (!mkt.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "mercado não encontrado" });
+      if (mkt.rows[0].status !== "OPEN")
+        throw new TRPCError({ code: "BAD_REQUEST", message: "só dá pra desafiar em mercado aberto" });
+
+      const existing = await ctx.pool.query(
+        `SELECT g.id, g.invite_code, b.id AS bolao_id
+           FROM groups g JOIN boloes b ON b.group_id = g.id
+          WHERE g.kind = 'DESAFIO' AND g.created_by = $1 AND b.market_id = $2
+          LIMIT 1`,
+        [ctx.user.id, input.marketId]);
+      if (existing.rowCount) {
+        const e = existing.rows[0];
+        return { groupId: e.id as string, bolaoId: e.bolao_id as string, inviteCode: e.invite_code as string };
+      }
+
+      const client = await ctx.pool.connect();
+      try {
+        await client.query("BEGIN");
+        const inviteCode = randomBytes(6).toString("base64url");
+        const title = mkt.rows[0].title as string;
+        const name = `Desafio: ${title}`.slice(0, 80);
+        const g = await client.query(
+          `INSERT INTO groups (name, invite_code, created_by, kind) VALUES ($1,$2,$3,'DESAFIO') RETURNING id`,
+          [name, inviteCode, ctx.user.id]);
+        const groupId = g.rows[0].id as string;
+        await client.query(`INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)`, [groupId, ctx.user.id]);
+        const b = await client.query(
+          `INSERT INTO boloes (group_id, market_id, created_by, guess_type) VALUES ($1,$2,$3,'WINNER') RETURNING id`,
+          [groupId, input.marketId, ctx.user.id]);
+        await client.query("COMMIT");
+        return { groupId, bolaoId: b.rows[0].id as string, inviteCode };
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      } finally {
+        client.release();
+      }
+    }),
+
   joinByCode: protectedProcedure
     .input(z.object({ code: z.string().trim().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const client = await ctx.pool.connect();
       let queuedEmail: { to: string; subject: string; html: string } | null = null;
-      let result: { id: string; name: string };
+      let result: { id: string; name: string; bolaoId: string | null };
       try {
         await client.query("BEGIN");
         const g = await client.query(
-          `SELECT id, name, created_by FROM groups WHERE invite_code = $1 FOR UPDATE`,
+          `SELECT id, name, created_by, kind FROM groups WHERE invite_code = $1 FOR UPDATE`,
           [input.code],
         );
         if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
@@ -187,8 +234,15 @@ const groupsSubRouter = router({
           }
         }
 
+        // Desafio/enquete têm um bolão só: quem entra vai direto pro palpite.
+        let bolaoId: string | null = null;
+        if (g.rows[0].kind !== "GRUPO") {
+          const b = await client.query(
+            `SELECT id FROM boloes WHERE group_id = $1 ORDER BY created_at LIMIT 1`, [groupId]);
+          bolaoId = (b.rows[0]?.id as string | undefined) ?? null;
+        }
         await client.query("COMMIT");
-        result = { id: groupId, name: groupName };
+        result = { id: groupId, name: groupName, bolaoId };
       } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -228,7 +282,28 @@ const groupsSubRouter = router({
       );
       if (!g.rowCount) throw new TRPCError({ code: "NOT_FOUND", message: "código de convite inválido" });
       const row = g.rows[0];
-      const kind = row.kind as "GRUPO" | "ENQUETE";
+      const kind = row.kind as "GRUPO" | "ENQUETE" | "DESAFIO";
+
+      let desafio = null;
+      if (kind === "DESAFIO") {
+        const d = await ctx.pool.query(
+          `SELECT m.title, m.slug, m.close_at,
+                  (SELECT count(*) FROM bolao_palpites bp WHERE bp.bolao_id = b.id) AS palpite_count,
+                  (SELECT array_agg(o.label ORDER BY o.display_order) FROM market_outcomes o
+                    WHERE o.market_id = m.id AND NOT o.is_catchall) AS outcomes
+             FROM boloes b JOIN markets m ON m.id = b.market_id
+            WHERE b.group_id = $1 ORDER BY b.created_at LIMIT 1`,
+          [row.id]);
+        if (d.rowCount) {
+          desafio = {
+            marketTitle: d.rows[0].title as string,
+            marketSlug: d.rows[0].slug as string,
+            closeAt: d.rows[0].close_at as Date,
+            palpiteCount: Number(d.rows[0].palpite_count),
+            outcomes: ((d.rows[0].outcomes as string[] | null) ?? []).slice(0, 8),
+          };
+        }
+      }
 
       let enquete = null;
       if (kind === "ENQUETE") {
@@ -261,6 +336,7 @@ const groupsSubRouter = router({
         memberCount: Number(row.member_count),
         activeBoloesCount: Number(row.active_boloes_count),
         enquete,
+        desafio,
       };
     }),
 

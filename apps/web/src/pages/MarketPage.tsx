@@ -11,6 +11,7 @@ import { MarketTile } from "../components/MarketTile";
 import { CpfPrompt } from "../components/CpfPrompt";
 import { ShareRow } from "../components/ShareRow";
 import { SignupCta } from "../components/SignupCta";
+import { DesafiarAmigos } from "../components/DesafiarAmigos";
 import { rememberReturnTo } from "../lib/attribution";
 import { getCurrentUf } from "../lib/useUfGeolocation";
 
@@ -283,6 +284,10 @@ export function MarketPage() {
           onShare={(channel) => trackShareMut.mutate({ marketId: market.id, channel })}
         />
       </div>
+
+      {market.status === "OPEN" && (
+        <DesafiarAmigos marketId={market.id} marketTitle={market.title} returnPath={`/m/${market.slug}`} />
+      )}
 
       {vindication && (
         <div className="card vindication-card">

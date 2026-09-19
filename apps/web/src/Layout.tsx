@@ -53,7 +53,9 @@ function usePendingInviteAutoJoin(userId: string | undefined) {
     }
     localStorage.removeItem(PENDING_INVITE_KEY);
     consumeReturnTo();
-    joinMut.mutateAsync({ code }).then((g) => navigate(`/grupos/${g.id}`)).catch(() => {});
+    joinMut.mutateAsync({ code })
+      .then((g) => navigate(g.bolaoId ? `/grupos/${g.id}/bolao/${g.bolaoId}` : `/grupos/${g.id}`))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 }
