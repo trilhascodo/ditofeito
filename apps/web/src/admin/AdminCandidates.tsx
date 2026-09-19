@@ -49,7 +49,9 @@ export function AdminCandidates() {
   const [exitJustification, setExitJustification] = useState("");
   const [exitSourceUrl, setExitSourceUrl] = useState("");
   const [exitErr, setExitErr] = useState<string | null>(null);
-  const [exitResult, setExitResult] = useState<{ voidedMarkets: string[]; skippedMarkets: string[] } | null>(null);
+  const [exitResult, setExitResult] = useState<{
+    voidedMarkets: string[]; skippedMarkets: string[]; removedFromMarkets: string[]; deletedDrafts: string[];
+  } | null>(null);
 
   async function onRemove(id: string) {
     if (!confirm("Remover essa sugestão de pré-candidato?")) return;
@@ -88,7 +90,10 @@ export function AdminCandidates() {
         id, candidacyStatus: exitStatus,
         justification: exitJustification.trim(), sourceUrl: exitSourceUrl.trim(),
       });
-      setExitResult({ voidedMarkets: r.voidedMarkets, skippedMarkets: r.skippedMarkets });
+      setExitResult({
+        voidedMarkets: r.voidedMarkets, skippedMarkets: r.skippedMarkets,
+        removedFromMarkets: r.removedFromMarkets, deletedDrafts: r.deletedDrafts,
+      });
       await utils.candidate.list.invalidate();
     } catch (err) {
       setExitErr(err instanceof Error ? err.message : "Erro ao atualizar status");
@@ -185,13 +190,25 @@ export function AdminCandidates() {
                       Mercado(s) anulado(s): {exitResult.voidedMarkets.join(", ")}
                     </p>
                   )}
-                  {exitResult.skippedMarkets.length > 0 && (
-                    <p className="hint-text" style={{ margin: 0 }}>
-                      Mercado(s) MULTI com outros candidatos ainda na disputa — não anulados,
-                      decida manualmente: {exitResult.skippedMarkets.join(", ")}
+                  {exitResult.removedFromMarkets.length > 0 && (
+                    <p className="hint-text" style={{ margin: "0 0 4px" }}>
+                      Removido da lista de candidatos de: {exitResult.removedFromMarkets.join(", ")}
                     </p>
                   )}
-                  {exitResult.voidedMarkets.length === 0 && exitResult.skippedMarkets.length === 0 && (
+                  {exitResult.deletedDrafts.length > 0 && (
+                    <p className="hint-text" style={{ margin: "0 0 4px" }}>
+                      Rascunho(s) apagado(s): {exitResult.deletedDrafts.join(", ")}
+                    </p>
+                  )}
+                  {exitResult.skippedMarkets.length > 0 && (
+                    <p className="hint-text" style={{ margin: 0 }}>
+                      Já tem aposta nesse candidato — não dá pra tirá-lo de:{" "}
+                      {exitResult.skippedMarkets.join(", ")}. Decida manualmente (anular o mercado
+                      inteiro devolve os pontos de todo mundo).
+                    </p>
+                  )}
+                  {exitResult.voidedMarkets.length === 0 && exitResult.skippedMarkets.length === 0
+                    && exitResult.removedFromMarkets.length === 0 && exitResult.deletedDrafts.length === 0 && (
                     <p className="hint-text" style={{ margin: 0 }}>Esse candidato ainda não tinha mercado gerado.</p>
                   )}
                 </div>
@@ -218,8 +235,9 @@ export function AdminCandidates() {
                     />
                   </div>
                   <p className="hint-text" style={{ marginBottom: 10 }}>
-                    Se esse candidato já tem mercado binário ("será eleito?"), ele é anulado junto
-                    (devolve os pontos apostados). Mercado MULTI com outros candidatos não é anulado.
+                    O mercado "será eleito?" dele é anulado (devolve os pontos apostados) ou, se
+                    ainda for rascunho, apagado. Nos mercados "quem vence", ele sai da lista de
+                    candidatos, desde que ninguém tenha apostado nele.
                   </p>
                   {exitErr && <p className="error-text">{exitErr}</p>}
                   <button
