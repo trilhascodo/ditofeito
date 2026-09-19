@@ -180,7 +180,7 @@ export async function gerarDisputasMajoritarias(
 
       const b = suggestB(cands.rowCount! + 1, GERADOR_CONFIG.depthMajoritaria);
       const slugMulti = `quem-vence-${slugDisputa}`;
-      const { created, marketId: novoMarketId } = await createMarketIdempotent(c, {
+      const { created } = await createMarketIdempotent(c, {
         slug: slugMulti,
         title: `Quem vence a eleição para ${cargoTxt}${local} em 2026?`,
         categoryId: opts.categoriaEleicoesId, groupId, type: "MULTI", liquidityB: b,
@@ -199,24 +199,33 @@ export async function gerarDisputasMajoritarias(
         ],
       });
 
-      let marketId: string;
       if (created) {
-        marketId = novoMarketId;
         mercadosCriados++;
         outcomesAdicionados += cands.rowCount!;
-      } else {
-        // Mercado já existe: SINCRONIZAR — pré-candidato novo entra como outcome
-        // com q inicial que preserva os preços atuais? Não: LMSR exige cuidado.
-        // Estratégia segura: novo outcome entra com q = min(q existentes) - offset,
-        // nascendo com preço baixo e roubando probabilidade proporcionalmente do
-        // conjunto (na prática, quase tudo de OUTROS, onde ele estava implícito).
+      }
+      // Mercados que acompanham a disputa e precisam da mesma lista de
+      // candidatos: o próprio "quem vence" (se já existia) e o "quem terá
+      // mais votos no 1º turno" (jobs/run-primeiro-turno.ts), que copia as
+      // opções do "quem vence" só na criação — sem isso, candidato que entra
+      // depois (ex.: registrado no TSE via tseSync) caía em OUTROS lá.
+      const seguidores = [
+        ...(created ? [] : [slugMulti]),
+        `mais-votado-1turno-${slugDisputa.replace(/^disputa-/, "")}`,
+      ];
+      for (const slug of seguidores) {
+        // SINCRONIZAR — pré-candidato novo entra como outcome com q inicial
+        // que preserva os preços atuais? Não: LMSR exige cuidado. Estratégia
+        // segura: novo outcome entra com q = min(q existentes), nascendo com
+        // preço baixo e roubando probabilidade proporcionalmente do conjunto
+        // (na prática, quase tudo de OUTROS, onde ele estava implícito).
+        // Mercado já encerrado (close_at passou) não ganha opção nova.
         const ex = await c.query(
           `SELECT m.id AS market_id, min(o.q) AS qmin
              FROM markets m JOIN market_outcomes o ON o.market_id=m.id
-            WHERE m.slug=$1 AND m.status IN ('DRAFT','OPEN')
-            GROUP BY m.id`, [slugMulti]);
+            WHERE m.slug=$1 AND m.status IN ('DRAFT','OPEN') AND m.close_at > now()
+            GROUP BY m.id`, [slug]);
         if (!ex.rowCount) continue;
-        marketId = ex.rows[0].market_id;
+        const marketId = ex.rows[0].market_id;
         for (const cd of cands.rows) {
           const novo = await c.query(
             `INSERT INTO market_outcomes (market_id, label, candidate_id, display_order, q)
@@ -226,6 +235,7 @@ export async function gerarDisputasMajoritarias(
                     $4
              WHERE NOT EXISTS (SELECT 1 FROM market_outcomes
                                 WHERE market_id=$1 AND candidate_id=$3)
+             ON CONFLICT (market_id, label) DO NOTHING
              RETURNING id`,
             [marketId, `${nomePublico(cd)} (${cd.party})`, cd.id,
              Number(ex.rows[0].qmin).toFixed(6)]);
