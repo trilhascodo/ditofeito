@@ -5,8 +5,13 @@
 // um painel com vários, pensado pro outreach de blogs políticos (cada um
 // embute o termômetro geral, com o mercado do candidato local em destaque).
 //
-//   GET /embed/termometro?categoria=<slug>&destaque=<marketSlug>&limit=<n>
+//   GET /embed/termometro?uf=<UF>&categoria=<slug>&destaque=<marketSlug>&limit=<n>
 //       &utm_source=...&utm_medium=...&utm_campaign=...
+//
+// uf é o filtro que o outreach de blog estadual usa (só existe UMA categoria
+// eleitoral, "eleicoes-2026" — o recorte por estado é markets.region_uf).
+// Mercado nacional (region_uf null, ex.: presidente) entra em qualquer UF,
+// mesma regra do filtro de estado da home.
 //
 // Mesmos requisitos de produto do embed.ts (zero dependência externa,
 // cacheável, frame-ancestors * liberado, disclaimer Lei 9.504 quando tem
@@ -24,21 +29,26 @@ const MAX_LIMIT = 12;
 
 export interface TermometroItem {
   slug: string; title: string; label: string; price: number; delta: number; isElectoral: boolean;
+  /** quantas pessoas já previram — sem isso o widget mostra só preços iguais
+   *  num mercado novo, e o blog não tem como saber se aquilo tem movimento. */
+  voters: number;
 }
 
 // Mesma lógica de outcome "manchete" + delta 24h do market.trending (router
 // tRPC) — reimplementada aqui porque este é um endpoint HTTP puro (como todo
 // embed.ts), não pode chamar o router tRPC direto.
 export async function getTermometroData(
-  pool: Pool, opts: { categorySlug?: string; destaqueSlug?: string; limit?: number },
+  pool: Pool, opts: { categorySlug?: string; uf?: string; destaqueSlug?: string; limit?: number },
 ): Promise<TermometroItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const params: unknown[] = [];
   let where = "m.status = 'OPEN'";
   if (opts.categorySlug) { params.push(opts.categorySlug); where += ` AND c.slug = $${params.length}`; }
+  if (opts.uf) { params.push(opts.uf); where += ` AND (m.region_uf = $${params.length} OR m.region_uf IS NULL)`; }
 
   const r = await pool.query(
-    `SELECT m.id, m.slug, m.title, m.type, m.liquidity_b, m.is_electoral
+    `SELECT m.id, m.slug, m.title, m.type, m.liquidity_b, m.is_electoral, m.close_at,
+            (SELECT count(DISTINCT t.user_id) FROM trades t WHERE t.market_id = m.id)::int AS voters
        FROM markets m JOIN categories c ON c.id = m.category_id
       WHERE ${where}`,
     params,
@@ -95,15 +105,22 @@ export async function getTermometroData(
       label: leader.label, price: leader.price,
       delta: before === undefined ? 0 : leader.price - before,
       isElectoral: row.is_electoral as boolean,
+      voters: row.voters as number,
     });
   }
 
+  // destaque no topo; depois o que tem gente prevendo, depois o que mais se
+  // moveu, e por fim o que fecha antes — sem o critério de participação, num
+  // mercado novo (todo delta 0) a ordem saía arbitrária.
+  const closeAt = new Map(r.rows.map((row) => [row.slug as string, new Date(row.close_at as string).getTime()]));
   items.sort((a, b) => {
     if (opts.destaqueSlug) {
       if (a.slug === opts.destaqueSlug) return -1;
       if (b.slug === opts.destaqueSlug) return 1;
     }
-    return Math.abs(b.delta) - Math.abs(a.delta);
+    return b.voters - a.voters
+      || Math.abs(b.delta) - Math.abs(a.delta)
+      || (closeAt.get(a.slug) ?? 0) - (closeAt.get(b.slug) ?? 0);
   });
 
   return items.slice(0, limit);
@@ -116,10 +133,11 @@ function fmtDelta(d: number): string {
 
 export function renderTermometroHtml(
   items: TermometroItem[],
-  opts: { categoryName?: string; destaqueSlug?: string; utmQuery: string },
+  opts: { categoryName?: string; heading?: string; destaqueSlug?: string; utmQuery: string },
 ): string {
-  const heading = opts.categoryName ? `Termômetro — ${opts.categoryName}` : "Termômetro DitoFeito";
+  const heading = opts.heading ?? (opts.categoryName ? `Termômetro — ${opts.categoryName}` : "Termômetro DitoFeito");
   const hasElectoral = items.some((i) => i.isElectoral);
+  const total = items.reduce((n, i) => n + i.voters, 0);
 
   const rows = items.map((it) => {
     const url = `${EMBED_CONFIG.baseUrl}/m/${it.slug}${opts.utmQuery}`;
@@ -127,8 +145,10 @@ export function renderTermometroHtml(
     const corDelta = it.delta > 0 ? "#0F8F5F" : it.delta < 0 ? "#C93A1F" : "#5C6672";
     return `<a class="row${destaque ? " destaque" : ""}" href="${url}" target="_blank" rel="noopener">
       <span class="ttl" title="${esc(it.title)}">${esc(it.title)}</span>
-      <span class="pct">${pct(it.price)}</span>
-      <span class="delta" style="color:${corDelta}">${fmtDelta(it.delta)}</span>
+      <span class="pct">${it.voters ? pct(it.price) : "—"}</span>
+      <span class="delta" style="color:${it.voters ? corDelta : "#5C6672"}">${
+        it.voters ? fmtDelta(it.delta) : "seja o 1º"
+      }</span>
     </a>`;
   }).join("\n");
 
@@ -162,7 +182,9 @@ export function renderTermometroHtml(
   ${items.length ? rows : `<p class="empty">Nenhum mercado aberto no momento.</p>`}
   <div class="foot">
     <a class="brand" href="${EMBED_CONFIG.baseUrl}/${opts.utmQuery}" target="_blank" rel="noopener">Dito<b>Feito</b><span class="selo">✓</span></a>
-    <span style="font-size:11px;color:#5C6672">participe da previsão</span>
+    <span style="font-size:11px;color:#5C6672">${
+      total ? `${total} previs${total === 1 ? "ão" : "ões"} da comunidade` : "participe da previsão"
+    }</span>
   </div>
   ${hasElectoral ? `<p class="disc">${DISCLAIMER}</p>` : ""}
 </div>
@@ -181,6 +203,8 @@ function readUtmQuery(query: express.Request["query"]): string {
 export function mountTermometro(app: express.Express, pool: Pool) {
   app.get("/embed/termometro", asyncHandler(async (req, res) => {
     const categoria = typeof req.query.categoria === "string" ? req.query.categoria : undefined;
+    const uf = typeof req.query.uf === "string" && /^[A-Za-z]{2}$/.test(req.query.uf)
+      ? req.query.uf.toUpperCase() : undefined;
     const destaque = typeof req.query.destaque === "string" ? req.query.destaque : undefined;
     const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : NaN;
     const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
@@ -191,20 +215,21 @@ export function mountTermometro(app: express.Express, pool: Pool) {
       categoryName = c.rows[0]?.name as string | undefined;
     }
 
-    const items = await getTermometroData(pool, { categorySlug: categoria, destaqueSlug: destaque, limit });
+    const items = await getTermometroData(pool, { categorySlug: categoria, uf, destaqueSlug: destaque, limit });
     res.set({
       "Cache-Control": `public, s-maxage=${EMBED_CONFIG.cacheSeconds}, stale-while-revalidate=300`,
       "Content-Security-Policy": "frame-ancestors *",
     });
     res.type("html").send(renderTermometroHtml(items, {
-      categoryName, destaqueSlug: destaque, utmQuery: readUtmQuery(req.query),
+      categoryName, heading: uf && categoryName ? `Termômetro — ${categoryName}/${uf}` : undefined,
+      destaqueSlug: destaque, utmQuery: readUtmQuery(req.query),
     }));
   }));
 }
 
 // Snippet que o blog cola no site (kit de outreach entrega isso já
 // preenchido com a categoria e o mercado do candidato local):
-// <iframe src="{base}/embed/termometro?categoria={slug}&destaque={marketSlug}
+// <iframe src="{base}/embed/termometro?uf={UF}&categoria=eleicoes-2026&destaque={marketSlug}
 //   &utm_source=blog&utm_medium=embed&utm_campaign={nome-do-blog}"
 //   width="420" height="320" style="border:0" loading="lazy"
 //   title="Termômetro DitoFeito"></iframe>

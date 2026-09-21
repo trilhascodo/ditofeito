@@ -28,8 +28,11 @@ const pool = getPool();
 
 // Rotas públicas do embed primeiro: HTML/SVG/JSON cacheáveis na CDN, sem
 // CORS restrito (frame-ancestors * é o requisito ali, não Access-Control).
-mountEmbed(app, pool);
+// Termômetro ANTES do embed: mountEmbed registra /embed/:slug, que casaria
+// com /embed/termometro e devolvia 404 "mercado não encontrado" — o widget
+// do kit de outreach nunca chegou a responder em produção por causa disso.
 mountTermometro(app, pool);
+mountEmbed(app, pool);
 mountVindication(app, pool);
 mountInviteCard(app, pool);
 mountBolaoVindication(app, pool);

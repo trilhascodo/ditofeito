@@ -15,9 +15,10 @@ link de demonstração faz o trabalho de venda. Mensagem curta, uma pergunta
 só, resposta fácil.
 
 Antes de disparar, preparar por estado:
-1. Uma página de demonstração pública do widget já com mercados reais daquela
-   UF (governador, senado, convenções locais), abrindo bem no celular —
-   blogueiro vai abrir no WhatsApp.
+1. O link de demonstração do widget já com os mercados reais daquela UF
+   (governador e senado do estado + presidente), abrindo bem no celular —
+   blogueiro vai abrir no WhatsApp. É só a própria URL do iframe:
+   `https://ditofeito.com/embed/termometro?uf=MA&categoria=eleicoes-2026`
 2. O snippet de embed testado no WordPress (a maioria desses blogs roda WP).
 3. A lista de 3–5 blogs políticos prioritários do `[ESTADO]` — levantar antes
    de cada leva, não reaproveitar lista de outro estado.
@@ -26,28 +27,33 @@ Antes de disparar, preparar por estado:
 
 ```html
 <iframe
-  src="https://ditofeito.com/embed/termometro?categoria=CATEGORIA-DA-UF&destaque=SLUG-DO-CANDIDATO-LOCAL&utm_source=blog&utm_medium=embed&utm_campaign=NOME-DO-BLOG"
+  src="https://ditofeito.com/embed/termometro?uf=MA&categoria=eleicoes-2026&destaque=quem-vence-disputa-governador-ma-2026&utm_source=blog&utm_medium=embed&utm_campaign=NOME-DO-BLOG"
   width="420" height="320" style="border:0" loading="lazy"
-  title="Termômetro DitoFeito — [ESTADO] 2026"
+  title="Termômetro DitoFeito — Maranhão 2026"
 ></iframe>
 ```
 
 Antes de mandar pra cada blog, substitua:
-- `CATEGORIA-DA-UF` — slug da categoria de mercados daquele estado (ex.:
-  `eleicoes-2026-ma`).
-- `SLUG-DO-CANDIDATO-LOCAL` — o mercado do candidato que aquele blog cobre
-  (destaque fixo no topo do widget, os outros mercados da categoria vêm logo
-  abaixo).
+- `uf=MA` — a UF do blog. É esse o recorte por estado: a categoria eleitoral
+  é uma só (`eleicoes-2026`) e o estado vem de `markets.region_uf`. Mercado
+  nacional (presidente) aparece em qualquer UF, como no filtro da home.
+- `destaque=` — o mercado que vai fixo no topo. **É mercado de disputa**
+  ("quem vence" de governador, "senador mais votado"); mercado por candidato
+  não existe mais (decisão de 2026-09-19).
 - `NOME-DO-BLOG` — identificador curto (`marcodeca`, `netoferreira` etc.) pra
   separar origem de tráfego no relatório de UTM.
+
+O widget mostra, por mercado, a opção líder, a chance e a variação de 24h.
+Mercado sem nenhuma previsão aparece com "—" e "seja o 1º" em vez de um
+número inventado, e o rodapé conta quantas previsões a lista já tem.
 
 ## Mensagem 1 — WhatsApp (primeiro contato, D0)
 
 > Oi [nome], tudo bem? Sou [seu nome], do DitoFeito — um termômetro de
 > probabilidade pras eleições 2026 em `[ESTADO]` (não é pesquisa registrada,
-> é agregado de palpite com reputação, tipo Polymarket só que sem dinheiro
-> envolvido) — começando pelas convenções que abrem agora: quem confirma,
-> quem registra no prazo do TSE.
+> é previsão da comunidade com conta verificada, tipo Polymarket só que sem
+> dinheiro envolvido) — com os candidatos registrados no TSE de `[ESTADO]`:
+> governo do estado e as duas vagas do Senado.
 >
 > Montei um widget que atualiza sozinho e mostra a chance de cada
 > pré-candidato — queria te oferecer de graça e com exclusividade de 30 dias
@@ -76,7 +82,7 @@ Notas de uso:
 >
 > ```html
 > <iframe
->   src="https://ditofeito.com/embed/termometro?categoria=CATEGORIA-DA-UF&destaque=SLUG-DO-CANDIDATO-LOCAL&utm_source=blog&utm_medium=embed&utm_campaign=NOME-DO-BLOG"
+>   src="https://ditofeito.com/embed/termometro?uf=[UF]&categoria=eleicoes-2026&destaque=[SLUG-DO-MERCADO]&utm_source=blog&utm_medium=embed&utm_campaign=NOME-DO-BLOG"
 >   width="100%" height="420" frameborder="0"
 >   title="Termômetro DitoFeito — [ESTADO] 2026"
 >   loading="lazy"></iframe>
@@ -100,12 +106,13 @@ Notas de uso:
 > O DitoFeito é um mercado de previsão por reputação para as eleições 2026 —
 > nacional, mercados abertos em cada estado — onde o público registra
 > palpites sobre eventos verificáveis, e o conjunto vira uma probabilidade
-> atualizada em tempo real. A janela de convenções que abre agora em
-> `[ESTADO]` é o primeiro teste público por aí: quais nomes se confirmam,
-> quais chapas registram no prazo do TSE. Não é pesquisa eleitoral (Lei
-> 9.504/97), não é aposta — pontos não têm valor monetário.
+> atualizada em tempo real. A lista de `[ESTADO]` sai do registro oficial do
+> TSE: governo do estado, as duas vagas do Senado e a disputa presidencial.
+> Não é pesquisa eleitoral (Lei 9.504/97), não é aposta — pontos não têm
+> valor monetário.
 >
-> Preparei um widget ("Termômetro") com o [candidato local] em destaque,
+> Preparei um widget ("Termômetro") com a disputa que o [nome do blog] mais
+> cobre em destaque,
 > pronto pra embutir no [nome do blog]. Demonstração ao vivo aqui: [link]
 >
 > Ofereço exclusividade de 30 dias aos primeiros veículos de `[ESTADO]` que
@@ -149,9 +156,9 @@ resolvido publica o confronto previsão × realidade, o que nenhuma pesquisa
 faz em dias.
 
 **"Posso escolher quais mercados aparecem?"**
-Sim — o embed aceita filtro por categoria (convenção, registro) e, se fizer
-sentido, monto uma seleção fixa para o blog, incluindo só os mercados de
-`[ESTADO]`. Só não removo o crédito nem altero os números.
+Sim — o embed filtra por estado (`uf=`) e deixa fixo no topo o mercado que
+você escolher (`destaque=`), então a lista já sai só com o que interessa ao
+seu leitor. Só não removo o crédito nem altero os números.
 
 **"Preciso de aprovação técnica/do editor antes."**
 Sem problema — o link de demonstração já está no ar, funciona igual ao que
@@ -182,4 +189,4 @@ necessidade.
 
 | Estado | D0 | Blogs contatados | Embeds ativos | Notas |
 |---|---|---|---|---|
-| MA | — | Marco D'Eça, Neto Ferreira, Jorge Aragão, Diego Emir, Gilberto Léda | — | leva original, kit em português MA-específico |
+| MA | — | Marco D'Eça, Neto Ferreira, Jorge Aragão, Diego Emir, Gilberto Léda | — | leva original; mercados do MA no ar (governador, senador mais votado), eleição em 04/10 |
