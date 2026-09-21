@@ -14,7 +14,7 @@ import { SignupCta } from "../components/SignupCta";
 import { DesafiarAmigos } from "../components/DesafiarAmigos";
 import { rememberReturnTo } from "../lib/attribution";
 import { getCurrentUf } from "../lib/useUfGeolocation";
-import { usePageMeta } from "../lib/head";
+import { usePageMeta, resumo } from "../lib/head";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
@@ -185,7 +185,7 @@ export function MarketPage() {
   usePageMeta({
     title: market?.title,
     description: market
-      ? `${lider ? `${lider.label}: ${pct(lider.price)} — ` : ""}${market.resolutionCriteria}`.slice(0, 300)
+      ? resumo(`${lider ? `${lider.label}: ${pct(lider.price)} — ` : ""}${market.resolutionCriteria}`)
       : undefined,
     path: market ? `/m/${market.slug}` : undefined,
     image: market ? `${window.location.origin}/card/${market.slug}.png` : undefined,

@@ -439,6 +439,44 @@ ${visiveis.map((o) => `  <li><span>${esc(o.label)}</span><b class="pct">${pct(o.
 }
 
 // ---------------------------------------------------------------------------
+// 3c-bis. FEED.XML — RSS dos mercados publicados (agregador/newsletter)
+// ---------------------------------------------------------------------------
+async function renderFeed(pool: Pool): Promise<string> {
+  const r = await pool.query(
+    `SELECT m.slug, m.title, m.resolution_criteria, m.created_at, m.close_at, m.status, c.name AS category_name
+       FROM markets m JOIN categories c ON c.id = m.category_id
+      WHERE m.status IN ('OPEN','CLOSED','RESOLVED')
+      ORDER BY m.created_at DESC LIMIT 50`);
+  const rfc822 = (d: Date) => new Date(d).toUTCString();
+  const fecha = (d: Date) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const items = r.rows.map((m) => {
+    const url = `${EMBED_CONFIG.baseUrl}/m/${m.slug}`;
+    const desc = `${m.category_name} · encerra em ${fecha(m.close_at)}. ${m.resolution_criteria}`;
+    return `  <item>
+    <title>${esc(m.title as string)}</title>
+    <link>${url}</link>
+    <guid isPermaLink="true">${url}</guid>
+    <pubDate>${rfc822(m.created_at)}</pubDate>
+    <category>${esc(m.category_name as string)}</category>
+    <description>${esc(desc)}</description>
+  </item>`;
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+  <title>${esc(EMBED_CONFIG.brand)} — mercados de previsão</title>
+  <link>${EMBED_CONFIG.baseUrl}/</link>
+  <atom:link href="${EMBED_CONFIG.baseUrl}/feed.xml" rel="self" type="application/rss+xml"/>
+  <description>Previsão da comunidade sobre eleições, esportes e cultura — pontos e reputação, sem dinheiro.</description>
+  <language>pt-BR</language>
+  <lastBuildDate>${rfc822(new Date())}</lastBuildDate>
+${items}
+</channel>
+</rss>`;
+}
+
+// ---------------------------------------------------------------------------
 // 3d. SITEMAP.XML — gerado na hora a partir dos mercados publicados (nunca
 //    DRAFT); mais simples que gerar em build time e sempre reflete o banco.
 // ---------------------------------------------------------------------------
@@ -446,13 +484,23 @@ async function renderSitemap(pool: Pool): Promise<string> {
   const r = await pool.query(
     `SELECT slug, created_at FROM markets WHERE status != 'DRAFT' ORDER BY created_at DESC`);
   const iso = (d: Date) => new Date(d).toISOString();
+  // Só página pública de conteúdo. /entrar e /cadastro saíram: são noindex
+  // (apps/web/src/lib/head.ts) — pedir indexação do que se declara não
+  // indexável só gera erro no Search Console.
   const staticUrls = [
     { loc: `${EMBED_CONFIG.baseUrl}/`, priority: "1.0" },
-    { loc: `${EMBED_CONFIG.baseUrl}/entrar`, priority: "0.3" },
-    { loc: `${EMBED_CONFIG.baseUrl}/cadastro`, priority: "0.3" },
+    { loc: `${EMBED_CONFIG.baseUrl}/ranking`, priority: "0.6" },
+    { loc: `${EMBED_CONFIG.baseUrl}/indices`, priority: "0.6" },
+    { loc: `${EMBED_CONFIG.baseUrl}/metodologia`, priority: "0.6" },
+    { loc: `${EMBED_CONFIG.baseUrl}/anuncie`, priority: "0.4" },
+    { loc: `${EMBED_CONFIG.baseUrl}/solicitar-mercado`, priority: "0.4" },
+    { loc: `${EMBED_CONFIG.baseUrl}/termos`, priority: "0.3" },
   ];
+  const idx = await pool.query(`SELECT slug FROM index_series ORDER BY slug`);
   const urls = [
     ...staticUrls.map((u) => `<url><loc>${u.loc}</loc><priority>${u.priority}</priority></url>`),
+    ...idx.rows.map((i) =>
+      `<url><loc>${EMBED_CONFIG.baseUrl}/indice/${i.slug}</loc><priority>0.5</priority></url>`),
     ...r.rows.map((m) =>
       `<url><loc>${EMBED_CONFIG.baseUrl}/m/${m.slug}</loc><lastmod>${iso(m.created_at)}</lastmod><priority>0.8</priority></url>`),
   ];
@@ -473,6 +521,13 @@ export function mountEmbed(app: express.Express, pool: Pool) {
     "Cache-Control": `public, s-maxage=${EMBED_CONFIG.cacheSeconds}, stale-while-revalidate=300`,
     "Content-Security-Policy": "frame-ancestors *",   // embed liberado
   });
+  // RSS de verdade (antes /feed.xml caía no fallback da SPA e devolvia
+  // HTML): mercados publicados mais recentes, pra agregador e newsletter.
+  app.get("/feed.xml", asyncHandler(async (req, res) => {
+    cache(res);
+    res.type("application/rss+xml").send(await renderFeed(pool));
+  }));
+
   app.get("/sitemap.xml", asyncHandler(async (req, res) => {
     res.set({ "Cache-Control": `public, s-maxage=3600, stale-while-revalidate=86400` });
     res.type("application/xml").send(await renderSitemap(pool));

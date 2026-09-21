@@ -21,6 +21,16 @@ function setMeta(selector: string, attr: "content" | "href", value: string) {
   if (el) el.setAttribute(attr, value);
 }
 
+/** Corta em ~155 caracteres (o que buscador mostra) sem partir palavra —
+ *  a description do mercado vinha do critério de resolução e cortava no meio. */
+export function resumo(texto: string, max = 155): string {
+  const t = texto.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const corte = t.slice(0, max);
+  const esp = corte.lastIndexOf(" ");
+  return `${(esp > max * 0.6 ? corte.slice(0, esp) : corte).replace(/[.,;:\s]+$/, "")}…`;
+}
+
 export interface PageMeta {
   title?: string;
   description?: string;
