@@ -7,6 +7,7 @@ import { SocialLinks, type SocialLinkItem } from "../lib/socialIcons";
 import { MarketTile } from "../components/MarketTile";
 import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
+import { usePageMeta } from "../lib/head";
 
 // Seletor de estado da home: guarda a última escolha no navegador (sem
 // login, sem geo-IP — mesma filosofia de users.region_uf) só pra semear a
@@ -285,6 +286,17 @@ function MarketTileAd({ ad }: { ad: HomeSponsor }) {
 }
 
 export function Home() {
+  // Home: canonical sempre "/" (o ?uf=/?categoria= são filtros da mesma
+  // página, não URLs próprias) + WebSite pro JSON-LD.
+  usePageMeta({
+    path: "/",
+    jsonLd: {
+      "@context": "https://schema.org", "@type": "WebSite", name: "DitoFeito",
+      url: typeof window !== "undefined" ? window.location.origin : "https://ditofeito.com",
+      inLanguage: "pt-BR",
+      description: "Mercado de previsão por reputação: previsões da comunidade sobre eleições, esportes e cultura, com pontos e reputação — sem dinheiro.",
+    },
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const categorySlug = searchParams.get("categoria");
   const busca = searchParams.get("busca");

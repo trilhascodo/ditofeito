@@ -1,11 +1,13 @@
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
+import { usePageMeta } from "../lib/head";
 
 function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase();
 }
 
 export function Leaderboard() {
+  usePageMeta({ title: "Ranking", description: "Quem mais acerta no DitoFeito: ranking por reputação, calculado sobre previsões resolvidas.", path: "/ranking" });
   const { user } = useAuth();
   const { data, isLoading, error } = trpc.user.leaderboard.useQuery({ limit: 50 });
 

@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { usePageMeta } from "../lib/head";
 
 const ATUALIZADO = "19 de julho de 2026";
 
 export function Termos() {
+  usePageMeta({ title: "Termos e Privacidade", description: "Termos de uso e política de privacidade do DitoFeito.", path: "/termos" });
   return (
     <main className="legal">
       <h1>Termos de uso e Política de Privacidade</h1>

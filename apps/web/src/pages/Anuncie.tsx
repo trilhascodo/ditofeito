@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { Turnstile } from "../components/Turnstile";
 import { useAuth } from "../lib/useAuth";
+import { usePageMeta } from "../lib/head";
 
 type Plan = "BASICO" | "PROFISSIONAL" | "PREMIUM";
 
@@ -113,6 +114,7 @@ function AplicacaoAnunciante() {
 }
 
 export function Anuncie() {
+  usePageMeta({ title: "Anuncie", description: "Anuncie no DitoFeito: patrocínio de mercados e espaços na home, com alcance medido.", path: "/anuncie" });
   const { user, isLoading: authLoading } = useAuth();
   const createLead = trpc.leads.create.useMutation();
 

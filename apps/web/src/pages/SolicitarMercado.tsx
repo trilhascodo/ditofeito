@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { trpc } from "../lib/trpc";
 import { Turnstile } from "../components/Turnstile";
+import { usePageMeta } from "../lib/head";
 
 const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
 export function SolicitarMercado() {
+  usePageMeta({ title: "Solicitar mercado", description: "Peça um mercado de previsão sobre o tema que você acompanha.", path: "/solicitar-mercado" });
   const createRequest = trpc.marketRequests.create.useMutation();
 
   const [name, setName] = useState("");

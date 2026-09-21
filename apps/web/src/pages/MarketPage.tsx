@@ -14,6 +14,7 @@ import { SignupCta } from "../components/SignupCta";
 import { DesafiarAmigos } from "../components/DesafiarAmigos";
 import { rememberReturnTo } from "../lib/attribution";
 import { getCurrentUf } from "../lib/useUfGeolocation";
+import { usePageMeta } from "../lib/head";
 
 const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"];
 
@@ -177,11 +178,36 @@ export function MarketPage() {
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!market) return;
-    document.title = `${market.title} — DitoFeito`;
-    return () => { document.title = "DitoFeito — pode escrever"; };
-  }, [market?.title]);
+  // <head> da rota (lib/head.ts): título, canonical, og:* e JSON-LD do
+  // mercado — sem isso o canonical do index.html mandava tudo pra home.
+  const lider = market?.outcomes.filter((o) => !o.isCatchall)
+    .reduce<{ label: string; price: number } | null>((b, o) => (!b || o.price > b.price ? o : b), null);
+  usePageMeta({
+    title: market?.title,
+    description: market
+      ? `${lider ? `${lider.label}: ${pct(lider.price)} — ` : ""}${market.resolutionCriteria}`.slice(0, 300)
+      : undefined,
+    path: market ? `/m/${market.slug}` : undefined,
+    image: market ? `${window.location.origin}/card/${market.slug}.png` : undefined,
+    jsonLd: market
+      ? {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: market.title,
+        description: market.resolutionCriteria,
+        url: `${window.location.origin}/m/${market.slug}`,
+        inLanguage: "pt-BR",
+        isPartOf: { "@type": "WebSite", name: "DitoFeito", url: window.location.origin },
+        breadcrumb: {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Mercados", item: window.location.origin },
+            { "@type": "ListItem", position: 2, name: market.title },
+          ],
+        },
+      }
+      : undefined,
+  });
 
   useEffect(() => {
     if (!sponsorship) return;

@@ -36,6 +36,7 @@ import { EntrarGrupo } from "./pages/EntrarGrupo";
 import { BolaoDetalhe } from "./pages/BolaoDetalhe";
 import { CriarEnquete } from "./pages/CriarEnquete";
 import { ComprarPontos } from "./pages/ComprarPontos";
+import { NaoEncontrado } from "./pages/NaoEncontrado";
 
 const router = createBrowserRouter([
   {
@@ -83,6 +84,7 @@ const router = createBrowserRouter([
           { path: "suspeitas", element: <AdminSuspicious /> },
         ],
       },
+      { path: "*", element: <NaoEncontrado /> },
     ],
   },
 ]);

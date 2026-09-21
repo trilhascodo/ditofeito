@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { pct } from "../lib/format";
+import { usePageMeta } from "../lib/head";
 
 export function Indice() {
   const { slug = "" } = useParams();
@@ -10,7 +11,6 @@ export function Indice() {
   useEffect(() => {
     if (!idx) return;
     document.title = `${idx.title} — DitoFeito`;
-    return () => { document.title = "DitoFeito — pode escrever"; };
   }, [idx?.title]);
 
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;

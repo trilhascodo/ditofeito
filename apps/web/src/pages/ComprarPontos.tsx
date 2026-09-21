@@ -3,12 +3,14 @@ import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/useAuth";
 import { MercadoPagoCardBrick, type CardBrickFormData } from "../components/MercadoPagoCardBrick";
+import { usePageMeta } from "../lib/head";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const fmtBRL = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dtDisplay = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
 export function ComprarPontos() {
+  usePageMeta({ noindex: true });
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const { data: me } = trpc.user.me.useQuery(undefined, { enabled: !!user });

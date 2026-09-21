@@ -9,6 +9,7 @@ import { useAuth } from "../lib/useAuth";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { GoogleCompleteProfileForm } from "../components/GoogleCompleteProfileForm";
 import { consumeReturnTo, signupSource } from "../lib/attribution";
+import { usePageMeta } from "../lib/head";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 // Sem chave configurada (dev/local): backend também aceita qualquer token
@@ -17,6 +18,7 @@ const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
 const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export function Signup() {
+  usePageMeta({ noindex: true });
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");

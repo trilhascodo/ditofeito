@@ -6,6 +6,7 @@ import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
 import { logout } from "../lib/auth";
 import { CpfPrompt } from "../components/CpfPrompt";
+import { usePageMeta } from "../lib/head";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 
@@ -36,6 +37,7 @@ interface LedgerRow {
 }
 
 export function Profile() {
+  usePageMeta({ noindex: true });
   const { user, isLoading: authLoading, refresh } = useAuth();
   const utils = trpc.useUtils();
   const { data: me, isLoading: meLoading } = trpc.user.me.useQuery(undefined, { enabled: !!user });

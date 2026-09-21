@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { trpc } from "../lib/trpc";
+import { usePageMeta } from "../lib/head";
 
 export function Indices() {
+  usePageMeta({ title: "Índices", description: "Índices do DitoFeito: séries agregadas de probabilidade por disputa.", path: "/indices" });
   const { data: list, isLoading } = trpc.indexSeries.list.useQuery();
 
   return (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { sharesForPoints, tradeCost } from "@ditofeito/core";
+import { usePageMeta } from "../lib/head";
 
 const ATUALIZADO = "20 de julho de 2026";
 
@@ -43,6 +44,7 @@ const VOCABULARIO: [string, string][] = [
 ];
 
 export function Metodologia() {
+  usePageMeta({ title: "Metodologia", description: "Como o DitoFeito calcula probabilidade, resolve mercados e mede reputação.", path: "/metodologia" });
   return (
     <main className="legal">
       <h1>Metodologia</h1>

@@ -47,6 +47,8 @@ const CORES = ["#4F2E99", "#C93A1F", "#0F8F5F", "#B8860B", "#0E7490", "#888780"]
 export interface PublicMarketData {
   slug: string; title: string; status: string; isElectoral: boolean;
   closeAt: string; type: "BINARY" | "MULTI"; categoryName: string;
+  /** texto do critério — conteúdo real da página servida a buscador (renderShareHtml) */
+  resolutionCriteria: string;
   outcomes: { label: string; price: number; isCatchall: boolean }[];
   /** série p/ sparkline: por outcome, pontos [t(0..1), price] */
   series: { label: string; points: [number, number][] }[];
@@ -60,7 +62,7 @@ export async function getMarketPublicData(
 ): Promise<PublicMarketData | null> {
   const m = await pool.query(
     `SELECT m.id, m.slug, m.title, m.status, m.is_electoral, m.close_at, m.type,
-            m.liquidity_b, c.name AS category_name
+            m.liquidity_b, m.resolution_criteria, c.name AS category_name
        FROM markets m JOIN categories c ON c.id = m.category_id
       WHERE m.slug = $1
         AND m.status IN ('OPEN','CLOSED','RESOLVED')`, [slug]);
@@ -108,6 +110,7 @@ export async function getMarketPublicData(
     slug: mk.slug, title: mk.title, status: mk.status,
     isElectoral: mk.is_electoral, closeAt: mk.close_at, type: mk.type,
     categoryName: mk.category_name,
+    resolutionCriteria: mk.resolution_criteria,
     outcomes: out.rows.map((r, i) => ({
       label: r.label, price: prices[i], isCatchall: r.is_catchall })),
     series: out.rows.map((r) => ({
@@ -384,10 +387,15 @@ export function renderShareHtml(d: PublicMarketData): string {
     : lider
     ? `${d.type === "BINARY" ? "Chance de SIM" : lider.label}: ${pct(lider.price)} — pode escrever.`
     : "pode escrever.";
+  const visiveis = [...d.outcomes].sort((a, b) => Number(a.isCatchall) - Number(b.isCatchall) || b.price - a.price);
+  const fecha = new Date(d.closeAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 
   return `<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(d.title)} — ${esc(EMBED_CONFIG.brand)}</title>
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${url}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(EMBED_CONFIG.brand)}">
 <meta property="og:title" content="${esc(d.title)}">
@@ -399,10 +407,35 @@ export function renderShareHtml(d: PublicMarketData): string {
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(d.title)}">
 <meta name="twitter:image" content="${cardUrl}">
-<meta http-equiv="refresh" content="0; url=${url}">
-</head><body>
-<p>Redirecionando… <a href="${url}">clique aqui</a> se a página não abrir sozinha.</p>
-</body></html>`;
+<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: d.title,
+    description: desc,
+    url,
+    inLanguage: "pt-BR",
+    isPartOf: { "@type": "WebSite", name: EMBED_CONFIG.brand, url: EMBED_CONFIG.baseUrl },
+  })}</script>
+<style>
+  body{margin:0;font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#FAF8F3;color:#1E2733}
+  main{max-width:680px;margin:0 auto;padding:32px 20px 64px}
+  h1{font-size:26px;line-height:1.3;margin:8px 0 12px}
+  .meta{color:#5C6672;font-size:14px;margin-bottom:20px}
+  ul{list-style:none;padding:0;margin:0 0 24px}
+  li{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid #E3DDD0;padding:10px 0}
+  b.pct{font-variant-numeric:tabular-nums;color:#4F2E99}
+  .btn{display:inline-block;font-weight:600;color:#fff;background:#4F2E99;border-radius:8px;padding:12px 22px;text-decoration:none}
+  .regras{color:#5C6672;font-size:14px}
+</style></head><body><main>
+<p class="meta">${esc(d.categoryName)} · DitoFeito</p>
+<h1>${esc(d.title)}</h1>
+<p class="meta">Previsão da comunidade${d.status === "OPEN" ? ` · aberto até ${fecha}` : ` · ${esc(d.status)}`}</p>
+<ul>
+${visiveis.map((o) => `  <li><span>${esc(o.label)}</span><b class="pct">${pct(o.price)}</b></li>`).join("\n")}
+</ul>
+<p><a class="btn" href="${url}">Registrar minha previsão</a></p>
+<p class="regras">${esc(d.resolutionCriteria ?? "")}</p>
+</main></body></html>`;
 }
 
 // ---------------------------------------------------------------------------

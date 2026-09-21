@@ -5,10 +5,12 @@ import { useAuth } from "../lib/useAuth";
 import { consumeReturnTo } from "../lib/attribution";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { GoogleCompleteProfileForm } from "../components/GoogleCompleteProfileForm";
+import { usePageMeta } from "../lib/head";
 
 const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export function Login() {
+  usePageMeta({ noindex: true });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
