@@ -23,6 +23,7 @@ import type { Pool } from "pg";
 import { EMBED_CONFIG, TOKENS, esc, wrapText, svgToPng } from "./embed.js";
 import type { GuessType } from "../domain/bolao.js";
 import { normalizeSource } from "@ditofeito/core";
+import { REF_CODE_PATTERN } from "../domain/referral.js";
 
 export interface InviteCardData {
   kind: "GRUPO" | "ENQUETE" | "DESAFIO";
@@ -177,10 +178,14 @@ export function renderInviteCardPng(d: InviteCardData): Buffer {
   return svgToPng(renderInviteCardSvg(d));
 }
 
-export function renderInviteHtml(d: InviteCardData, code: string, origem?: string): string {
-  // origem (?origem= do link compartilhado) segue pro /grupos/entrar — o
-  // botão desta página é um clique a mais e perdia a atribuição do canal.
-  const joinUrl = `${EMBED_CONFIG.baseUrl}/grupos/entrar/${code}${origem ? `?origem=${encodeURIComponent(origem)}` : ""}`;
+export function renderInviteHtml(d: InviteCardData, code: string, origem?: string, ref?: string): string {
+  // origem (?origem=) e ref (?ref=, 047) do link compartilhado seguem pro
+  // /grupos/entrar — o botão desta página é um clique a mais e perdia a
+  // atribuição do canal e de quem indicou.
+  const qs = new URLSearchParams();
+  if (origem) qs.set("origem", origem);
+  if (ref) qs.set("ref", ref);
+  const joinUrl = `${EMBED_CONFIG.baseUrl}/grupos/entrar/${code}${qs.toString() ? `?${qs}` : ""}`;
   const cardUrl = `${EMBED_CONFIG.baseUrl}/card/convite/${code}.png`;
   const isEnquete = d.kind === "ENQUETE" && d.enquete;
   const isDesafio = d.kind === "DESAFIO" && d.enquete;
@@ -247,6 +252,7 @@ export function mountInviteCard(app: express.Express, pool: Pool) {
     const d = await getInviteCardData(pool, req.params.code);
     if (!d) return res.status(404).send("convite não encontrado");
     const origem = normalizeSource(typeof req.query.origem === "string" ? req.query.origem : undefined);
-    cache(res); res.type("html").send(renderInviteHtml(d, req.params.code, origem));
+    const ref = typeof req.query.ref === "string" && REF_CODE_PATTERN.test(req.query.ref) ? req.query.ref : undefined;
+    cache(res); res.type("html").send(renderInviteHtml(d, req.params.code, origem, ref));
   }));
 }

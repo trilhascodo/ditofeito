@@ -9,7 +9,7 @@ export async function notify(
   userId: string,
   kind: "MARKET_RESOLVED" | "MARKET_VOIDED" | "NEW_COMMENT" | "SPONSOR_REVIEW_APPROVED"
     | "SPONSOR_REVIEW_REJECTED" | "BOLAO_CLOSING_SOON" | "GROUP_JOINED"
-    | "BOLAO_RESOLVED" | "STREAK_MILESTONE",
+    | "BOLAO_RESOLVED" | "STREAK_MILESTONE" | "REFERRAL_ACTIVATED",
   body: string,
   opts: { marketId?: string; commentId?: string; groupId?: string; bolaoId?: string } = {},
 ): Promise<void> {

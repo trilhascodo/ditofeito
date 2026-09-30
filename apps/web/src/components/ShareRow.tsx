@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ICON_PATHS as BRAND_ICON_PATHS } from "../lib/socialIcons";
+import { trpc } from "../lib/trpc";
+import { useAuth } from "../lib/useAuth";
 
 // Componente único pros 4 lugares que compartilham algo (convite de grupo,
 // card de vindicação de mercado/bolão, botão geral de mercado) — antes cada
@@ -42,11 +44,14 @@ const ORIGEM: Record<ShareChannel, string> = {
   INSTAGRAM: "instagram", COPY_LINK: "link", NATIVE: "compartilhar",
 };
 
-function withOrigem(url: string, channel: ShareChannel): string {
+// Logado: o link também leva o ?ref= pessoal (047_referral_rewards.sql) —
+// quem chega por ele rende pontos pra quem compartilhou.
+function withOrigem(url: string, channel: ShareChannel, refCode?: string): string {
   try {
     const u = new URL(url);
     if (u.origin !== window.location.origin) return url;
     u.searchParams.set("origem", ORIGEM[channel]);
+    if (refCode) u.searchParams.set("ref", refCode);
     return u.toString();
   } catch {
     return url;
@@ -75,6 +80,9 @@ export function ShareRow({
   label?: string;
 }) {
   const [copied, setCopied] = useState<ShareChannel | null>(null);
+  const { user } = useAuth();
+  const { data: referral } = trpc.referral.mine.useQuery(undefined, { enabled: !!user, staleTime: 5 * 60_000 });
+  const refCode = user ? referral?.refCode : undefined;
 
   function fire(channel: ShareChannel) {
     onShare?.(channel);
@@ -85,7 +93,7 @@ export function ShareRow({
   }
 
   async function onCopy() {
-    await navigator.clipboard.writeText(withOrigem(url, "COPY_LINK"));
+    await navigator.clipboard.writeText(withOrigem(url, "COPY_LINK", refCode));
     fire("COPY_LINK");
     flashCopied("COPY_LINK");
   }
@@ -93,15 +101,15 @@ export function ShareRow({
   // link abre o app já com texto/URL prontos) — o único caminho real a
   // partir do navegador é copiar o link pra colar no Story/bio/DM na mão.
   async function onInstagram() {
-    await navigator.clipboard.writeText(withOrigem(url, "INSTAGRAM"));
+    await navigator.clipboard.writeText(withOrigem(url, "INSTAGRAM", refCode));
     fire("INSTAGRAM");
     flashCopied("INSTAGRAM");
   }
   function onNative() {
-    navigator.share?.({ title: text, url: withOrigem(url, "NATIVE") }).then(() => fire("NATIVE")).catch(() => {});
+    navigator.share?.({ title: text, url: withOrigem(url, "NATIVE", refCode) }).then(() => fire("NATIVE")).catch(() => {});
   }
 
-  const u = (channel: ShareChannel) => withOrigem(url, channel);
+  const u = (channel: ShareChannel) => withOrigem(url, channel, refCode);
   const links: { channel: ShareChannel; href: string }[] = [
     { channel: "WHATSAPP", href: `https://wa.me/?text=${encodeURIComponent(`${text} ${u("WHATSAPP")}`)}` },
     { channel: "TELEGRAM", href: `https://t.me/share/url?url=${encodeURIComponent(u("TELEGRAM"))}&text=${encodeURIComponent(text)}` },

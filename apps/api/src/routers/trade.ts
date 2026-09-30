@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc/trpc.js";
 import { executeTrade } from "../domain/trade.js";
+import { activateReferralInBackground } from "../domain/referral.js";
 import { throwAsTRPC } from "../trpc/errors.js";
 
 export const tradeRouter = router({
@@ -18,7 +19,9 @@ export const tradeRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        return await executeTrade(ctx.pool, { ...input, userId: ctx.user.id });
+        const r = await executeTrade(ctx.pool, { ...input, userId: ctx.user.id });
+        activateReferralInBackground(ctx.pool, ctx.user.id);
+        return r;
       } catch (e) {
         throwAsTRPC(e);
       }

@@ -6,6 +6,7 @@ import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
 import { logout } from "../lib/auth";
 import { CpfPrompt } from "../components/CpfPrompt";
+import { ShareRow } from "../components/ShareRow";
 import { usePageMeta } from "../lib/head";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
@@ -26,6 +27,8 @@ const REASON_LABEL: Record<string, string> = {
   REFERRAL_BONUS: "Alguém entrou no seu grupo",
   GROUP_JOIN_BONUS: "Entrou em um grupo por convite",
   TOPUP: "Compra de pontos",
+  REF_VISIT: "Visitantes pelo seu link",
+  REF_SIGNUP: "Cadastro pelo seu link",
 };
 
 const MARKET_STATUS_LABEL: Record<string, string> = {
@@ -34,6 +37,44 @@ const MARKET_STATUS_LABEL: Record<string, string> = {
 
 interface LedgerRow {
   id: string; delta: string; balance_after: string; reason: string; created_at: string;
+}
+
+// "Traga gente, ganhe pontos" (047_referral_rewards.sql) — link pessoal com
+// ?ref=; regras e tetos vêm do backend (REFERRAL_CONFIG), nunca duplicados aqui.
+function SeuLink() {
+  const { data } = trpc.referral.mine.useQuery();
+  if (!data) return null;
+  const link = `${window.location.origin}/?ref=${data.refCode}`;
+  const c = data.config;
+  const stats = [
+    { value: data.visitorsToday, label: `visitantes hoje (máx. ${c.maxVisitorsPerDay})` },
+    { value: data.visitorsMonth, label: "visitantes no mês (já creditados)" },
+    { value: data.signupsActivated, label: "cadastros ativados" },
+    { value: data.signupsPending, label: "cadastros aguardando 1º palpite" },
+    { value: data.pointsTotal, label: "pontos ganhos" },
+  ];
+  return (
+    <div id="seu-link" className="card" style={{ marginTop: 20 }}>
+      <h2 style={{ fontFamily: "var(--serif)", fontSize: 18, margin: "0 0 4px" }}>Seu link</h2>
+      <p className="hint-text" style={{ margin: "0 0 12px" }}>
+        Cada visitante que chega pelo seu link vale {c.pointsPerVisitor} pontos (creditados no dia
+        seguinte), e cada cadastro vale {c.pointsPerSignup} quando a pessoa confirma o CPF e faz o
+        primeiro palpite. Os botões de compartilhar do site já usam o seu link quando você está logado.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+        <code className="mono" style={{ flex: "1 1 220px", minWidth: 0, overflowWrap: "anywhere", fontSize: 13 }}>{link}</code>
+        <ShareRow url={link} text="Vem prever as eleições comigo no DitoFeito" label="" />
+      </div>
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+        {stats.map((s) => (
+          <div key={s.label}>
+            <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{fmt(s.value)}</div>
+            <p className="hint-text" style={{ margin: 0 }}>{s.label}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function Profile() {
@@ -229,6 +270,8 @@ export function Profile() {
           <CpfPrompt onDone={refresh} />
         </div>
       )}
+
+      <SeuLink />
 
       {me?.reputation && (
         <div className="card" style={{ marginTop: 20 }}>

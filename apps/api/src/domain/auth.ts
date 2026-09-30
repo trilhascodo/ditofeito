@@ -69,11 +69,13 @@ export async function signup(
 
     const u = await client.query(
       `INSERT INTO users (handle, display_name, email, password_hash, birth_date, signup_ip,
-                          signup_user_agent, region_uf, region_city, signup_source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+                          signup_user_agent, region_uf, region_city, signup_source, referred_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+               (SELECT id FROM users WHERE ref_code = $11 AND NOT is_banned)) RETURNING id`,
       [input.handle, input.displayName, input.email, passwordHash, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
-        input.regionUf ?? null, input.regionCity?.trim() || null, input.source ?? null]);
+        input.regionUf ?? null, input.regionCity?.trim() || null, input.source ?? null,
+        input.ref ?? null]);
     userId = u.rows[0].id;
 
     await appendLedger(client, userId, AUTH_CONFIG.signupBonusPoints, "SIGNUP_BONUS", null, null);
@@ -251,12 +253,14 @@ export async function oauthGoogleComplete(
 
     const u = await client.query(
       `INSERT INTO users (handle, display_name, email, birth_date, signup_ip, signup_user_agent,
-                          region_uf, region_city, email_verified_at, signup_source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+                          region_uf, region_city, email_verified_at, signup_source, referred_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+               (SELECT id FROM users WHERE ref_code = $11 AND NOT is_banned)) RETURNING id`,
       [input.handle, input.displayName, identity.email, input.birthDate,
         meta.ip ?? null, meta.userAgent ?? null,
         input.regionUf ?? null, input.regionCity?.trim() || null,
-        identity.emailVerified ? new Date() : null, input.source ?? null]);
+        identity.emailVerified ? new Date() : null, input.source ?? null,
+        input.ref ?? null]);
     userId = u.rows[0].id;
 
     await client.query(

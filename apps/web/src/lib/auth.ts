@@ -22,7 +22,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function signup(input: {
   handle: string; displayName: string; email: string; password: string;
-  birthDate: string; captchaToken: string; regionUf?: string; regionCity?: string; source?: string;
+  birthDate: string; captchaToken: string; regionUf?: string; regionCity?: string; source?: string; ref?: string;
 }) {
   return call<{ userId: string; user: AuthUser }>("/auth/signup", { method: "POST", body: JSON.stringify(input) });
 }
@@ -46,7 +46,7 @@ export function oauthGoogleLogin(credential: string) {
 
 export function oauthGoogleComplete(input: {
   credential: string; handle: string; displayName: string; birthDate: string; captchaToken: string;
-  regionUf?: string; regionCity?: string; source?: string;
+  regionUf?: string; regionCity?: string; source?: string; ref?: string;
 }) {
   return call<{ user: AuthUser }>("/auth/oauth/google/complete", { method: "POST", body: JSON.stringify(input) });
 }

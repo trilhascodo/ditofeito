@@ -13,6 +13,7 @@ import { router, protectedProcedure, publicProcedure } from "../trpc/trpc.js";
 import { calcularVencedores, statusBolao, type GuessType } from "../domain/bolao.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
 import { appendLedger } from "../domain/trade.js";
+import { activateReferralInBackground } from "../domain/referral.js";
 import { notify } from "../domain/notify.js";
 import { sendTransactionalEmail } from "../lib/email.js";
 import { APP_CONFIG } from "../config.js";
@@ -727,6 +728,7 @@ const groupsSubRouter = router({
             input.guessHomeScore ?? null, input.guessAwayScore ?? null, input.guessNumber ?? null,
           ],
         );
+        activateReferralInBackground(ctx.pool, ctx.user.id);
         return { ok: true };
       }),
 

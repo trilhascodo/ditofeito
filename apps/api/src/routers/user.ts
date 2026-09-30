@@ -12,6 +12,7 @@ import {
 } from "../domain/auth.js";
 import { submitCpfSchema } from "../domain/auth.schemas.js";
 import { throwAsTRPC } from "../trpc/errors.js";
+import { activateReferralInBackground } from "../domain/referral.js";
 
 // Mínimo de previsões resolvidas pra entrar no ranking público — sem isso,
 // 1 acerto de sorte já colocaria alguém em 1º lugar (skill_score de amostra
@@ -152,6 +153,8 @@ export const userRouter = router({
       try {
         await submitCpf(ctx.pool, ctx.user.id, input.cpf);
       } catch (e) { throwAsTRPC(e); }
+      // Quem palpitou em bolão antes de confirmar o CPF ativa aqui.
+      activateReferralInBackground(ctx.pool, ctx.user.id);
       return { ok: true };
     }),
 

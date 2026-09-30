@@ -16,6 +16,10 @@ const birthDateSchema = z.string().date("Data inválida").refine(
 // cadastro — atribuição nunca pode custar uma conta.
 const sourceSchema = z.string().max(200).optional().catch(undefined).transform(normalizeSource);
 
+// Código ?ref= de quem indicou (047_referral_rewards.sql) — mesma leniência:
+// código inválido vira undefined, nunca reprova o cadastro.
+const refSchema = z.string().regex(/^[a-z0-9]{6,12}$/).optional().catch(undefined);
+
 // Regra de handle espelha o CHECK de users.handle no schema (packages/db/migrations/001_schema.sql).
 export const signupSchema = z.object({
   handle: z.string().regex(/^[a-z0-9_]{3,30}$/, "3–30 caracteres: a-z, 0-9, _"),
@@ -30,6 +34,7 @@ export const signupSchema = z.object({
   regionUf: z.string().length(2).optional(),
   regionCity: z.string().trim().max(120).optional(),
   source: sourceSchema,
+  ref: refSchema,
 });
 export type SignupInput = z.infer<typeof signupSchema>;
 
@@ -78,5 +83,6 @@ export const oauthCompleteSchema = z.object({
   regionUf: z.string().length(2).optional(),
   regionCity: z.string().trim().max(120).optional(),
   source: sourceSchema,
+  ref: refSchema,
 });
 export type OauthCompleteInput = z.infer<typeof oauthCompleteSchema>;

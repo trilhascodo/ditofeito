@@ -4,7 +4,7 @@ import { oauthGoogleComplete, type AuthUser } from "../lib/auth";
 import { Turnstile } from "./Turnstile";
 import { UFS } from "../lib/ufs";
 import { useUfGeolocation } from "../lib/useUfGeolocation";
-import { signupSource } from "../lib/attribution";
+import { signupSource, signupRef } from "../lib/attribution";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 const CAPTCHA_REQUIRED = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
@@ -48,6 +48,7 @@ export function GoogleCompleteProfileForm({
         credential, handle, displayName, birthDate, captchaToken,
         regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined,
         source: signupSource(),
+        ref: signupRef(),
       });
       onDone(user);
     } catch (err) {

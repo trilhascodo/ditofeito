@@ -7,6 +7,7 @@ import { rodarGeradorEsporte } from "./generators/esporte.js";
 import { rodarGeradorFinanceiro } from "./generators/financeiro.js";
 import { verifyLedgerChain } from "../domain/trade.js";
 import { sendBolaoClosingReminders } from "./bolaoReminder.js";
+import { creditReferralVisits } from "../domain/referral.js";
 
 /** Roda verifyLedgerChain para todo usuário; loga qualquer cadeia quebrada
  *  (não deve acontecer — é alarme de integridade, não fluxo esperado). */
@@ -71,6 +72,17 @@ export function startJobs(pool: Pool) {
       console.error("[jobs] sendBolaoClosingReminders falhou", e);
     }
   });
+
+  // Crédito REF_VISIT do dia anterior (link pessoal ?ref= — 047). Depois da
+  // virada em Brasília; idempotente por (usuário, dia).
+  cron.schedule("15 3 * * *", async () => {
+    try {
+      const r = await creditReferralVisits(pool);
+      console.log("[jobs] creditReferralVisits", r);
+    } catch (e) {
+      console.error("[jobs] creditReferralVisits falhou", e);
+    }
+  }, { timezone: "America/Sao_Paulo" });
 
   // runMatcher NÃO entra no cron: roda sob demanda a cada republicação do TSE
   // (disparado pelo painel admin — ver apps/api/src/jobs/matcher.ts).

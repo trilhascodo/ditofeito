@@ -9,6 +9,7 @@ const dayFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short"
 export function AdminAudience() {
   const [days, setDays] = useState<(typeof DAY_OPTIONS)[number]>(30);
   const { data: stats, isLoading } = trpc.pageViews.stats.useQuery({ days });
+  const { data: referrers } = trpc.referral.topReferrers.useQuery({ days });
 
   const maxViews = stats ? Math.max(1, ...stats.daily.map((d) => d.views)) : 1;
   const avgPerDay = stats && stats.days > 0 ? stats.views / stats.days : 0;
@@ -137,6 +138,26 @@ export function AdminAudience() {
                 ))
               )}
             </div>
+          </div>
+          <div className="card" style={{ marginTop: 20 }}>
+            <h2 style={{ fontFamily: "var(--serif)", fontSize: 16, margin: "0 0 4px" }}>Quem mais trouxe gente (?ref=)</h2>
+            <p className="hint-text" style={{ margin: "0 0 12px" }}>
+              Visitantes e cadastros ativados já creditados. Número fora da curva = olhar de perto;
+              banir em Usuários corta os créditos futuros.
+            </p>
+            {!referrers || referrers.length === 0 ? (
+              <p className="hint-text">Nenhum crédito de indicação no período.</p>
+            ) : (
+              referrers.map((r) => (
+                <div key={r.userId} className="admin-row">
+                  <span className="titulo">
+                    {r.displayName} <span className="hint-text">@{r.handle}{r.isBanned ? " · banido" : ""}</span>
+                  </span>
+                  <span className="hint-text">{fmtPoints(r.visitors)} visit. · {fmtPoints(r.signups)} cad.</span>
+                  <span className="badge">{fmtPoints(r.points)} pts</span>
+                </div>
+              ))
+            )}
           </div>
         </>
       )}

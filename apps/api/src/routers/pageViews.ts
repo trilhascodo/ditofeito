@@ -3,6 +3,7 @@ import { normalizeSource } from "@ditofeito/core";
 import { router, publicProcedure, adminProcedure } from "../trpc/trpc.js";
 import { visitorHash } from "../lib/visitorHash.js";
 import { checkRateLimit } from "../lib/rateLimit.js";
+import { resolveRefCode } from "../domain/referral.js";
 
 // ----------------------------------------------------------------------------
 // Analytics próprio (migrations/006_page_views.sql) — sem cookie, sem
@@ -18,14 +19,28 @@ export const pageViewsRouter = router({
       // Canal da visita (?origem=/utm_source/fbclid — ver 045). Leniente:
       // valor inválido vira null, nunca derruba o track.
       source: z.string().max(200).optional(),
+      // Código ?ref= da sessão de chegada (047). Leniente como source.
+      ref: z.string().max(40).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const hash = visitorHash(ctx.ip, ctx.userAgent);
       // Generoso pra navegação real (uma troca de rota por vez); barra script.
       if (!checkRateLimit(`pageview:${hash}`, 30, 60_000)) return { ok: true };
+
+      // Visita indicada vale ponto (REF_VISIT), então é o alvo óbvio de
+      // fraude: trocar user-agent gera hash novo à vontade. Por isso só a 1ª
+      // visita por IP+indicador a cada 24h leva o ref (IP só em memória, como
+      // no visitorHash — nunca persistido), e o próprio indicador logado
+      // abrindo o link dele não conta.
+      let refUserId = await resolveRefCode(ctx.pool, input.ref);
+      if (refUserId && (refUserId === ctx.user?.id
+          || !checkRateLimit(`refvisit:${ctx.ip ?? ""}:${refUserId}`, 1, 24 * 60 * 60_000))) {
+        refUserId = null;
+      }
+
       await ctx.pool.query(
-        `INSERT INTO page_views (path, referrer_host, visitor_hash, source) VALUES ($1,$2,$3,$4)`,
-        [input.path, input.referrerHost ?? null, hash, normalizeSource(input.source) ?? null],
+        `INSERT INTO page_views (path, referrer_host, visitor_hash, source, ref_user_id) VALUES ($1,$2,$3,$4,$5)`,
+        [input.path, input.referrerHost ?? null, hash, normalizeSource(input.source) ?? null, refUserId],
       );
       return { ok: true };
     }),

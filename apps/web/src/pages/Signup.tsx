@@ -8,7 +8,7 @@ import { useUfGeolocation } from "../lib/useUfGeolocation";
 import { useAuth } from "../lib/useAuth";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { GoogleCompleteProfileForm } from "../components/GoogleCompleteProfileForm";
-import { consumeReturnTo, signupSource } from "../lib/attribution";
+import { consumeReturnTo, signupSource, signupRef } from "../lib/attribution";
 import { usePageMeta } from "../lib/head";
 
 const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
@@ -79,6 +79,7 @@ export function Signup() {
         handle, displayName, email, password, birthDate, captchaToken,
         regionUf: regionUf || undefined, regionCity: regionCity.trim() || undefined,
         source: signupSource(),
+        ref: signupRef(),
       });
       // Cadastro já devolve sessão (auth.ts::signup) — entra direto e volta
       // pra onde a pessoa estava; confirmar o e-mail fica pra depois.

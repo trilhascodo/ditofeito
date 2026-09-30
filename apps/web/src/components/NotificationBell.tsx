@@ -5,7 +5,7 @@ import { trpc } from "../lib/trpc";
 const KIND_ICON: Record<string, string> = {
   MARKET_RESOLVED: "✓", MARKET_VOIDED: "↺", NEW_COMMENT: "💬",
   BOLAO_CLOSING_SOON: "⏰", GROUP_JOINED: "👋",
-  BOLAO_RESOLVED: "🎯", STREAK_MILESTONE: "🔥",
+  BOLAO_RESOLVED: "🎯", STREAK_MILESTONE: "🔥", REFERRAL_ACTIVATED: "🔗",
 };
 
 const timeFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -59,7 +59,8 @@ export function NotificationBell() {
               // LMSR — destino errado pro lembrete de bolão).
               const to = n.bolaoId && n.groupId ? `/grupos/${n.groupId}/bolao/${n.bolaoId}`
                 : n.groupId ? `/grupos/${n.groupId}`
-                : n.marketSlug ? `/m/${n.marketSlug}` : null;
+                : n.marketSlug ? `/m/${n.marketSlug}`
+                : n.kind === "REFERRAL_ACTIVATED" ? "/perfil#seu-link" : null;
               return to ? (
                 <Link
                   key={n.id} to={to} onClick={() => setOpen(false)}

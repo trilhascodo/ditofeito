@@ -31,6 +31,41 @@ export function signupSource(): string | undefined {
   return safe(() => localStorage.getItem(FIRST_SOURCE_KEY)) ?? undefined;
 }
 
+// Link pessoal ?ref= (047_referral_rewards.sql). A visita só conta na sessão
+// em que a pessoa chegou pelo link; o cadastro vai pro PRIMEIRO link que a
+// trouxe, se ela se cadastrar em até 30 dias (REFERRAL_CONFIG.attributionDays).
+const VISIT_REF_KEY = "visitRef";   // sessionStorage
+const FIRST_REF_KEY = "firstRef";   // localStorage: {code, at}
+const REF_PATTERN = /^[a-z0-9]{6,12}$/;
+const REF_TTL_MS = 30 * 86_400_000;
+
+function storedFirstRef(): { code: string; at: number } | undefined {
+  return safe(() => {
+    const v = JSON.parse(localStorage.getItem(FIRST_REF_KEY) ?? "null");
+    return v && typeof v.code === "string" && typeof v.at === "number" && Date.now() - v.at < REF_TTL_MS
+      ? v as { code: string; at: number } : undefined;
+  });
+}
+
+/** Lê ?ref= da URL e guarda. Chamado a cada rota, junto de captureSource. */
+export function captureRef(search: string): void {
+  const code = safe(() => new URLSearchParams(search).get("ref")?.toLowerCase());
+  if (!code || !REF_PATTERN.test(code)) return;
+  safe(() => {
+    sessionStorage.setItem(VISIT_REF_KEY, code);
+    if (!storedFirstRef()) localStorage.setItem(FIRST_REF_KEY, JSON.stringify({ code, at: Date.now() }));
+  });
+}
+
+export function visitRef(): string | undefined {
+  return safe(() => sessionStorage.getItem(VISIT_REF_KEY)) ?? undefined;
+}
+
+/** Quem indicou — vai no cadastro (users.referred_by). */
+export function signupRef(): string | undefined {
+  return storedFirstRef()?.code;
+}
+
 // Só caminho interno ("/m/x"), nunca URL absoluta nem "//host" — senão vira
 // redirecionamento aberto pra fora do site.
 function isInternalPath(path: string): boolean {

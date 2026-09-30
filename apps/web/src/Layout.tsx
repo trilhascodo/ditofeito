@@ -5,7 +5,7 @@ import { useAuth } from "./lib/useAuth";
 import { trpc } from "./lib/trpc";
 import { NotificationBell } from "./components/NotificationBell";
 import { PENDING_INVITE_KEY } from "./pages/EntrarGrupo";
-import { captureSource, visitSource, rememberReturnTo, consumeReturnTo } from "./lib/attribution";
+import { captureSource, visitSource, captureRef, visitRef, rememberReturnTo, consumeReturnTo } from "./lib/attribution";
 
 const STAFF_ROLES = new Set(["ADMIN", "MODERATOR", "RESOLVER"]);
 
@@ -25,7 +25,8 @@ function usePageViewTracking() {
       }
     })();
     captureSource(location.search);
-    track.mutate({ path: location.pathname, referrerHost, source: visitSource() });
+    captureRef(location.search);
+    track.mutate({ path: location.pathname, referrerHost, source: visitSource(), ref: visitRef() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 }
