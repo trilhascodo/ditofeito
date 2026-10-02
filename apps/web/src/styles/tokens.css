@@ -524,8 +524,8 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
 .out.sel { background: var(--violeta-2); border-radius: 8px; border-bottom-color: transparent; }
 
 .painel { position: sticky; top: 20px; align-self: start; }
-.painel h2 { font: 600 18px var(--serif); margin: 0 0 4px; }
-.painel .sub { font-size: 13px; color: var(--grafite); margin-bottom: 16px; }
+.painel h2, .signup-modal-card h2 { font: 600 18px var(--serif); margin: 0 0 4px; }
+.painel .sub, .signup-modal-card .sub { font-size: 13px; color: var(--grafite); margin-bottom: 16px; }
 .campo { margin-bottom: 14px; }
 .campo label { display: block; font: 600 12px var(--sans); color: var(--grafite); margin-bottom: 6px; }
 .campo .sel-out { font-weight: 600; }
@@ -691,4 +691,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--violeta); }
 .site-footer-copy {
   max-width: 1440px; margin: 0 auto; padding: 0 20px 24px;
   font-size: 12px; color: var(--grafite);
+}
+
+/* Convite de cadastro que abre quando um visitante clica em "Prever"
+   (MarketPage.tsx) — mesmo conteúdo do painel lateral, mas no momento da ação. */
+.signup-modal {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: rgba(30, 39, 51, .45); padding: 16px;
+}
+.signup-modal-card {
+  position: relative; width: 100%; max-width: 380px;
+  max-height: calc(100vh - 32px); overflow-y: auto;
+}
+.signup-modal-card h2 { padding-right: 28px; }
+.signup-modal-fechar {
+  position: absolute; top: 8px; right: 10px; background: none; border: 0;
+  font-size: 24px; line-height: 1; color: var(--grafite); cursor: pointer; padding: 4px 8px;
 }

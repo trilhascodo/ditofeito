@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { TRPCClientError } from "@trpc/client";
 import { sharesForPoints, tradeCost } from "@ditofeito/core";
 import { trpc } from "../lib/trpc";
@@ -177,6 +177,11 @@ export function MarketPage() {
   const [needsCpf, setNeedsCpf] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [commentError, setCommentError] = useState<string | null>(null);
+  // Visitante clicou em "Prever": abre o convite de cadastro na hora, em vez
+  // de esperar ele notar o painel ao lado. Guarda a escolha em ?prever= no
+  // caminho de volta — depois do cadastro/login ele volta com ela marcada.
+  const [signupFor, setSignupFor] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // <head> da rota (lib/head.ts): título, canonical, og:* e JSON-LD do
   // mercado — sem isso o canonical do index.html mandava tudo pra home.
@@ -208,6 +213,21 @@ export function MarketPage() {
       }
       : undefined,
   });
+
+  const preverParam = searchParams.get("prever");
+  useEffect(() => {
+    if (!preverParam || !user || !market) return;
+    if (market.outcomes.some((o) => o.id === preverParam)) setSelected(preverParam);
+    setSearchParams((p) => { p.delete("prever"); return p; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preverParam, user, market?.id]);
+
+  useEffect(() => {
+    if (!signupFor) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSignupFor(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [signupFor]);
 
   useEffect(() => {
     if (!sponsorship) return;
@@ -250,6 +270,13 @@ export function MarketPage() {
   }
 
   const canTrade = market.status === "OPEN";
+
+  function escolher(outcomeId: string) {
+    setSelected(outcomeId);
+    if (!user) setSignupFor(outcomeId);
+  }
+  const voltarCom = (outcomeId: string | null) =>
+    `/m/${market.slug}${outcomeId ? `?prever=${outcomeId}` : ""}`;
 
   async function onRegistrar() {
     if (!selected || (!otherPosition && points < 1)) return;
@@ -420,13 +447,13 @@ export function MarketPage() {
                 <div className="binary-pills">
                   <button
                     className={`pill-outcome ${selected === market.outcomes[simIdx].id ? "sel" : ""}`}
-                    onClick={() => setSelected(market.outcomes[simIdx].id)}
+                    onClick={() => escolher(market.outcomes[simIdx].id)}
                   >
                     Prever SIM<b>{pct(market.outcomes[simIdx].price)}</b>
                   </button>
                   <button
                     className={`pill-outcome ${selected === market.outcomes[naoIdx].id ? "sel" : ""}`}
-                    onClick={() => setSelected(market.outcomes[naoIdx].id)}
+                    onClick={() => escolher(market.outcomes[naoIdx].id)}
                   >
                     Prever NÃO<b>{pct(market.outcomes[naoIdx].price)}</b>
                   </button>
@@ -442,7 +469,7 @@ export function MarketPage() {
                   <VarBadge d={priceDelta(o)} />
                   <span className="preco mono">{pct(o.price)}</span>
                   {canTrade && (
-                    <button onClick={() => setSelected(o.id)} aria-label={`Prever ${o.label}`}>Prever</button>
+                    <button onClick={() => escolher(o.id)} aria-label={`Prever ${o.label}`}>Prever</button>
                   )}
                 </div>
               ))}
@@ -502,7 +529,7 @@ export function MarketPage() {
         <aside className="painel">
           <div className="card">
             {!user ? (
-              <SignupCta returnPath={`/m/${market.slug}`} />
+              <SignupCta returnPath={voltarCom(selected)} />
             ) : !canTrade ? (
               <>
                 <h2>O que você diz?</h2>
@@ -662,6 +689,23 @@ export function MarketPage() {
       <div className={`carimbo ${showStamp ? "show" : ""}`} role="status">
         <div className="selo-big">DITO ✓<small>Registrado. Agora é esperar o feito.</small></div>
       </div>
+
+      {!user && signupFor && (
+        <div className="signup-modal" onClick={() => setSignupFor(null)}>
+          <div
+            className="card signup-modal-card" role="dialog" aria-modal="true" aria-labelledby="signup-modal-t"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="signup-modal-fechar" aria-label="Fechar" onClick={() => setSignupFor(null)}>×</button>
+            <div id="signup-modal-t">
+              <SignupCta
+                returnPath={voltarCom(signupFor)}
+                titulo={<>Pra prever <b>{market.outcomes.find((o) => o.id === signupFor)?.label}</b>, crie sua conta</>}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { oauthGoogleLogin } from "../lib/auth";
 import { useAuth } from "../lib/useAuth";
@@ -12,7 +12,7 @@ const GOOGLE_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
 // cadastro — o painel dizia só "Entrar", que pra quem nunca veio soa como
 // "isso é pra quem já tem conta". Agora: cadastro em primeiro plano, Google
 // em 1 clique, e a pessoa volta pro mesmo mercado depois.
-export function SignupCta({ returnPath }: { returnPath: string }) {
+export function SignupCta({ returnPath, titulo }: { returnPath: string; titulo?: ReactNode }) {
   const navigate = useNavigate();
   const { refresh } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function SignupCta({ returnPath }: { returnPath: string }) {
 
   return (
     <>
-      <h2>O que você diz?</h2>
+      <h2>{titulo ?? "O que você diz?"}</h2>
       <p className="sub">
         Crie sua conta grátis e ganhe <strong>1.000 pontos</strong> pra registrar sua previsão.
       </p>
