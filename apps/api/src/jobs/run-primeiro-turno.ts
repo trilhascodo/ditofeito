@@ -48,7 +48,7 @@ const maisVotado = (uf: string): Def => ({
   criteria:
     `Resolve no candidato com o maior número de votos válidos para governador ${UF_DE[uf]} no ` +
     `1º turno de 04/10/2026, conforme a totalização final do TSE, mesmo que haja 2º turno. ` +
-    `Candidato não listado resolve em OUTROS. Anula se o 1º turno for adiado ou anulado.`,
+    `Anula se o 1º turno for adiado ou anulado.`,
 });
 
 const DEFS: Def[] = [
@@ -75,10 +75,8 @@ async function main() {
         console.log(`PULADO  ${d.slug} — "${d.copyFrom}" não existe ou tem menos de 2 candidatos`);
         continue;
       }
-      outcomes = [
-        ...src.rows.map((r) => ({ label: r.label as string, candidateId: (r.candidate_id as string | null) ?? undefined })),
-        { label: "OUTROS", isCatchall: true },
-      ];
+      // Sem "OUTROS" — mesma lista fechada do "quem vence" (migração 048).
+      outcomes = src.rows.map((r) => ({ label: r.label as string, candidateId: (r.candidate_id as string | null) ?? undefined }));
     }
     const c = await pool.connect();
     try {
@@ -93,7 +91,7 @@ async function main() {
         outcomes,
       });
       await c.query("COMMIT");
-      const n = d.type === "MULTI" ? ` (${outcomes.length - 1} candidatos + OUTROS)` : "";
+      const n = d.type === "MULTI" ? ` (${outcomes.length} candidatos)` : "";
       console.log(`${created ? (publish ? "CRIADO  " : "RASCUNHO") : "JÁ EXISTE"} ${d.slug}${n}`);
     } catch (e) {
       await c.query("ROLLBACK");

@@ -48,10 +48,8 @@ export async function ensureSenateMarket(pool: Pool, uf: string, publish: boolea
   if (cands.length < 2) throw new Error(`menos de 2 candidatos ativos a senador/${uf} na base — rode a sync do TSE antes`);
 
   const slug = senateSlug(uf);
-  const outcomes = [
-    ...cands.map((c) => ({ label: `${c.nome} (${c.party})`, candidateId: c.id })),
-    { label: "OUTROS", isCatchall: true },
-  ];
+  // Sem "OUTROS" — lista fechada do registro no TSE (migração 048).
+  const outcomes = cands.map((c) => ({ label: `${c.nome} (${c.party})`, candidateId: c.id }));
   const c = await pool.connect();
   try {
     await c.query("BEGIN");
@@ -62,7 +60,7 @@ export async function ensureSenateMarket(pool: Pool, uf: string, publish: boolea
       resolutionCriteria:
         `Resolve no candidato a senador ${UF_DE[uf]} com o maior número de votos válidos na eleição de ` +
         `04/10/2026 (turno único), conforme a totalização final do TSE. São 2 vagas: este mercado trata só ` +
-        `do PRIMEIRO colocado. Candidato não listado resolve em OUTROS. Anula se a eleição for adiada ou anulada.`,
+        `do PRIMEIRO colocado. Anula se a eleição for adiada ou anulada.`,
       resolutionSource: "TSE — resultado oficial (resultados.tse.jus.br)",
       closeAt: CALENDARIO_2026.primeiroTurno, resolveBy: RESOLVE_BY,
       isElectoral: true, createdBy: sys.rows[0].id, regionUf: uf, outcomes,

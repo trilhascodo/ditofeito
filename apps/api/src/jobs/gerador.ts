@@ -3,7 +3,7 @@
 //
 // Regras de domínio (sistema eleitoral brasileiro):
 //   MAJORITÁRIO (PRESIDENTE, GOVERNADOR, SENADOR, PREFEITO):
-//     -> 1 mercado MULTI por disputa: candidatos nomeados + "OUTROS" (catchall)
+//     -> 1 mercado MULTI por disputa: só os candidatos nomeados (sem "OUTROS", 048)
 //   PROPORCIONAL (DEP_FEDERAL, DEP_ESTADUAL, VEREADOR):
 //     -> sem MULTI (não há "vencedor" da disputa); só binários individuais
 //   TODO CANDIDATO (qualquer cargo):
@@ -190,7 +190,7 @@ export async function gerarDisputasMajoritarias(
         [d.office, d.uf, limite]);
       if (cands.rowCount! < 2) continue; // disputa sem massa crítica ainda
 
-      const b = suggestB(cands.rowCount! + 1, GERADOR_CONFIG.depthMajoritaria);
+      const b = suggestB(cands.rowCount!, GERADOR_CONFIG.depthMajoritaria);
       const slugMulti = `quem-vence-${slugDisputa}`;
       const { created } = await createMarketIdempotent(c, {
         slug: slugMulti,
@@ -199,16 +199,14 @@ export async function gerarDisputasMajoritarias(
         status: (opts.publicarDireto ?? GERADOR_CONFIG.publicarDireto) ? "OPEN" : "DRAFT",
         resolutionCriteria:
           `Resolve no candidato declarado eleito ${cargoTxt}${local} pela Justiça Eleitoral ` +
-          `(2º turno, se houver). Candidato não listado nominalmente resolve em "OUTROS". ` +
+          `(2º turno, se houver). ` +
           `Anulação da eleição pela Justiça Eleitoral antes da diplomação ANULA o mercado.`,
         resolutionSource: "TSE — resultado oficial / diplomação",
         closeAt: CALENDARIO_2026.segundoTurno, resolveBy: CALENDARIO_2026.prazoResolucaoEleito,
         isElectoral: true, createdBy: opts.sistemaUserId, regionUf: d.uf,
-        // Outcomes iniciais: candidatos + OUTROS por último (display_order tratado no factory)
-        outcomes: [
-          ...cands.rows.map((cd) => ({ label: `${nomePublico(cd)} (${cd.party})`, candidateId: cd.id })),
-          { label: "OUTROS", isCatchall: true },
-        ],
+        // Só candidatos, sem "OUTROS": a lista vem do registro no TSE
+        // (tseSync), não existe candidato fora dela (migração 048).
+        outcomes: cands.rows.map((cd) => ({ label: `${nomePublico(cd)} (${cd.party})`, candidateId: cd.id })),
       });
 
       if (created) {

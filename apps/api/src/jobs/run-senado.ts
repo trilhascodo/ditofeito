@@ -16,7 +16,7 @@ async function main() {
   const semTse = (await senateCandidates(pool, uf)).filter((c) => !c.tse_sq_candidato).map((c) => c.nome);
   if (semTse.length) console.log(`AVISO: sem vínculo com o TSE (rode run-tse-sync --uf ${uf}): ${semTse.join(", ")}`);
   const r = await ensureSenateMarket(pool, uf, publish);
-  console.log(`${r.estado.padEnd(9)} ${senateSlug(uf)} (${r.candidatos} candidatos + OUTROS)`);
+  console.log(`${r.estado.padEnd(9)} ${senateSlug(uf)} (${r.candidatos} candidatos)`);
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
