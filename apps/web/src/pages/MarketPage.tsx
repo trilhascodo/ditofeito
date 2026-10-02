@@ -231,10 +231,11 @@ export function MarketPage() {
   const q = market.outcomes.map((o) => market.liquidityB * Math.log(Math.max(o.price, 1e-9)));
   const idx = selected ? market.outcomes.findIndex((o) => o.id === selected) : -1;
 
-  // Trocar de outcome: o servidor vende as outras posições primeiro e soma o
-  // valor recuperado aos pontos da compra nova — o preview simula igual.
+  // Trocar de outcome: o servidor vende as outras posições primeiro e move só
+  // o valor recuperado pra compra nova (pontos digitados não entram na troca)
+  // — o preview simula igual.
   let preview: { shares: number; priceAfter: number; recovered: number } | null = null;
-  if (idx >= 0 && points > 0) {
+  if (idx >= 0 && (points > 0 || otherPosition)) {
     const qSim = [...q];
     let recovered = 0;
     for (const p of myPositions) {
@@ -243,7 +244,7 @@ export function MarketPage() {
       recovered += -tradeCost(qSim, market.liquidityB, j, -p.shares).cost;
       qSim[j] -= p.shares;
     }
-    const shares = sharesForPoints(qSim, market.liquidityB, idx, points + recovered);
+    const shares = sharesForPoints(qSim, market.liquidityB, idx, otherPosition ? recovered : points);
     const { pricesAfter } = tradeCost(qSim, market.liquidityB, idx, shares);
     preview = { shares, priceAfter: pricesAfter[idx], recovered };
   }
@@ -251,12 +252,14 @@ export function MarketPage() {
   const canTrade = market.status === "OPEN";
 
   async function onRegistrar() {
-    if (!selected || points < 1) return;
+    if (!selected || (!otherPosition && points < 1)) return;
     setTradeError(null);
     setNeedsCpf(false);
     try {
       const regionUf = me?.shareLocationOnTrades ? (await getCurrentUf()) ?? undefined : undefined;
-      await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId: selected, side: "BUY", amount: points, regionUf });
+      await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId: selected, side: "BUY",
+        // Na troca o servidor ignora amount e move só o valor recuperado.
+        amount: otherPosition ? 1 : points, regionUf });
       await Promise.all([
         utils.market.get.invalidate({ slug }),
         utils.user.myPositions.invalidate(),
@@ -520,13 +523,15 @@ export function MarketPage() {
                     <span className="sel-out">— selecione um outcome ao lado</span>
                   </div>
                 )}
-                <div className="campo">
-                  <label htmlFor="pts">Pontos a comprometer</label>
-                  <input
-                    type="number" id="pts" name="pontos" autoComplete="off" min={1} max={1000} step={10}
-                    value={points} onChange={(e) => setPoints(Number(e.target.value))}
-                  />
-                </div>
+                {!otherPosition && (
+                  <div className="campo">
+                    <label htmlFor="pts">Pontos a comprometer</label>
+                    <input
+                      type="number" id="pts" name="pontos" autoComplete="off" min={1} max={1000} step={10}
+                      value={points} onChange={(e) => setPoints(Number(e.target.value))}
+                    />
+                  </div>
+                )}
                 {preview && (
                   <div className="preview">
                     <div className="row"><span>Posições que você recebe</span><b>{fmtPoints(preview.shares)}</b></div>
@@ -542,9 +547,9 @@ export function MarketPage() {
                 )}
                 {otherPosition && (
                   <p className="hint-text" aria-live="polite">
-                    Você já previu <b>{otherPosition.outcomeLabel}</b>. Ao trocar, ela sai de lá e
-                    ~{fmtPoints(preview?.recovered ?? valorDesfazer(otherPosition.outcomeId, otherPosition.shares))} pts
-                    (valor atual) vêm junto pra <b>{market.outcomes[idx]?.label}</b>, somados aos pontos acima.
+                    Você já previu <b>{otherPosition.outcomeLabel}</b>. Ao trocar, sua previsão sai de lá e
+                    os ~{fmtPoints(preview?.recovered ?? valorDesfazer(otherPosition.outcomeId, otherPosition.shares))} pts
+                    (valor atual) passam pra <b>{market.outcomes[idx]?.label}</b>. Nenhum ponto novo é usado.
                   </p>
                 )}
                 {needsCpf ? (

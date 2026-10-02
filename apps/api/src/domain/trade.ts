@@ -154,8 +154,10 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
     let recovered = 0;
     if (input.side === "BUY") {
       // Um outcome por mercado: trocar de lado desfaz (vende, pelo preço
-      // atual) a previsão anterior na mesma transação e leva o valor
-      // recuperado pra escolha nova, somado aos pontos informados.
+      // atual) a previsão anterior na mesma transação e MOVE só o valor
+      // recuperado pra escolha nova — input.amount é ignorado na troca
+      // (somar fazia a posição crescer a cada vai e volta). Pra pôr mais
+      // pontos, o usuário reforça depois, já no outcome novo.
       // Sem isso dava pra apostar nos dois lados e ficar empurrando o preço
       // de um pro outro. q é atualizado em memória pra compra abaixo já
       // partir do estado pós-venda.
@@ -185,7 +187,7 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
         switchedFrom.push(p.outcome_id as string);
         recovered += -sell.cost;
       }
-      shares = sharesForPoints(q, b, idx, input.amount + recovered);
+      shares = sharesForPoints(q, b, idx, switchedFrom.length ? recovered : input.amount);
       if (shares <= 0) throw new TradeError("VALOR_INVALIDO", "Pontos insuficientes p/ 1 share");
     } else {
       const pos = await c.query(
