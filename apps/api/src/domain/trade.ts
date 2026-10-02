@@ -187,7 +187,20 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
         switchedFrom.push(p.outcome_id as string);
         recovered += -sell.cost;
       }
-      shares = sharesForPoints(q, b, idx, switchedFrom.length ? recovered : input.amount);
+      let buyPoints = input.amount;
+      if (switchedFrom.length) {
+        // Valor recuperado pode passar do teto de exposição (posição antiga
+        // valorizou): leva só até o teto e o resto fica no saldo — senão o
+        // LIMITE_EXPOSICAO abaixo desfazia a troca inteira.
+        const exp = await c.query(
+          `SELECT coalesce(sum(cost_basis),0) AS total FROM positions
+            WHERE user_id=$1 AND market_id=$2`, [input.userId, input.marketId]);
+        const room = TRADE_CONFIG.maxExposurePerMarket - Number(exp.rows[0].total) - 0.01;
+        buyPoints = Math.min(recovered, room);
+        if (buyPoints <= 0) throw new TradeError("LIMITE_EXPOSICAO",
+          `Exposição máxima de ${TRADE_CONFIG.maxExposurePerMarket} pontos por mercado`);
+      }
+      shares = sharesForPoints(q, b, idx, buyPoints);
       if (shares <= 0) throw new TradeError("VALOR_INVALIDO", "Pontos insuficientes p/ 1 share");
     } else {
       const pos = await c.query(
@@ -347,7 +360,13 @@ export async function resolveMarket(
       `SELECT user_id,
               array_agg(outcome_id ORDER BY outcome_id) AS oids,
               array_agg(CASE WHEN shares>0 THEN cost_basis/shares END ORDER BY outcome_id) AS avg_px
-         FROM positions WHERE market_id=$1 GROUP BY user_id ORDER BY user_id`,
+         FROM positions WHERE market_id=$1 GROUP BY user_id
+        -- Só quem ainda tem posição: quem trocou de lado fica com linha zerada
+        -- no outcome antigo (ignorada pelo avg_px null) e quem desfez tudo não
+        -- tem previsão nenhuma — não pode ganhar evento de reputação nem ter
+        -- a sequência de acertos zerada por um mercado em que não está.
+        HAVING sum(shares) > 0
+        ORDER BY user_id`,
       [p.marketId]);
     const outcomeOrder = out.rows.map((r) => r.id as string);
     for (const h of holders.rows) {
