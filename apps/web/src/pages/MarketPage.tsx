@@ -218,7 +218,11 @@ export function MarketPage() {
   if (isLoading) return <main className="page"><p className="hint-text">Carregando…</p></main>;
   if (error || !market) return <main className="page"><p className="error-text">Mercado não encontrado.</p></main>;
 
-  const myPosition = positions?.find((p) => p.marketSlug === market.slug);
+  // Normalmente 0 ou 1 — comprar outro outcome desfaz a posição anterior
+  // (domain/trade.ts::executeTrade). Contas antigas podem ter mais de uma,
+  // por isso lista todas.
+  const myPositions = positions?.filter((p) => p.marketSlug === market.slug) ?? [];
+  const otherPosition = selected ? myPositions.find((p) => p.outcomeId !== selected) : undefined;
 
   // Reconstrói q a partir do preço: como preço = softmax(q/b) e Σpreço = 1,
   // q'_i = b·ln(p_i) reproduz exatamente os mesmos preços (softmax é
@@ -227,11 +231,21 @@ export function MarketPage() {
   const q = market.outcomes.map((o) => market.liquidityB * Math.log(Math.max(o.price, 1e-9)));
   const idx = selected ? market.outcomes.findIndex((o) => o.id === selected) : -1;
 
-  let preview: { shares: number; priceAfter: number } | null = null;
+  // Trocar de outcome: o servidor vende as outras posições primeiro e soma o
+  // valor recuperado aos pontos da compra nova — o preview simula igual.
+  let preview: { shares: number; priceAfter: number; recovered: number } | null = null;
   if (idx >= 0 && points > 0) {
-    const shares = sharesForPoints(q, market.liquidityB, idx, points);
-    const { pricesAfter } = tradeCost(q, market.liquidityB, idx, shares);
-    preview = { shares, priceAfter: pricesAfter[idx] };
+    const qSim = [...q];
+    let recovered = 0;
+    for (const p of myPositions) {
+      const j = market.outcomes.findIndex((o) => o.id === p.outcomeId);
+      if (j < 0 || j === idx) continue;
+      recovered += -tradeCost(qSim, market.liquidityB, j, -p.shares).cost;
+      qSim[j] -= p.shares;
+    }
+    const shares = sharesForPoints(qSim, market.liquidityB, idx, points + recovered);
+    const { pricesAfter } = tradeCost(qSim, market.liquidityB, idx, shares);
+    preview = { shares, priceAfter: pricesAfter[idx], recovered };
   }
 
   const canTrade = market.status === "OPEN";
@@ -260,6 +274,29 @@ export function MarketPage() {
         setTradeError(err instanceof Error ? err.message : "Não foi possível registrar a previsão");
       }
     }
+  }
+
+  // "Desfazer" = vende todas as shares da posição pelo preço atual (pode
+  // devolver mais ou menos do que foi comprometido). Mesma conta que o
+  // servidor faz sozinho quando o usuário troca de outcome.
+  async function onDesfazer(outcomeId: string, shares: number) {
+    setTradeError(null);
+    try {
+      await tradeMutation.mutateAsync({ marketId: market!.id, outcomeId, side: "SELL", amount: shares });
+      await Promise.all([
+        utils.market.get.invalidate({ slug }),
+        utils.user.myPositions.invalidate(),
+        utils.user.me.invalidate(),
+      ]);
+    } catch (err) {
+      setTradeError(err instanceof Error ? err.message : "Não foi possível desfazer a previsão");
+    }
+  }
+
+  function valorDesfazer(outcomeId: string, shares: number): number {
+    const i = market!.outcomes.findIndex((o) => o.id === outcomeId);
+    if (i < 0) return 0;
+    return -tradeCost(q, market!.liquidityB, i, -shares).cost;
   }
 
   // TradeError SALDO_INSUFICIENTE (domain/trade.ts::appendLedger) sempre
@@ -503,6 +540,13 @@ export function MarketPage() {
                     {saldoInsuficiente && <> — <Link to="/pontos/comprar">comprar mais pontos</Link></>}
                   </p>
                 )}
+                {otherPosition && (
+                  <p className="hint-text" aria-live="polite">
+                    Você já previu <b>{otherPosition.outcomeLabel}</b>. Ao trocar, ela sai de lá e
+                    ~{fmtPoints(preview?.recovered ?? valorDesfazer(otherPosition.outcomeId, otherPosition.shares))} pts
+                    (valor atual) vêm junto pra <b>{market.outcomes[idx]?.label}</b>, somados aos pontos acima.
+                  </p>
+                )}
                 {needsCpf ? (
                   <CpfPrompt onDone={() => { setNeedsCpf(false); onRegistrar(); }} />
                 ) : (
@@ -510,16 +554,25 @@ export function MarketPage() {
                     className="btn" disabled={!preview || tradeMutation.isPending}
                     onClick={onRegistrar}
                   >
-                    {tradeMutation.isPending ? "Registrando…" : "Registrar previsão"}
+                    {tradeMutation.isPending ? "Registrando…"
+                      : otherPosition ? "Trocar previsão"
+                      : myPositions.some((p) => p.outcomeId === selected) ? "Reforçar previsão"
+                      : "Registrar previsão"}
                   </button>
                 )}
-                {myPosition && (
-                  <div className="posicao">
-                    <div className="row"><span>Sua posição</span><b>{myPosition.outcomeLabel}</b></div>
-                    <div className="row"><span>Posições</span><b>{fmtPoints(myPosition.shares)}</b></div>
-                    <div className="row"><span>Comprometido</span><b>{fmtPoints(myPosition.costBasis)} pts</b></div>
+                {myPositions.map((p) => (
+                  <div key={p.outcomeId} className="posicao">
+                    <div className="row"><span>Sua posição</span><b>{p.outcomeLabel}</b></div>
+                    <div className="row"><span>Posições</span><b>{fmtPoints(p.shares)}</b></div>
+                    <div className="row"><span>Comprometido</span><b>{fmtPoints(p.costBasis)} pts</b></div>
+                    <button
+                      className="link-btn" disabled={tradeMutation.isPending}
+                      onClick={() => onDesfazer(p.outcomeId, p.shares)}
+                    >
+                      Desfazer previsão (recebe {fmtPoints(valorDesfazer(p.outcomeId, p.shares))} pts)
+                    </button>
                   </div>
-                )}
+                ))}
               </>
             )}
           </div>

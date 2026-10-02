@@ -67,6 +67,8 @@ export interface TradeResult {
   priceAfter: number;
   newBalance: number;
   flags: string[];           // ex.: ['POSICAO_DOMINANTE']
+  /** Outcomes cuja posição foi desfeita porque o usuário trocou de lado. */
+  switchedFrom: string[];
 }
 
 // ------------------------------ Ledger --------------------------------------
@@ -148,8 +150,42 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
 
     // Shares e custo
     let shares: number;
+    const switchedFrom: string[] = [];
+    let recovered = 0;
     if (input.side === "BUY") {
-      shares = sharesForPoints(q, b, idx, input.amount);
+      // Um outcome por mercado: trocar de lado desfaz (vende, pelo preço
+      // atual) a previsão anterior na mesma transação e leva o valor
+      // recuperado pra escolha nova, somado aos pontos informados.
+      // Sem isso dava pra apostar nos dois lados e ficar empurrando o preço
+      // de um pro outro. q é atualizado em memória pra compra abaixo já
+      // partir do estado pós-venda.
+      const others = await c.query(
+        `SELECT outcome_id, shares FROM positions
+          WHERE user_id=$1 AND market_id=$2 AND outcome_id<>$3 AND shares > 0
+          FOR UPDATE`,
+        [input.userId, input.marketId, input.outcomeId]);
+      for (const p of others.rows) {
+        const j = out.rows.findIndex((r) => r.id === p.outcome_id);
+        if (j < 0) continue;
+        const sold = Number(p.shares);
+        const sell = tradeCost(q, b, j, -sold);
+        await appendLedger(c, input.userId, -sell.cost, "TRADE_SELL", "market", input.marketId);
+        await c.query(`UPDATE market_outcomes SET q = q - $1 WHERE id = $2`,
+          [sold.toFixed(6), p.outcome_id]);
+        await c.query(
+          `UPDATE positions SET shares = 0, cost_basis = 0, updated_at = now()
+            WHERE user_id=$1 AND market_id=$2 AND outcome_id=$3`,
+          [input.userId, input.marketId, p.outcome_id]);
+        await c.query(
+          `INSERT INTO trades (market_id, outcome_id, user_id, side, shares, cost_points, price_before, price_after, region_uf)
+           VALUES ($1,$2,$3,'SELL',$4,$5,$6,$7,$8)`,
+          [input.marketId, p.outcome_id, input.userId, sold.toFixed(6), sell.cost.toFixed(4),
+           sell.pricesBefore[j].toFixed(6), sell.pricesAfter[j].toFixed(6), input.regionUf ?? null]);
+        q[j] -= sold;
+        switchedFrom.push(p.outcome_id as string);
+        recovered += -sell.cost;
+      }
+      shares = sharesForPoints(q, b, idx, input.amount + recovered);
       if (shares <= 0) throw new TradeError("VALOR_INVALIDO", "Pontos insuficientes p/ 1 share");
     } else {
       const pos = await c.query(
@@ -238,7 +274,7 @@ export async function executeTrade(pool: Pool, input: TradeInput): Promise<Trade
     return {
       tradeId: t.rows[0].id, shares: Math.abs(shares), costPoints: cost,
       priceBefore: pricesBefore[idx], priceAfter: pricesAfter[idx],
-      newBalance, flags,
+      newBalance, flags, switchedFrom,
     };
   } catch (e) {
     await c.query("ROLLBACK");
