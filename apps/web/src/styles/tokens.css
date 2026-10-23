@@ -462,6 +462,8 @@ h1 { font: 600 28px/1.25 var(--serif); letter-spacing: -.01em; max-width: 640px;
 .meta { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--grafite); flex-wrap: wrap; }
 .meta .mono { font-weight: 500; }
 .regras { margin-top: 6px; font-size: 13px; color: var(--grafite); }
+/* contexto do mercado (market.description): o "onde está agora" antes das regras */
+.contexto { margin: 4px 0 8px; font-size: 15px; line-height: 1.45; }
 
 /* card de vindicação — pico emocional (prova pública de acerto), por isso
    destacado com borda violeta em vez do .card neutro padrão. */

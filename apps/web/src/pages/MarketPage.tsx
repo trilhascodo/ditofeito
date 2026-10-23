@@ -363,6 +363,7 @@ export function MarketPage() {
         {market.categoryName}
       </Link>
       <h1>{market.title}</h1>
+      {market.description && <p className="contexto">{market.description}</p>}
       <div className="meta">
         <span>{relativeClose(market.closeAt)} <span className="mono">· {dataFmt(market.closeAt)}</span></span>
         <span>Resolve por <span className="mono">{market.resolutionSource}</span></span>
