@@ -268,6 +268,11 @@ export async function rodarGerador(pool: Pool, opts: { publicarDireto?: boolean 
     `SELECT id FROM users WHERE handle = 'sistema'`);
   if (!cat.rowCount || !sys.rowCount)
     throw new Error("Seed ausente: categoria 'eleicoes-2026' e usuário 'sistema'");
+  // Ciclo de 2026 encerrado no 1º turno: os mercados de disputa foram
+  // apagados em 2026-10-23 (run-apagar-1turno.ts) e o dedupe por slug faria
+  // o cron das 6h recriá-los todos como rascunho no dia seguinte.
+  if (Date.now() > Date.parse(CALENDARIO_2026.primeiroTurno))
+    return { binarios: 0, multis: 0, outcomesSincronizados: 0 };
   const a = GERADOR_CONFIG.criarBinarios
     ? await gerarBinariosCandidatos(pool, {
       categoriaEleicoesId: cat.rows[0].id, sistemaUserId: sys.rows[0].id,
